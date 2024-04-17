@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  wajo_backend:
+    build: .
+    command: >
+      bash -c "
+              python manage.py makemigrations api && 
+              python manage.py migrate api && 
+              python manage.py makemigrations && 
+              python manage.py migrate && 
+              python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    restart: 'always'
