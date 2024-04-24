@@ -84,7 +84,6 @@ class LoginAPI(APIView):
             # method to validate OTP
             if user.verify_otp(otp):
                 token = create_token(user)
-                print(token)
                 return Response({
                     'token': token
                 }, status=status.HTTP_200_OK)
@@ -95,6 +94,12 @@ class LoginAPI(APIView):
             return Response({"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND)
         
 
+"""
+    Handle Onboarding Profile Update.
+    Also update question ID i.e, current step.
+    Default ID is PQ1, after Q1 is updated, then change current_step PQ2
+    which represents the NEXT step.
+"""
 class OnboardingAPI(APIView):
     permission_classes = [IsAuthenticated]
     field_mapping = {
@@ -106,14 +111,13 @@ class OnboardingAPI(APIView):
         'profile-picture': 'picture',
     }
 
-    MAX_IMAGE_SIZE = 2 * 1024 * 1024 # 2MB
+    MAX_IMAGE_SIZE = 5 * 1024 * 1024 # 5MB
     
     def post(self, request, field):
         user = request.user
         # Map the URL field to the data key
         data_key = self.field_mapping.get(field, field)
         data = request.data.get(data_key)
-        print(user, field, data_key, data)
 
         if data is None:
             return Response({'error': f'{data_key} field is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -131,16 +135,28 @@ class OnboardingAPI(APIView):
     def handle_name(self, user, name):
         user.name = name
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ2" # PQ1 has been completed through this current step.
+        entrypoint.save()
         return Response({ 'message': 'Full name updated successfully'}, status=status.HTTP_200_OK)
 
     def handle_nickname(self, user, nickname):
         user.nickname = nickname
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ3" 
+        entrypoint.save()
         return Response({ 'message': 'Nickname updated successfully'}, status=status.HTTP_200_OK)
     
     def handle_gender(self, user, gender):
         user.gender = gender
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ4" 
+        entrypoint.save()
         return Response({ 'message': 'Gender updated successfully'}, status=status.HTTP_200_OK)
     
     def handle_dob(self, user, dob):
@@ -151,16 +167,28 @@ class OnboardingAPI(APIView):
     
         user.dob = parsed_dob
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ5"
+        entrypoint.save()
         return Response({'message': 'Date of birth updated successfully'}, status=status.HTTP_200_OK)
     
     def handle_primary_sport(self, user, primary_sport):
         user.primary_sport = primary_sport
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ6"
+        entrypoint.save()
         return Response({'message': 'Primary sport updated successfully'}, status=status.HTTP_200_OK)
     
     def handle_role(self, user, role):
         user.role = role
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ7"
+        entrypoint.save()
         return Response({'message': 'Role updated successfully'}, status=status.HTTP_200_OK)
     
     def handle_wake_up_time(self, user, wake_up_time):
@@ -173,6 +201,10 @@ class OnboardingAPI(APIView):
 
         user.wake_up_time = validated_time
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ8"
+        entrypoint.save()
         return Response({'message': 'Wake-up time updated successfully'}, status=status.HTTP_200_OK)
     
     def handle_sleep_time(self, user, sleep_time):
@@ -185,11 +217,19 @@ class OnboardingAPI(APIView):
 
         user.sleep_time = validated_time
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ10"
+        entrypoint.save()
         return Response({'message': 'Sleep time updated successfully'}, status=status.HTTP_200_OK)
 
     def handle_activities(self, user, activities):
         user.activities = activities
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ11"
+        entrypoint.save()
         return Response({'message': 'Activities updated successfully'}, status=status.HTTP_200_OK)
     
     def handle_picture(self, user, picture):
@@ -229,16 +269,27 @@ class OnboardingAPI(APIView):
         user.picture = picture
         user.save()
 
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ12"
+        entrypoint.save()
         return Response({'message': 'Profile picture updated successfully'}, status=status.HTTP_200_OK)
     
     def handle_location(self, user, location):
         user.location = location
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ13"
+        entrypoint.save()
         return Response({'message': 'Location updated successfully'}, status=status.HTTP_200_OK)
 
     def handle_affiliation(self, user, affiliation):
         user.affiliation = affiliation
         user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ14"
+        entrypoint.save()
         return Response({'message': 'Affiliation details updated successfully'}, status=status.HTTP_200_OK)
     
 
@@ -252,11 +303,14 @@ class OnboardingFlowEntrypoint(APIView):
         serializer = OnboardingStepSerializer(onboarding_step)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-    def post(self, request):
-        user = request.user
-        onboarding_step, created = OnboardingStep.objects.get_or_create(user=user)
-        serializer = OnboardingStepSerializer(onboarding_step, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    """
+        Current step has been update through onboarding API.
+    """
+    # def post(self, request):
+    #     user = request.user
+    #     onboarding_step, created = OnboardingStep.objects.get_or_create(user=user)
+    #     serializer = OnboardingStepSerializer(onboarding_step, data=request.data)
+    #     if serializer.is_valid():
+    #         serializer.save()
+    #         return Response(serializer.data, status=status.HTTP_200_OK)
+    #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
