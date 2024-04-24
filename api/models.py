@@ -1,5 +1,9 @@
 from django.db import models
 
+
+# On creating WajoUser, new OnboardingStep instance will be created using signals
+# refer signals.py
+
 def profile_picture_path(instnace, filename):
     # MEDIA_ROOT / uploads/user_phone_no/profile_picture/<filename>
     return 'uploads/user_{0}/profile_picture/{1}'.format(instnace.phone_no, filename)
@@ -42,6 +46,7 @@ class WajoUser(models.Model):
         else:
             return False
     
+
 
 
 class OnboardingStep(models.Model):
