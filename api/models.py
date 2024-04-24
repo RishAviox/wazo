@@ -44,6 +44,22 @@ class WajoUser(models.Model):
     
 
 
+class OnboardingStep(models.Model):
+    user = models.OneToOneField(WajoUser, primary_key=True, on_delete=models.CASCADE, related_name='onboarding_step')
+    step = models.CharField(max_length=10, default='S1')
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.phone_no} is at step {self.step}"
+    
+    class Meta:
+        verbose_name = "Onboarding Flow"
+        verbose_name_plural = "Onboarding Flow"
+
+    
+
+
 class APILog(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.SET_NULL, null=True, blank=True)
     method = models.CharField(max_length=10)
@@ -51,8 +67,8 @@ class APILog(models.Model):
     status_code = models.IntegerField()
     request_body = models.TextField(blank=True, null=True)
     response_message = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_on = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.method} {self.path} {self.status_code} {self.created_at}"
+        return f"{self.method} {self.path} {self.status_code} {self.created_on}"
 

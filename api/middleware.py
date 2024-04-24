@@ -16,7 +16,9 @@ class DatabaseLogMiddleware(MiddlewareMixin):
                     user=request.user,
                     method=request.method,
                     path=request.path,
-                    status_code=response.status_code
+                    status_code=response.status_code,
+                    request_body='',
+                    response_message=response.content.decode('utf-8')
                 )
             else:
                 APILog.objects.create(

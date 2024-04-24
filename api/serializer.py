@@ -1,4 +1,4 @@
-from .models import WajoUser
+from .models import WajoUser, OnboardingStep
 from rest_framework import serializers
 import re
 
@@ -22,3 +22,7 @@ class WajoUserSerializer(serializers.ModelSerializer):
         return value
 
 
+class OnboardingStepSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OnboardingStep
+        fields = ['step']

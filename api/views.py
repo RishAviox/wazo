@@ -1,14 +1,14 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 import re
 from datetime import datetime
 from django.utils.dateparse import parse_time
 from PIL import Image
 
-from .models import WajoUser
-from .serializer import WajoUserSerializer
+from .models import WajoUser, OnboardingStep
+from .serializer import WajoUserSerializer, OnboardingStepSerializer
 from .auth import create_token
 
 # Register API
@@ -241,4 +241,22 @@ class OnboardingAPI(APIView):
         user.save()
         return Response({'message': 'Affiliation details updated successfully'}, status=status.HTTP_200_OK)
     
+
+
+class OnboardingFlowEntrypoint(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        onboarding_step, created = OnboardingStep.objects.get_or_create(user=user)
+        serializer = OnboardingStepSerializer(onboarding_step)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
+    def post(self, request):
+        user = request.user
+        onboarding_step, created = OnboardingStep.objects.get_or_create(user=user)
+        serializer = OnboardingStepSerializer(onboarding_step, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
