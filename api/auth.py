@@ -2,7 +2,7 @@
 
 import jwt
 from django.conf import settings
-import datetime
+from django.utils import timezone
 from rest_framework import authentication, exceptions
 from .models import WajoUser
 
@@ -24,10 +24,12 @@ class JWTAuthentication(authentication.BaseAuthentication):
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
             user = WajoUser.objects.get(phone_no=payload['id'])
             return (user, None)
-        except jwt.ExpiredSignatureError as e:
+        except jwt.ExpiredSignatureError:
             raise exceptions.AuthenticationFailed('Token has expired')
-        except jwt.DecodeError as e:
+        except jwt.DecodeError:
             raise exceptions.AuthenticationFailed('Error decoding token')
+        except jwt.ImmatureSignatureError:
+            raise exceptions.AuthenticationFailed('Immature token')
         except WajoUser.DoesNotExist:
             raise exceptions.AuthenticationFailed('No such user')
     
@@ -39,6 +41,6 @@ class JWTAuthentication(authentication.BaseAuthentication):
 def create_token(user):
     return jwt.encode({
             'id': user.phone_no,
-            'exp': datetime.datetime.now() + datetime.timedelta(hours=24),
-            'iat': datetime.datetime.now()
+            'exp': timezone.now() + timezone.timedelta(hours=24),
+            'iat': timezone.now()
         }, settings.SECRET_KEY, algorithm='HS256')

@@ -10,6 +10,7 @@ from PIL import Image
 from .models import WajoUser, OnboardingStep
 from .serializer import WajoUserSerializer, OnboardingStepSerializer
 from .auth import create_token
+from .utils import generate_and_send_otp, validate_otp
 
 # Register API
 class RegisterAPI(APIView):
@@ -34,7 +35,11 @@ class SendOTPAPI(APIView):
 
         try:
             user = WajoUser.objects.get(phone_no=phone_no)
-            return Response({"message": "OTP sent successfully."}, status=status.HTTP_200_OK)
+            try:
+                generate_and_send_otp(user)
+                return Response({"message": "OTP sent successfully."}, status=status.HTTP_200_OK)
+            except Exception as e:  # Catch any exceptions from generate_and_send_otp
+                return Response({"error": "Failed to send OTP"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except WajoUser.DoesNotExist:
             return Response({"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND)
         
@@ -58,13 +63,15 @@ class VerifyOTPAPI(APIView):
         try:
             user = WajoUser.objects.get(phone_no=phone_no)
             # method to validate OTP
-            if user.verify_otp(otp):
+            if validate_otp(user, otp):
                 return Response({"message": "OTP verified successfully."}, status=status.HTTP_200_OK)
             else:
                 return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
         except WajoUser.DoesNotExist:
             return Response({"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND)
-        
+
+
+
 class LoginAPI(APIView):
     def post(self, request):
         phone_no = request.data.get("phone_no")
@@ -82,17 +89,17 @@ class LoginAPI(APIView):
         try:
             user = WajoUser.objects.get(phone_no=phone_no)
             # method to validate OTP
-            if user.verify_otp(otp):
+            if validate_otp(user, otp):
                 token = create_token(user)
                 return Response({
                     'token': token
                 }, status=status.HTTP_200_OK)
-                # return Response({"message": "OTP verified successfully."}, status=status.HTTP_200_OK)
             else:
                 return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
         except WajoUser.DoesNotExist:
             return Response({"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND)
         
+
 
 """
     Handle Onboarding Profile Update.

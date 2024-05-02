@@ -1,5 +1,5 @@
 from django.db import models
-
+from django.utils import timezone
 
 # On creating WajoUser, new OnboardingStep instance will be created using signals
 # refer signals.py
@@ -37,14 +37,6 @@ class WajoUser(models.Model):
     def is_authenticated(self):
         """Always return True for compatibility with Django's authentication system."""
         return True
-
-    def verify_otp(self, otp):
-        # Not Available for now
-        print(otp)
-        if otp == "12345":
-            return True
-        else:
-            return False
     
 
 
@@ -63,6 +55,21 @@ class OnboardingStep(models.Model):
         verbose_name_plural = "Onboarding Flow"
 
     
+
+# Store OTP
+class OTPStore(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='otp_store')
+    data = models.CharField(max_length=6)
+    is_used = models.BooleanField(default=False)
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"OTP {self.data} for {self.user.phone_no}"
+    
+    def is_valid(self):
+        time_valid = timezone.now() - self.created_on < timezone.timedelta(minutes=5)
+        return time_valid and not self.is_used
+
 
 
 class APILog(models.Model):
