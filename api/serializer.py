@@ -13,7 +13,6 @@ class WajoUserSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'phone_no': {'required': True, 'validators': [custom_phone_number_validator]},
             'selected_language': {'required': True},
-            'fcm_token': {'required': True}
         }
 
     def validate_phone_no(self, value):
