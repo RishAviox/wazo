@@ -7,7 +7,7 @@ from datetime import datetime
 from django.utils.dateparse import parse_time
 from PIL import Image
 
-from .models import WajoUser, OnboardingStep
+from .models import WajoUser, OnboardingStep, WajoUserDevice
 from .serializer import WajoUserSerializer, OnboardingStepSerializer
 from .auth import create_token
 from .utils import generate_and_send_otp, validate_otp
@@ -21,10 +21,13 @@ class RegisterAPI(APIView):
             return Response({ 'error': 'FCM Token is required.'}, status=status.HTTP_400_BAD_REQUEST)
         # remove fcm_token from _data for serialization
         del _data['fcm_token']
-        
-        serializer = WajoUserSerializer(data=request.data)
+
+        serializer = WajoUserSerializer(data=_data)
         if serializer.is_valid():
-            serializer.save()
+            user = serializer.save()
+
+            # Create WajoUserDevice instance
+            WajoUserDevice.objects.create(user=user, fcm_token=fcm_token)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
