@@ -12,9 +12,16 @@ from .serializer import WajoUserSerializer, OnboardingStepSerializer
 from .auth import create_token
 from .utils import generate_and_send_otp, validate_otp
 
-# Register API
+# Register API, store FCM token as well
 class RegisterAPI(APIView):
     def post(self, request):
+        _data = request.data.copy()
+        fcm_token = _data.get('fcm_token', None)
+        if not fcm_token:
+            return Response({ 'error': 'FCM Token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        # remove fcm_token from _data for serialization
+        del _data['fcm_token']
+        
         serializer = WajoUserSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()

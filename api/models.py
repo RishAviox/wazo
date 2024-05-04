@@ -11,7 +11,8 @@ def profile_picture_path(instnace, filename):
 class WajoUser(models.Model):
     phone_no = models.CharField(max_length=15, unique=True, primary_key=True)
     selected_language = models.CharField(max_length=15)
-    fcm_token = models.CharField(max_length=255)
+    # fcm_token = models.CharField(max_length=255)
+    # we have WajoUserDevice to store FCM tokens
 
     # Onboarding Profile
     name = models.CharField(max_length=50, blank=True, null=True)
@@ -41,6 +42,21 @@ class WajoUser(models.Model):
 
 
 
+# Store FCM Tokens
+class WajoUserDevice(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="devices")
+    fcm_token = models.CharField(max_length=255)
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return self.user.phone_no
+    
+    class Meta:
+        unique_together = ('user', 'fcm_token')
+
+
+# Track EntryPoint
 class OnboardingStep(models.Model):
     user = models.OneToOneField(WajoUser, primary_key=True, on_delete=models.CASCADE, related_name='onboarding_step')
     step = models.CharField(max_length=10, default='PQ1')

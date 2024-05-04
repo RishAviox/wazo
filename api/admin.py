@@ -1,10 +1,10 @@
 from django.contrib import admin
-from .models import WajoUser, APILog, OTPStore, OnboardingStep
+from .models import WajoUser, APILog, OTPStore, OnboardingStep, WajoUserDevice
 
 # Register your models here.
 
 class WajoUserAdmin(admin.ModelAdmin):
-    list_display = ('phone_no', 'selected_language', 'fcm_token', 'created_on', 'updated_on', )
+    list_display = ('phone_no', 'selected_language', 'created_on', 'updated_on', )
 
 class APILogAdmin(admin.ModelAdmin):
     list_display = ['user', 'method', 'path', 'status_code', 'created_on']
@@ -18,8 +18,12 @@ class OTPStoreAdmin(admin.ModelAdmin):
 class OnboardingFlowAdmin(admin.ModelAdmin):
     list_display = ['user', 'step', 'created_on', 'updated_on']
 
+class WajoUserDeviceAdmin(admin.ModelAdmin):
+    list_display = ['user', 'fcm_token', 'created_on', 'updated_on']
+
 
 admin.site.register(WajoUser, WajoUserAdmin)
 admin.site.register(APILog, APILogAdmin)
 admin.site.register(OTPStore, OTPStoreAdmin)
 admin.site.register(OnboardingStep, OnboardingFlowAdmin)
+admin.site.register(WajoUserDevice, WajoUserDeviceAdmin)
