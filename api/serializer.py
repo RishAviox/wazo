@@ -9,7 +9,7 @@ def custom_phone_number_validator(value):
 class WajoUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = WajoUser
-        fields = ['phone_no', 'selected_language', 'fcm_token']
+        fields = ['phone_no', 'selected_language']
         extra_kwargs = {
             'phone_no': {'required': True, 'validators': [custom_phone_number_validator]},
             'selected_language': {'required': True},
