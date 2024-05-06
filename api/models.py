@@ -101,3 +101,31 @@ class APILog(models.Model):
     def __str__(self):
         return f"{self.method} {self.path} {self.status_code} {self.created_on}"
 
+
+
+# Daily Wellness Questionnaire
+class DailyWellnessQuestionnaire(models.Model):
+    id = models.CharField(max_length=5, primary_key=True)
+    name = models.CharField(max_length=50)
+    description = models.TextField()
+    question_to_ask = models.TextField()
+    response_choices = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+
+    def __str__(self):
+        return f"{self.id} - {self.name}"
+
+
+class DailyWellnessUserResponse(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='daily_wellness_user_response')
+    question = models.ForeignKey(DailyWellnessQuestionnaire, on_delete=models.CASCADE)
+    response = models.TextField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.name} - {self.question.name}"

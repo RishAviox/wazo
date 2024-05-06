@@ -1,5 +1,9 @@
 from django.contrib import admin
-from .models import WajoUser, APILog, OTPStore, OnboardingStep, WajoUserDevice
+from .models import (
+                    WajoUser, APILog, OTPStore, 
+                    OnboardingStep, WajoUserDevice,
+                    DailyWellnessQuestionnaire, DailyWellnessUserResponse
+                )   
 
 # Register your models here.
 
@@ -21,9 +25,18 @@ class OnboardingFlowAdmin(admin.ModelAdmin):
 class WajoUserDeviceAdmin(admin.ModelAdmin):
     list_display = ['user', 'fcm_token', 'created_on', 'updated_on']
 
+class DailyWellnessQuestionnaireAdmin(admin.ModelAdmin):
+    list_display = ['id', 'name', 'description', 'created_on', 'updated_on']
+
+
+class DailyWellnessUserResponseAdmin(admin.ModelAdmin):
+    list_display = ['user', 'question', 'response', 'created_on', 'updated_on']
+
 
 admin.site.register(WajoUser, WajoUserAdmin)
 admin.site.register(APILog, APILogAdmin)
 admin.site.register(OTPStore, OTPStoreAdmin)
 admin.site.register(OnboardingStep, OnboardingFlowAdmin)
 admin.site.register(WajoUserDevice, WajoUserDeviceAdmin)
+admin.site.register(DailyWellnessQuestionnaire, DailyWellnessQuestionnaireAdmin)
+admin.site.register(DailyWellnessUserResponse, DailyWellnessUserResponseAdmin)
