@@ -5,12 +5,17 @@ from rest_framework.permissions import IsAuthenticated
 import re
 from datetime import datetime
 from django.utils.dateparse import parse_time
-from PIL import Image
 
 from .models import WajoUser, OnboardingStep, WajoUserDevice
 from .serializer import WajoUserSerializer, OnboardingStepSerializer
 from .auth import create_token
-from .utils import generate_and_send_otp, validate_otp
+from .utils import (
+                generate_and_send_otp, validate_otp,
+                is_valid_image, is_valid_image_content_type, 
+                is_valid_image_extension, is_valid_image_size, 
+                convert_base64_to_file
+            )           
+
 
 # Register API, store FCM token as well
 class RegisterAPI(APIView):
@@ -250,33 +255,18 @@ class OnboardingAPI(APIView):
         return Response({'message': 'Activities updated successfully'}, status=status.HTTP_200_OK)
     
     def handle_picture(self, user, picture):
-        
-        def is_valid_image_extension(file):
-            return file.name.lower().endswith(('.png', '.jpg', '.jpeg'))
-        
-        def is_valid_image_content_type(file):
-            return file.content_type in ['image/png', 'image/jpeg']
-        
-        def is_valid_image(file):
-            try:
-                with Image.open(file) as img:
-                    img.verify()  # Verify that it is an image
-                return True
-            except (IOError, SyntaxError) as e:
-                print(f"Invalid image file: {e}")  # Not an image, or corrupted
-                return False
-        
-        def is_valid_image_size(file):
-            if file.size > self.MAX_IMAGE_SIZE:
-                return False
-            return True
-            
+        if type(picture) == str:
+            picture, content_type, error = convert_base64_to_file(picture)
+            if error:
+                return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+            picture.content_type = content_type
+                    
         # Validate file type and content type
         if not is_valid_image_extension(picture) or not is_valid_image_content_type(picture):
             return Response({'error': 'Only valid image files are accepted (.png, .jpg, etc.)'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Validate file size
-        if not is_valid_image_size(picture):
+        if not is_valid_image_size(picture, self.MAX_IMAGE_SIZE):
             return Response({'error': f'The file size must not exceed {self.MAX_IMAGE_SIZE/1024/1024} MB'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Validate image integrity and type
