@@ -241,9 +241,18 @@ class OnboardingAPI(APIView):
         user.save()
 
         entrypoint = OnboardingStep.objects.get(user=user)
-        entrypoint.step = "PQ10"
+        entrypoint.step = "PQ9"
         entrypoint.save()
         return Response({'message': 'Sleep time updated successfully'}, status=status.HTTP_200_OK)
+
+    def handle_problems(self, user, problems):
+        user.problems = problems
+        user.save()
+
+        entrypoint = OnboardingStep.objects.get(user=user)
+        entrypoint.step = "PQ10"
+        entrypoint.save()
+        return Response({'message': 'Problems updated successfully'}, status=status.HTTP_200_OK)
 
     def handle_activities(self, user, activities):
         user.activities = activities
@@ -255,15 +264,15 @@ class OnboardingAPI(APIView):
         return Response({'message': 'Activities updated successfully'}, status=status.HTTP_200_OK)
     
     def handle_picture(self, user, picture):
-        if type(picture) == str:
-            picture, content_type, error = convert_base64_to_file(picture)
-            if error:
-                return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
-            picture.content_type = content_type
+        # if type(picture) == str:
+        #     picture, content_type, error = convert_base64_to_file(picture)
+        #     if error:
+        #         return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+        #     picture.content_type = content_type
                     
         # Validate file type and content type
-        if not is_valid_image_extension(picture) or not is_valid_image_content_type(picture):
-            return Response({'error': 'Only valid image files are accepted (.png, .jpg, etc.)'}, status=status.HTTP_400_BAD_REQUEST)
+        if not is_valid_image_extension(picture):
+            return Response({'error': 'Only valid image files are accepted (.png, .jpg, .jpeg)'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Validate file size
         if not is_valid_image_size(picture, self.MAX_IMAGE_SIZE):
@@ -295,7 +304,7 @@ class OnboardingAPI(APIView):
         user.save()
 
         entrypoint = OnboardingStep.objects.get(user=user)
-        entrypoint.step = "PQ14"
+        entrypoint.step = "COMPLETED"
         entrypoint.save()
         return Response({'message': 'Affiliation details updated successfully'}, status=status.HTTP_200_OK)
     
