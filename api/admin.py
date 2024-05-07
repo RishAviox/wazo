@@ -16,7 +16,7 @@ class APILogAdmin(admin.ModelAdmin):
     search_fields = ['path']
 
 class OTPStoreAdmin(admin.ModelAdmin):
-    list_display = ['user', 'data', 'is_used', 'created_on']
+    list_display = ['phone_no', 'data', 'is_used', 'created_on']
 
 
 class OnboardingFlowAdmin(admin.ModelAdmin):

@@ -75,13 +75,13 @@ class OnboardingStep(models.Model):
 
 # Store OTP
 class OTPStore(models.Model):
-    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='otp_store')
+    phone_no = models.CharField(max_length=15)
     data = models.CharField(max_length=6)
     is_used = models.BooleanField(default=False)
     created_on = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"OTP {self.data} for {self.user.phone_no}"
+        return f"OTP {self.data} for {self.phone_no}"
     
     def is_valid(self):
         time_valid = timezone.now() - self.created_on < timezone.timedelta(minutes=5)

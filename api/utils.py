@@ -10,9 +10,9 @@ from .models import OTPStore
 
 
 # generate, store and send otp
-def generate_and_send_otp(user):
+def generate_and_send_otp(phone_no):
     otp_number = secrets.randbelow(1000000) + 100000 # 6 digit 
-    otp = OTPStore(data=str(otp_number), user=user)
+    otp = OTPStore(data=str(otp_number), phone_no=phone_no)
     otp.save()
 
     # send OTP via API call
@@ -20,7 +20,7 @@ def generate_and_send_otp(user):
         'Content-Type': 'application/json'
     }
     data = {
-        "number": user.phone_no,
+        "number": phone_no,
         "OTP": str(otp_number)
     }
     response = requests.post(settings.WAJO_OTP_SERVICE_URL, headers=headers, json=data)
@@ -28,14 +28,14 @@ def generate_and_send_otp(user):
     return otp
 
 
-def validate_otp(user, input_otp):
+def validate_otp(phone_no, input_otp):
     """
         Prevent race conditions with atomic and select_for_update() for row level locking
         Reference: https://docs.djangoproject.com/en/5.0/topics/db/transactions/
     """
     with transaction.atomic(): 
         try:
-            otp = OTPStore.objects.select_for_update().filter(user=user).latest('created_on')
+            otp = OTPStore.objects.select_for_update().filter(phone_no=phone_no).latest('created_on')
             if otp.is_valid() and otp.data == input_otp:
                 otp.is_used = True
                 otp.save()
