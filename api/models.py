@@ -105,24 +105,28 @@ class APILog(models.Model):
 
 # Daily Wellness Questionnaire
 class DailyWellnessQuestionnaire(models.Model):
-    id = models.CharField(max_length=5, primary_key=True)
+    q_id = models.CharField(max_length=10)
     name = models.CharField(max_length=50)
+    language = models.CharField(max_length=10)
     description = models.TextField()
     question_to_ask = models.TextField()
     response_choices = models.JSONField()
 
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
-
+    
+    class Meta:
+        unique_together = ('q_id', 'language')
 
     def __str__(self):
-        return f"{self.id} - {self.name}"
+        return f"{self.q_id} - {self.name}"
 
 
 class DailyWellnessUserResponse(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='daily_wellness_user_response')
     question = models.ForeignKey(DailyWellnessQuestionnaire, on_delete=models.CASCADE)
     response = models.TextField()
+    language = models.CharField(max_length=10)
 
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)

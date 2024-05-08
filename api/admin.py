@@ -26,11 +26,11 @@ class WajoUserDeviceAdmin(admin.ModelAdmin):
     list_display = ['user', 'fcm_token', 'created_on', 'updated_on']
 
 class DailyWellnessQuestionnaireAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'description', 'created_on', 'updated_on']
+    list_display = ['q_id', 'name', 'language', 'description', 'created_on', 'updated_on']
 
 
 class DailyWellnessUserResponseAdmin(admin.ModelAdmin):
-    list_display = ['user', 'question', 'response', 'created_on', 'updated_on']
+    list_display = ['user', 'question', 'response', 'language', 'created_on', 'updated_on']
 
 
 admin.site.register(WajoUser, WajoUserAdmin)
