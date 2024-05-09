@@ -16,13 +16,13 @@ class Migration(migrations.Migration):
             field=models.CharField(default="WQ-1", max_length=10),
             preserve_default=False,
         ),
-        migrations.AlterField(
-            model_name="dailywellnessquestionnaire",
-            name="id",
-            field=models.BigAutoField(
-                auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
-            ),
-        ),
+        # migrations.AlterField(
+        #     model_name="dailywellnessquestionnaire",
+        #     name="id",
+        #     field=models.CharField(
+        #         auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+        #     ),
+        # ),
         migrations.AlterUniqueTogether(
             name="dailywellnessquestionnaire",
             unique_together={("q_id", "language")},
