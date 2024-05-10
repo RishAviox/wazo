@@ -6,6 +6,7 @@ from .models import (
                     RPEQuestionnaire, RPEUserResponse,
                 )   
 
+from .custom_admin import admin_site
 # Register your models here.
 
 class WajoUserAdmin(admin.ModelAdmin):
@@ -42,12 +43,12 @@ class RPEUserResponseAdmin(admin.ModelAdmin):
     list_display = ['user', 'question', 'response', 'language', 'created_on', 'updated_on']
 
 
-admin.site.register(WajoUser, WajoUserAdmin)
-admin.site.register(APILog, APILogAdmin)
-admin.site.register(OTPStore, OTPStoreAdmin)
-admin.site.register(OnboardingStep, OnboardingFlowAdmin)
-admin.site.register(WajoUserDevice, WajoUserDeviceAdmin)
-admin.site.register(DailyWellnessQuestionnaire, DailyWellnessQuestionnaireAdmin)
-admin.site.register(DailyWellnessUserResponse, DailyWellnessUserResponseAdmin)
-admin.site.register(RPEQuestionnaire, RPEQuestionnaireAdmin)
-admin.site.register(RPEUserResponse, RPEUserResponseAdmin)
+admin_site.register(WajoUser, WajoUserAdmin)
+admin_site.register(APILog, APILogAdmin)
+admin_site.register(OTPStore, OTPStoreAdmin)
+admin_site.register(OnboardingStep, OnboardingFlowAdmin)
+admin_site.register(WajoUserDevice, WajoUserDeviceAdmin)
+admin_site.register(DailyWellnessQuestionnaire, DailyWellnessQuestionnaireAdmin)
+admin_site.register(DailyWellnessUserResponse, DailyWellnessUserResponseAdmin)
+admin_site.register(RPEQuestionnaire, RPEQuestionnaireAdmin)
+admin_site.register(RPEUserResponse, RPEUserResponseAdmin)
