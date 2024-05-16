@@ -24,13 +24,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-##48_16eac%1=v1ql*3qdf62_tj74b21*$-h8jj5!!73pe^*v5"
+SECRET_KEY = env_config["DJANGO_SECRET_KEY"]
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ['*']
-CORS_ALLOW_ALL_ORIGINS = True
+ALLOWED_HOSTS = ['api.hiwajo.com']
 CSRF_TRUSTED_ORIGINS = ['https://api.hiwajo.com']
 
 
@@ -50,6 +49,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -141,7 +141,9 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 STATIC_URL = "static/"
+
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
 
@@ -152,3 +154,16 @@ MEDIA_URL = '/media/'
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 WAJO_OTP_SERVICE_URL = env_config['WAJO_OTP_SERVICE_URL']
+
+"""
+?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting. 
+If your entire site is served only over SSL, you may want to consider setting a value and enabling HTTP Strict Transport Security. 
+Be sure to read the documentation first; enabling HSTS carelessly can cause serious, irreversible problems.
+"""
+
+"""
+More on this, 
+https://stackoverflow.com/questions/49166768/setting-secure-hsts-seconds-can-irreversibly-break-your-site
+"""
+
+CSRF_COOKIE_SECURE = True
