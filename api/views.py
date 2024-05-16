@@ -11,34 +11,11 @@ from .serializer import WajoUserSerializer, OnboardingStepSerializer
 from .auth import create_token
 from .utils import (
                 generate_and_send_otp, validate_otp,
-                is_valid_image, is_valid_image_content_type, 
-                is_valid_image_extension, is_valid_image_size, 
-                convert_base64_to_file
+                is_valid_image, is_valid_image_extension, is_valid_image_size
             )           
 
 
-# Register API, store FCM token as well
-# class RegisterAPI(APIView):
-#     def post(self, request):
-#         _data = request.data.copy()
-#         fcm_token = _data.get('fcm_token', None)
-#         if not fcm_token:
-#             return Response({ 'error': 'FCM Token is required.'}, status=status.HTTP_400_BAD_REQUEST)
-#         # remove fcm_token from _data for serialization
-#         del _data['fcm_token']
-
-#         serializer = WajoUserSerializer(data=_data)
-#         if serializer.is_valid():
-#             user = serializer.save()
-
-#             # Create WajoUserDevice instance
-#             WajoUserDevice.objects.create(user=user, fcm_token=fcm_token)
-#             return Response(serializer.data, status=status.HTTP_201_CREATED)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
 # SendOTP API
-# check if user is registerd before sending otp
 class SendOTPAPI(APIView):
     def post(self, request):
         phone_no = request.data.get("phone_no")
@@ -54,33 +31,9 @@ class SendOTPAPI(APIView):
         except Exception as e:  # Catch any exceptions from generate_and_send_otp
             return Response({"error": "Failed to send OTP"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# Verify OTP API    
-# class VerifyOTPAPI(APIView):
-#     def post(self, request):
-#         phone_no = request.data.get("phone_no")
-#         otp = request.data.get("otp")
-
-#         # Check if both phone number and OTP are provided
-#         if not phone_no or not otp:
-#             return Response({"error": "Phone number and OTP are required"}, status=status.HTTP_400_BAD_REQUEST)
-        
-#         # Validate the phone number format
-#         if not re.match(r'^\+?1?\d{9,15}$', phone_no):
-#             return Response({"error": "Invalid phone number format. Please use a valid international phone number format."}, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Attempt to retrieve the user and verify the OTP
-#         try:
-#             user = WajoUser.objects.get(phone_no=phone_no)
-#             # method to validate OTP
-#             if validate_otp(user, otp):
-#                 return Response({"message": "OTP verified successfully."}, status=status.HTTP_200_OK)
-#             else:
-#                 return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
-#         except WajoUser.DoesNotExist:
-#             return Response({"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND)
 
 
-
+# Both New REGISTRATION and LOGIN done thorugh only one route
 class LoginAPI(APIView):
     def post(self, request):
         phone_no = request.data.get("phone_no")
@@ -88,8 +41,6 @@ class LoginAPI(APIView):
         fcm_token = _data.get('fcm_token', None)
         if not fcm_token:
             return Response({ 'error': 'FCM Token is required.'}, status=status.HTTP_400_BAD_REQUEST)
-        # remove fcm_token from _data for serialization
-        # del _data['fcm_token']
         
         otp = request.data.get("otp")
         selected_language = request.data.get("selected_language")
@@ -132,7 +83,7 @@ class LoginAPI(APIView):
 
 """
     Handle Onboarding Profile Update.
-    Also update question ID i.e, current step.
+    Also update question ID i.e, current step(entrypoint).
     Default ID is PQ1, after Q1 is updated, then change current_step PQ2
     which represents the NEXT step.
 """
@@ -336,11 +287,16 @@ class OnboardingFlowEntrypoint(APIView):
     """
         Current step has been update through onboarding API.
     """
-    # def post(self, request):
-    #     user = request.user
-    #     onboarding_step, created = OnboardingStep.objects.get_or_create(user=user)
-    #     serializer = OnboardingStepSerializer(onboarding_step, data=request.data)
-    #     if serializer.is_valid():
-    #         serializer.save()
-    #         return Response(serializer.data, status=status.HTTP_200_OK)
-    #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# USER Prfoile Details
+class WajoUserProfileDetails(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            user = request.user
+            serializer = WajoUserSerializer(user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except WajoUser.DoesNotExist:
+            return Response({'error': 'User does not exist'}, status=status.HTTP_400_BAD_REQUEST)
