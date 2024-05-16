@@ -14,4 +14,22 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - media_volume:/app/media
     restart: 'always'
+
+  media_server:
+    image: nginx:latest
+    container_name: media_server
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/media_server.conf:/etc/nginx/conf.d/media.conf
+      - media_volume:/usr/share/nginx/html/media
+    environment:
+      - VIRTUAL_HOST=api.hiwajo.com
+    depends_on:
+      - wajo_backend
+
+
+volumes:
+  media_volume:
