@@ -27,6 +27,7 @@ services:
       - media_volume:/usr/share/nginx/html/media
     environment:
       - VIRTUAL_HOST=api.hiwajo.com
+    restart: 'always'
     depends_on:
       - wajo_backend
 
