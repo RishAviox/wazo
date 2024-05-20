@@ -40,6 +40,9 @@ class LoginAPI(APIView):
         _data = request.data.copy()
         fcm_token = _data.get('fcm_token', None)
         if not fcm_token:
+            # Token will stored in WajoUserDevices if not exists
+            # for sending Notifications.
+            # will be removed when LOGOUT api is called
             return Response({ 'error': 'FCM Token is required.'}, status=status.HTTP_400_BAD_REQUEST)
         
         otp = request.data.get("otp")
@@ -70,6 +73,10 @@ class LoginAPI(APIView):
                     entrypoint = OnboardingStep.objects.get(user=user)
                     step = entrypoint.step
 
+                # add FCM token wajo user devices if not exists
+                device, _ = WajoUserDevice.objects.get_or_create(user=user, fcm_token=fcm_token)
+                print("Wajo User Device: ", device, _)
+
                 return Response({
                     'token': token,
                     'step': step
@@ -80,8 +87,23 @@ class LoginAPI(APIView):
             return Response({"error": "Failed to validate OTP, try again."}, status=status.HTTP_404_NOT_FOUND)
         
 
+class LogoutAPI(APIView):
+    permission_classes = [IsAuthenticated]
 
-"""
+    def post(self, request):
+        fcm_token = request.data.get('fcm_token', None)
+        if not fcm_token:
+            # will be removed when LOGOUT api is called
+            return Response({ 'error': 'FCM Token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        device, _ = WajoUserDevice.objects.filter(
+                                    user=request.user, 
+                                    fcm_token=fcm_token
+                                ).delete()
+        print("remove user device: ", device, _)
+        return Response({ 'message': 'logout successful'}, status=status.HTTP_200_OK)
+
+""" 
     Handle Onboarding Profile Update.
     Also update question ID i.e, current step(entrypoint).
     Default ID is PQ1, after Q1 is updated, then change current_step PQ2
