@@ -1,13 +1,24 @@
-import secrets
-import requests
 from django.conf import settings
 from django.db import transaction
 from django.core.files.base import ContentFile
+from django.utils import timezone
+
+import secrets
+import requests
 from PIL import Image
 import base64
+import jwt
+
 
 from .models import OTPStore
 
+
+def create_token(user):
+    return jwt.encode({
+            'id': user.phone_no,
+            'exp': timezone.now() + timezone.timedelta(hours=24),
+            'iat': timezone.now()
+        }, settings.SECRET_KEY, algorithm='HS256')
 
 # generate, store and send otp
 def generate_and_send_otp(phone_no):

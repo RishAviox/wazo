@@ -14,11 +14,12 @@ class CustomAdminSite(AdminSite):
                     'Wajo users',
                     'Onboarding Flow',
                     'Wajo user devices',
-                    'Otp stores',
                     'Daily wellness questionnaires',
                     'Daily wellness user responses',
                     'Rpe questionnaires',
                     'Rpe user responses',
+                    'Card suggested actions',
+                    'Otp stores',
                     'Api logs',
                 ]
                 

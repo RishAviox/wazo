@@ -1,7 +1,7 @@
 from django.urls import path
-from .views import SendOTPAPI, LoginAPI, LogoutAPI
-from .views import OnboardingAPI, OnboardingFlowEntrypoint
-from .views import WajoUserProfileDetails
+from .views.auth import SendOTPAPI, LoginAPI, LogoutAPI
+from .views.onboarding import OnboardingAPI, OnboardingFlowEntrypoint
+from .views.user import WajoUserProfileDetails
 
 urlpatterns = [
     path('auth/sendOTP', SendOTPAPI.as_view(), name='send-otp'),

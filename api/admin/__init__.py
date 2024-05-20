@@ -1,12 +1,14 @@
 from django.contrib import admin
-from .models import (
+from ..models import (
                     WajoUser, APILog, OTPStore, 
                     OnboardingStep, WajoUserDevice,
                     DailyWellnessQuestionnaire, DailyWellnessUserResponse,
                     RPEQuestionnaire, RPEUserResponse,
+                    CardSuggestedAction,
                 )   
 
-from .custom_admin import admin_site
+from .customize import admin_site
+
 # Register your models here.
 
 class WajoUserAdmin(admin.ModelAdmin):
@@ -43,6 +45,10 @@ class RPEUserResponseAdmin(admin.ModelAdmin):
     list_display = ['user', 'question', 'response', 'language', 'created_on', 'updated_on']
 
 
+class CardSuggestedActionAdmin(admin.ModelAdmin):
+    list_display = ['card_name', 'action_title', 'postback_name', 'action_note', 'created_on', 'updated_on']
+
+
 admin_site.register(WajoUser, WajoUserAdmin)
 admin_site.register(APILog, APILogAdmin)
 admin_site.register(OTPStore, OTPStoreAdmin)
@@ -52,3 +58,4 @@ admin_site.register(DailyWellnessQuestionnaire, DailyWellnessQuestionnaireAdmin)
 admin_site.register(DailyWellnessUserResponse, DailyWellnessUserResponseAdmin)
 admin_site.register(RPEQuestionnaire, RPEQuestionnaireAdmin)
 admin_site.register(RPEUserResponse, RPEUserResponseAdmin)
+admin_site.register(CardSuggestedAction, CardSuggestedActionAdmin)

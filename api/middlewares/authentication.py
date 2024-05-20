@@ -2,9 +2,9 @@
 
 import jwt
 from django.conf import settings
-from django.utils import timezone
 from rest_framework import authentication, exceptions
-from .models import WajoUser
+
+from ..models import WajoUser
 
 
 class JWTAuthentication(authentication.BaseAuthentication):
@@ -36,11 +36,3 @@ class JWTAuthentication(authentication.BaseAuthentication):
     def authenticate_header(self, request):
         return 'Bearer'
     
-
-
-def create_token(user):
-    return jwt.encode({
-            'id': user.phone_no,
-            'exp': timezone.now() + timezone.timedelta(hours=24),
-            'iat': timezone.now()
-        }, settings.SECRET_KEY, algorithm='HS256')

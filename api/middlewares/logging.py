@@ -1,7 +1,8 @@
 
-from .models import APILog
 from django.contrib import auth
 from django.utils.deprecation import MiddlewareMixin
+
+from ..models import APILog
 
 class DatabaseLogMiddleware(MiddlewareMixin):
     def __init__(self, get_response):
