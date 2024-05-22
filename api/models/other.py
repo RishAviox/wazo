@@ -17,20 +17,6 @@ class OTPStore(models.Model):
         time_valid = timezone.now() - self.created_on < timezone.timedelta(minutes=5)
         return time_valid and not self.is_used
 
-
-# Card's Suggested Actions (redirect to chatbot) Model
-class CardSuggestedAction(models.Model):
-    card_name = models.CharField(max_length=100)
-    action_title = models.CharField(max_length=255)
-    action_note = models.TextField(null=True, blank=True)
-    postback_name = models.CharField(max_length=255, null=True, blank=True)
-
-    created_on = models.DateTimeField(auto_now_add=True)
-    updated_on = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.action_title
-    
     
 # store api logs
 class APILog(models.Model):

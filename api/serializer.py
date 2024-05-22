@@ -1,4 +1,4 @@
-from .models import WajoUser, OnboardingStep
+from .models import WajoUser, OnboardingStep, CardSuggestedAction
 from rest_framework import serializers
 import re
 
@@ -24,3 +24,9 @@ class OnboardingStepSerializer(serializers.ModelSerializer):
     class Meta:
         model = OnboardingStep
         fields = ['step']
+
+
+class CardSuggestedActionsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CardSuggestedAction
+        fields = "__all__"
