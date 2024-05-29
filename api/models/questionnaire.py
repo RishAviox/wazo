@@ -23,15 +23,13 @@ class DailyWellnessQuestionnaire(models.Model):
 
 class DailyWellnessUserResponse(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='daily_wellness_user_response')
-    question = models.ForeignKey(DailyWellnessQuestionnaire, on_delete=models.CASCADE)
-    response = models.TextField()
-    language = models.CharField(max_length=10)
+    response = models.JSONField()
 
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user.name} - {self.question.name}"
+        return f"{self.user.name}"
     
 
 # RPE Questionnaire
@@ -56,13 +54,11 @@ class RPEQuestionnaire(models.Model):
 
 class RPEUserResponse(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='rpe_user_response')
-    question = models.ForeignKey(RPEQuestionnaire, on_delete=models.CASCADE)
-    response = models.TextField()
-    language = models.CharField(max_length=10)
+    response = models.JSONField()
 
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user.name} - {self.question.name}"
+        return f"{self.user.name}"
     

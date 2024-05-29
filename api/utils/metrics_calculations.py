@@ -1,111 +1,139 @@
 from django.utils import timezone
-from django.db.models import Avg
-from api.models import DailyWellnessUserResponse, RPEUserResponse
+from api.models import DailyWellnessUserResponse, RPEUserResponse, DailyWellnessQuestionnaire, RPEQuestionnaire
 
+# Helper function to extract score from JSON responses
+def get_score_by_q_id(response, q_id):
+    for item in response:
+        if item['q_id'] == q_id:
+            return item['score']
+    return 0
+
+def get_rpe_score_by_q_name(user, response, q_name):
+    scores = []
+    for item in response:
+        question = RPEQuestionnaire.objects.filter(q_id=item['q_id'], language=user.selected_language).first()
+        if question and q_name in question.name:
+            scores.append(item['score'])
+    scores_avg = sum(scores) / len(scores) if scores else 0
+    return scores_avg
+
+def get_wellness_score_by_q_name(user, response, q_name):
+    scores = []
+    for item in response:
+        question = DailyWellnessQuestionnaire.objects.filter(q_id=item['q_id'], language=user.selected_language).first()
+        if question and q_name in question.name:
+            scores.append(item['score'])
+    scores_avg = sum(scores) / len(scores) if scores else 0
+    return scores_avg
+
+# Helper function to get the most recent instance with the required response count
+def get_most_recent_instance_with_count(queryset, required_count):
+    for instance in queryset:
+        if len(instance.response) == required_count:
+            return instance
+    return None
 
 # ****************** StatusCard Metrics **************************
 
-# overall score (7 days or defined period) - (STM-01)
-# Average of selected scores from the wellness and RPE tables, typically over the past week or another defined period.
 def calculate_overall_score(user, days=7):
     end_date = timezone.now()
     start_date = end_date - timezone.timedelta(days=days)
-    wellness_avg = DailyWellnessUserResponse.objects.filter(
+    wellness_responses = DailyWellnessUserResponse.objects.filter(
         user=user,
-        created_on__range=(start_date, end_date)
-    ).aggregate(Avg('response'))['response__avg']
+        updated_on__range=(start_date, end_date)
+    )
 
-    rpe_avg = RPEUserResponse.objects.filter(
+    rpe_responses = RPEUserResponse.objects.filter(
         user=user,
-        created_on__range=(start_date, end_date)
-    ).aggregate(Avg('response'))['response__avg']
+        updated_on__range=(start_date, end_date)
+    )
 
-    if wellness_avg is None and rpe_avg is None:
-        return 0  # or return "N/A" or return None
+    wellness_scores = []
+    rpe_scores = []
+
+    for instance in wellness_responses:
+        if len(instance.response) == 8:  # Ensure response count is 8
+            wellness_scores.extend([item['score'] for item in instance.response])
+
+    for instance in rpe_responses:
+        if len(instance.response) == 14:  # Ensure response count is 14
+            rpe_scores.extend([item['score'] for item in instance.response])
+
+    wellness_avg = sum(wellness_scores) / len(wellness_scores) if wellness_scores else 0
+    rpe_avg = sum(rpe_scores) / len(rpe_scores) if rpe_scores else 0
+
+    if not wellness_avg and not rpe_avg:
+        return "N/A"
     
-    wellness_avg = wellness_avg or 0
-    rpe_avg = rpe_avg or 0
+    print("scores: ", wellness_scores, rpe_scores)
 
     overall_avg = (wellness_avg + rpe_avg) / 2
     return round(overall_avg, 1)
 
-
-# sRPE (STM-06)
-# Most recent entry for training intensity from the RPE table.
 def calculate_srpe(user):
     most_recent_training_intensity = RPEUserResponse.objects.filter(
-        user=user,
-        question__name__contains='Intensity',
-        question__after_session_type__contains='Training' # only trainings, not match session
-    ).order_by('-created_on').first()
+        user=user
+    ).order_by('-updated_on')
+
+    most_recent_training_intensity = get_most_recent_instance_with_count(most_recent_training_intensity, 14)
     
-    return int(most_recent_training_intensity.response) if most_recent_training_intensity else 0
+    if most_recent_training_intensity:
+        return get_rpe_score_by_q_name(user, most_recent_training_intensity.response, 'Intensity')
+    return "N/A"
 
-
-# Readiness Score (STM-07)
-# A weighted average of recent scores for sleep quality, mood, and recovery.
 def calculate_readiness_score(user, weights={'sleep': 0.4, 'mood': 0.3, 'recovery': 0.3}):
-    sleep_score = DailyWellnessUserResponse.objects.filter(
-        user=user,
-        question__name__contains='Sleep'
-    ).order_by('-created_on').first()
+    most_recent_wellness = DailyWellnessUserResponse.objects.filter(
+        user=user
+    ).order_by('-updated_on')
 
-    mood_score = DailyWellnessUserResponse.objects.filter(
-        user=user,
-        question__name__contains='Mood'
-    ).order_by('-created_on').first()
+    most_recent_rpe = RPEUserResponse.objects.filter(
+        user=user
+    ).order_by('-updated_on')
 
-    recovery_score = RPEUserResponse.objects.filter(
-        user=user,
-        question__name__contains='Recovery'
-    ).order_by('-created_on').first()
+    most_recent_wellness = get_most_recent_instance_with_count(most_recent_wellness, 8)
+    most_recent_rpe = get_most_recent_instance_with_count(most_recent_rpe, 14)
+
+    sleep_score = get_wellness_score_by_q_name(user, most_recent_wellness.response, 'Sleep') if most_recent_wellness else 0
+    mood_score = get_wellness_score_by_q_name(user, most_recent_wellness.response, 'Mood') if most_recent_wellness else 0
+    recovery_score = get_rpe_score_by_q_name(user, most_recent_rpe.response, 'Recovery') if most_recent_rpe else 0
+
+    print('sleep_score: ', sleep_score)
+    print('mood_score: ', mood_score)
+    print('recovery_score: ', recovery_score)
 
     if not sleep_score and not mood_score and not recovery_score:
-        return 0  # or return "N/A"
-    
-    sleep_score = sleep_score.response if sleep_score else 0
-    mood_score = mood_score.response if mood_score else 0
-    recovery_score = recovery_score.response if recovery_score else 0
+        return "N/A"
 
-    readiness_score = (int(sleep_score) * weights['sleep'] + int(mood_score) * weights['mood'] + int(recovery_score) * weights['recovery'])
-    return readiness_score
+    readiness_score = (sleep_score * weights['sleep'] + mood_score * weights['mood'] + recovery_score * weights['recovery'])
+    return round(readiness_score, 1)
 
-
-# Sleep Quality (SMT-05)
-# Most recent score for sleep quality.
 def calculate_sleep_quality(user):
-    most_recent_sleep = DailyWellnessUserResponse.objects.filter(
-        user=user,
-        question__name__contains='Sleep'
-    ).order_by('-created_on').first()
+    most_recent_wellness = DailyWellnessUserResponse.objects.filter(
+        user=user
+    ).order_by('-updated_on')
+    
+    most_recent_wellness = get_most_recent_instance_with_count(most_recent_wellness, 8)
 
-    return int(most_recent_sleep.response) if most_recent_sleep else 0
+    return get_wellness_score_by_q_name(user, most_recent_wellness.response, 'Sleep') if most_recent_wellness else "N/A"
 
-
-# Fatigue (SMT-03)
-# Most recent fatigue score from the RPE table.
 def calculate_fatigue_score(user):
-    most_recent_fatigue = RPEUserResponse.objects.filter(
-        user=user,
-        question__name__contains='Fatigue'
-    ).order_by('-created_on').first()
+    most_recent_rpe = RPEUserResponse.objects.filter(
+        user=user
+    ).order_by('-updated_on')
 
-    return int(most_recent_fatigue.response) if most_recent_fatigue else 0
+    most_recent_rpe = get_most_recent_instance_with_count(most_recent_rpe, 14)
 
+    return get_rpe_score_by_q_name(user, most_recent_rpe.response, 'Fatigue') if most_recent_rpe else "N/A"
 
-# Mood (SMT-02)
-# Most recent mood score.
 def calculate_mood_score(user):
-    most_recent_mood = DailyWellnessUserResponse.objects.filter(
-        user=user,
-        question__name__contains='Mood'
-    ).order_by('-created_on').first()
+    most_recent_wellness = DailyWellnessUserResponse.objects.filter(
+        user=user
+    ).order_by('-updated_on')
 
-    return int(most_recent_mood.response) if most_recent_mood else 0
+    most_recent_wellness = get_most_recent_instance_with_count(most_recent_wellness, 8)
 
+    return get_wellness_score_by_q_name(user, most_recent_wellness.response, 'Mood') if most_recent_wellness else "N/A"
 
-# Play Time (SMT-08)
-# Total minutes played in the most recent game or training session.
 def calculate_play_time(user):
     # data not available
     return 0

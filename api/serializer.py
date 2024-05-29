@@ -1,4 +1,4 @@
-from .models import WajoUser, OnboardingStep, CardSuggestedAction
+from .models import WajoUser, OnboardingStep, CardSuggestedAction, StatusCardMetrics
 from rest_framework import serializers
 import re
 
@@ -29,4 +29,10 @@ class OnboardingStepSerializer(serializers.ModelSerializer):
 class CardSuggestedActionsSerializer(serializers.ModelSerializer):
     class Meta:
         model = CardSuggestedAction
+        fields = "__all__"
+
+
+class StatusCardMetricsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StatusCardMetrics
         fields = "__all__"

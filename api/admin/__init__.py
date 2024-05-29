@@ -4,7 +4,7 @@ from ..models import (
                     OnboardingStep, WajoUserDevice,
                     DailyWellnessQuestionnaire, DailyWellnessUserResponse,
                     RPEQuestionnaire, RPEUserResponse,
-                    CardSuggestedAction,
+                    CardSuggestedAction, StatusCardMetrics,
                 )   
 
 from .customize import admin_site
@@ -34,7 +34,7 @@ class DailyWellnessQuestionnaireAdmin(admin.ModelAdmin):
 
 
 class DailyWellnessUserResponseAdmin(admin.ModelAdmin):
-    list_display = ['user', 'question', 'response', 'language', 'created_on', 'updated_on']
+    list_display = ['user', 'response', 'created_on', 'updated_on']
 
 
 class RPEQuestionnaireAdmin(admin.ModelAdmin):
@@ -42,11 +42,16 @@ class RPEQuestionnaireAdmin(admin.ModelAdmin):
 
 
 class RPEUserResponseAdmin(admin.ModelAdmin):
-    list_display = ['user', 'question', 'response', 'language', 'created_on', 'updated_on']
+    list_display = ['user', 'response', 'created_on', 'updated_on']
 
 
 class CardSuggestedActionAdmin(admin.ModelAdmin):
     list_display = ['card_name', 'action_title', 'postback_name', 'action_note', 'created_on', 'updated_on']
+
+
+class StatusCardMetricsAdmin(admin.ModelAdmin):
+    list_display = ['user', 'overall_score', 'srpe_score', 'readiness_score', 'sleep_quality', 
+                    'fatigue_score', 'mood_score', 'play_time', 'created_on', 'updated_on']
 
 
 admin_site.register(WajoUser, WajoUserAdmin)
@@ -59,3 +64,4 @@ admin_site.register(DailyWellnessUserResponse, DailyWellnessUserResponseAdmin)
 admin_site.register(RPEQuestionnaire, RPEQuestionnaireAdmin)
 admin_site.register(RPEUserResponse, RPEUserResponseAdmin)
 admin_site.register(CardSuggestedAction, CardSuggestedActionAdmin)
+admin_site.register(StatusCardMetrics, StatusCardMetricsAdmin)
