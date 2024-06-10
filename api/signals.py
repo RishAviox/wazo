@@ -23,11 +23,12 @@ def create_onboarding_entryflow(sender, instance, created, **kwargs):
 # we have JSON field as Response which stores partial or all 8 
 # if partial for long time then schedule notification
 # if all 8 are present then calculate metrics
+# remove PainLocation, so now count is 7
 @receiver(post_save, sender=DailyWellnessUserResponse)
 def process_daily_wellness_responses(sender, instance, created, **kwargs):
     responses_count = len(instance.response) if instance.response else 0
-    # number of questions(8) can be made dynamic
-    if responses_count > 0 and responses_count < 8:
+    # number of questions(7) can be made dynamic
+    if responses_count > 0 and responses_count < 7:
         # schedule notification in `Notification server`
         # get the latest, if less than for 30 minutes
         # schedule notification to inform user
@@ -57,7 +58,6 @@ def process_daily_wellness_responses(sender, instance, created, **kwargs):
 
 def calculate_and_store_status_card_metrics(user):
     metrics = {
-        'user': user,
         'overall_score': calculate_overall_score(user, days=7),
         'srpe_score': calculate_srpe(user),
         'readiness_score': calculate_readiness_score(user),
@@ -69,6 +69,6 @@ def calculate_and_store_status_card_metrics(user):
     print(metrics)
     metrics_serializer = StatusCardMetricsSerializer(data=metrics)
     if metrics_serializer.is_valid():
-        metrics_serializer.save()
+        metrics_serializer.save(user=user)
 
     
