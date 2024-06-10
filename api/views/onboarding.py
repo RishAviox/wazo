@@ -24,7 +24,6 @@ class OnboardingAPI(APIView):
         'primary-sport': 'primary_sport',
         'wake-up-time': 'wake_up_time',
         'sleep-time': 'sleep_time',
-        'activities-n-events': 'activities',
         'profile-picture': 'picture',
     }
 

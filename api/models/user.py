@@ -24,11 +24,7 @@ class WajoUser(models.Model):
     role = models.CharField(max_length=50, blank=True, null=True)
     wake_up_time = models.TimeField(blank=True, null=True)
     sleep_time = models.TimeField(blank=True, null=True)
-    problems = models.TextField(blank=True, null=True)
-    activities = models.TextField(blank=True, null=True)
     picture = models.ImageField(blank=True, null=True, upload_to=profile_picture_path)
-    location = models.CharField(max_length=255, blank=True, null=True)
-    affiliation = models.CharField(max_length=255, blank=True, null=True)
     
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
