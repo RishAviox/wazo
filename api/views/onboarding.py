@@ -140,24 +140,6 @@ class OnboardingAPI(APIView):
         entrypoint.save()
         return Response({'message': 'Sleep time updated successfully'}, status=status.HTTP_200_OK)
 
-    def handle_problems(self, user, problems):
-        user.problems = problems
-        user.save()
-
-        entrypoint = OnboardingStep.objects.get(user=user)
-        entrypoint.step = "PQ10"
-        entrypoint.save()
-        return Response({'message': 'Problems updated successfully'}, status=status.HTTP_200_OK)
-
-    def handle_activities(self, user, activities):
-        user.activities = activities
-        user.save()
-
-        entrypoint = OnboardingStep.objects.get(user=user)
-        entrypoint.step = "PQ11"
-        entrypoint.save()
-        return Response({'message': 'Activities updated successfully'}, status=status.HTTP_200_OK)
-    
     def handle_picture(self, user, picture):
         # if type(picture) == str:
         #     picture, content_type, error = convert_base64_to_file(picture)
@@ -181,28 +163,9 @@ class OnboardingAPI(APIView):
         user.save()
 
         entrypoint = OnboardingStep.objects.get(user=user)
-        entrypoint.step = "PQ12"
-        entrypoint.save()
-        return Response({'message': 'Profile picture updated successfully'}, status=status.HTTP_200_OK)
-    
-    def handle_location(self, user, location):
-        user.location = location
-        user.save()
-
-        entrypoint = OnboardingStep.objects.get(user=user)
-        entrypoint.step = "PQ13"
-        entrypoint.save()
-        return Response({'message': 'Location updated successfully'}, status=status.HTTP_200_OK)
-
-    def handle_affiliation(self, user, affiliation):
-        user.affiliation = affiliation
-        user.save()
-
-        entrypoint = OnboardingStep.objects.get(user=user)
         entrypoint.step = "COMPLETED"
         entrypoint.save()
-        return Response({'message': 'Affiliation details updated successfully'}, status=status.HTTP_200_OK)
-    
+        return Response({'message': 'Profile picture updated successfully'}, status=status.HTTP_200_OK)
 
 
 class OnboardingFlowEntrypoint(APIView):
