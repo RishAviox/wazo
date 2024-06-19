@@ -12,7 +12,7 @@ from .customize import admin_site
 # Register your models here.
 
 class WajoUserAdmin(admin.ModelAdmin):
-    list_display = ('phone_no', 'selected_language', 'created_on', 'updated_on', )
+    list_display = ('phone_no', 'selected_language', 'role', 'created_on', 'updated_on', )
 
 class APILogAdmin(admin.ModelAdmin):
     list_display = ['user', 'method', 'path', 'status_code', 'created_on']
