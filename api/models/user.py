@@ -29,7 +29,7 @@ class WajoUser(models.Model):
     # Self-referential many-to-many relationship
     coach = models.ForeignKey('self', related_name='players', null=True,
                                 blank=True, on_delete=models.SET_NULL,
-                                limit_choices_to={'role': 'coach'}
+                                limit_choices_to={'role': 'Coach'}
                             )
 
     
@@ -39,7 +39,7 @@ class WajoUser(models.Model):
 
     def clean(self):
         # Ensure that only players can have a coach
-        if self.role == 'coach' and self.coach is not None:
+        if self.role == 'Coach' and self.coach is not None:
             raise ValidationError("A coach cannot have another coach assigned.")
 
     def save(self, *args, **kwargs):

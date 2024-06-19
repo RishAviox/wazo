@@ -15,7 +15,7 @@ class StatusCardMetricAPI(APIView):
 
     def get(self, request):
 
-        if request.user.role == 'coach':
+        if request.user.role == 'Coach':
             player_data = []
             for player in request.user.players.all():
                 try:
