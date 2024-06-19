@@ -1,5 +1,5 @@
 from django.db import models
-from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 
 # On creating WajoUser, new OnboardingStep instance will be created using signals
@@ -25,9 +25,26 @@ class WajoUser(models.Model):
     wake_up_time = models.TimeField(blank=True, null=True)
     sleep_time = models.TimeField(blank=True, null=True)
     picture = models.ImageField(blank=True, null=True, upload_to=profile_picture_path)
+
+    # Self-referential many-to-many relationship
+    coach = models.ForeignKey('self', related_name='players', null=True,
+                                blank=True, on_delete=models.SET_NULL,
+                                limit_choices_to={'role': 'coach'}
+                            )
+
     
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
+
+
+    def clean(self):
+        # Ensure that only players can have a coach
+        if self.role == 'coach' and self.coach is not None:
+            raise ValidationError("A coach cannot have another coach assigned.")
+
+    def save(self, *args, **kwargs):
+        self.clean()  # Call the clean method to enforce the validation
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.phone_no
