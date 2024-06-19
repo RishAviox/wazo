@@ -20,7 +20,7 @@ def create_token(user):
 
 # generate, store and send otp
 def generate_and_send_otp(phone_no):
-    otp_number = secrets.randbelow(1000000) + 100000 # 6 digit 
+    otp_number = secrets.randbelow(900000) + 100000 # 6 digit 
     otp = OTPStore(data=str(otp_number), phone_no=phone_no)
     otp.save()
 

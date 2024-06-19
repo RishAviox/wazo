@@ -78,7 +78,7 @@ class LoginAPI(APIView):
             else:
                 return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
         except:
-            return Response({"error": "Failed to validate OTP, try again."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Failed to validate OTP, try again."}, status=status.HTTP_400_BAD_REQUEST)
         
 
 # LOGOUT API
