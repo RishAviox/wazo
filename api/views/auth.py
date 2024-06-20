@@ -54,15 +54,14 @@ class LoginAPI(APIView):
         try:
             # method to validate OTP
             if validate_otp(phone_no, otp):
-                user, created = WajoUser.objects.get_or_create(
-                    phone_no=phone_no,
-                    selected_language=selected_language
-                    )
+                user, created = WajoUser.objects.get_or_create(phone_no=phone_no)
                 token = create_token(user)
                 
                 # for redirecting to screen after LOGIN on mobile app.
                 if created:
                     step = 'PQ1'
+                    user.selected_language = selected_language
+                    user.save()
                 else:
                     entrypoint = OnboardingStep.objects.get(user=user)
                     step = entrypoint.step
@@ -73,7 +72,8 @@ class LoginAPI(APIView):
 
                 return Response({
                     'token': token,
-                    'step': step
+                    'step': step,
+                    'selected_language': user.selected_language
                 }, status=status.HTTP_200_OK)
             else:
                 return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
