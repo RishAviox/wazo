@@ -5,8 +5,9 @@ from ..models import (
                     DailyWellnessQuestionnaire, DailyWellnessUserResponse,
                     RPEQuestionnaire, RPEUserResponse,
                     CardSuggestedAction, StatusCardMetrics,
-                    ActivitiesQuestionnaire, SchedulePlanningQuestionnaire,
-                    SchedulePlanningResponse, RecurringEvents, OneTimeEvents,
+                    # ActivitiesQuestionnaire, 
+                    SchedulePlanningQuestionnaire, SchedulePlanningResponse, 
+                    RecurringEvents, OneTimeEvents,
                 )   
 
 from .customize import admin_site
@@ -56,8 +57,8 @@ class StatusCardMetricsAdmin(admin.ModelAdmin):
                     'fatigue_score', 'mood_score', 'play_time', 'created_on', 'updated_on']
 
 
-class ActivitiesQuestionnaireAdmin(admin.ModelAdmin):
-    list_display = ['activity_id', 'language', 'user_role', 'category', 'icon', 'created_on', 'updated_on']
+# class ActivitiesQuestionnaireAdmin(admin.ModelAdmin):
+#     list_display = ['activity_id', 'language', 'user_role', 'category', 'icon', 'created_on', 'updated_on']
 
 
 class SchedulePlanningQuestionnaireAdmin(admin.ModelAdmin):
@@ -87,7 +88,7 @@ admin_site.register(RPEQuestionnaire, RPEQuestionnaireAdmin)
 admin_site.register(RPEUserResponse, RPEUserResponseAdmin)
 admin_site.register(CardSuggestedAction, CardSuggestedActionAdmin)
 admin_site.register(StatusCardMetrics, StatusCardMetricsAdmin)
-admin_site.register(ActivitiesQuestionnaire, ActivitiesQuestionnaireAdmin)
+# admin_site.register(ActivitiesQuestionnaire, ActivitiesQuestionnaireAdmin)
 admin_site.register(SchedulePlanningQuestionnaire, SchedulePlanningQuestionnaireAdmin)
 admin_site.register(SchedulePlanningResponse, SchedulePlanningResponseAdmin)
 admin_site.register(RecurringEvents, RecurringEventsAdmin)

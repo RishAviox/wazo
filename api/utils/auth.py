@@ -32,8 +32,9 @@ def generate_and_send_otp(phone_no):
         "number": phone_no,
         "OTP": str(otp_number)
     }
-    response = requests.post(settings.WAJO_OTP_SERVICE_URL, headers=headers, json=data)
-    print(response.text)
+    print(data)
+    # response = requests.post(settings.WAJO_OTP_SERVICE_URL, headers=headers, json=data)
+    # print(response.text)
     return otp
 
 

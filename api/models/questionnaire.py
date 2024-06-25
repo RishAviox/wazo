@@ -80,29 +80,29 @@ class RPEUserResponse(models.Model):
     
 
 # Activities Questionnaire
-class ActivitiesQuestionnaire(models.Model):
-    activity_id = models.BigIntegerField()
-    language = models.CharField(max_length=10)
+# class ActivitiesQuestionnaire(models.Model):
+#     activity_id = models.BigIntegerField()
+#     language = models.CharField(max_length=10)
 
-    user_role = models.CharField(max_length=150, null=True, blank=True)
-    category = models.CharField(max_length=150, null=True, blank=True)
-    activity_type = models.CharField(max_length=150, null=True, blank=True)
-    event_description = models.TextField(null=True, blank=True)
-    description = models.TextField(null=True, blank=True)
-    duration = models.CharField(max_length=150, null=True, blank=True)
-    typical_time = models.CharField(max_length=150, null=True, blank=True)
-    warnings_or_considerations = models.TextField(null=True, blank=True)
-    icon = models.CharField(max_length=150, null=True, blank=True)
+#     user_role = models.CharField(max_length=150, null=True, blank=True)
+#     category = models.CharField(max_length=150, null=True, blank=True)
+#     activity_type = models.CharField(max_length=150, null=True, blank=True)
+#     event_description = models.TextField(null=True, blank=True)
+#     description = models.TextField(null=True, blank=True)
+#     duration = models.CharField(max_length=150, null=True, blank=True)
+#     typical_time = models.CharField(max_length=150, null=True, blank=True)
+#     warnings_or_considerations = models.TextField(null=True, blank=True)
+#     icon = models.CharField(max_length=150, null=True, blank=True)
 
-    created_on = models.DateTimeField(auto_now_add=True)
-    updated_on = models.DateTimeField(auto_now=True)
+#     created_on = models.DateTimeField(auto_now_add=True)
+#     updated_on = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return str(self.activity_id)
+#     def __str__(self):
+#         return str(self.activity_id)
     
-    class Meta:
-        verbose_name = "Activities Questionnaire"
-        verbose_name_plural = "Activities Questionnaire"
+#     class Meta:
+#         verbose_name = "Activities Questionnaire"
+#         verbose_name_plural = "Activities Questionnaire"
     
 
 # Q&A Table for Schedule Planning
