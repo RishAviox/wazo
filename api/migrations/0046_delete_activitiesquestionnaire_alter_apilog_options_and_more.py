@@ -10,9 +10,9 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.DeleteModel(
-            name='ActivitiesQuestionnaire',
-        ),
+        # migrations.DeleteModel(
+        #     name='ActivitiesQuestionnaire',
+        # ),
         migrations.AlterModelOptions(
             name='apilog',
             options={'verbose_name': 'API Log', 'verbose_name_plural': 'API Logs'},

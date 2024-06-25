@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0043_activitiesquestionnaire_id_and_more'),
+        ('api', '0040_alter_wajouser_coach'),
     ]
 
     operations = [
