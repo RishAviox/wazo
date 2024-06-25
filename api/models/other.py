@@ -16,6 +16,10 @@ class OTPStore(models.Model):
     def is_valid(self):
         time_valid = timezone.now() - self.created_on < timezone.timedelta(minutes=5)
         return time_valid and not self.is_used
+    
+    class Meta:
+        verbose_name = "OTP Store"
+        verbose_name_plural = "OTP Store"
 
     
 # store api logs
@@ -30,4 +34,8 @@ class APILog(models.Model):
 
     def __str__(self):
         return f"{self.method} {self.path} {self.status_code} {self.created_on}"
+    
+    class Meta:
+        verbose_name = "API Log"
+        verbose_name_plural = "API Logs"
 

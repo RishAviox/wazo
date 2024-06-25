@@ -11,6 +11,10 @@ class CardSuggestedAction(models.Model):
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        verbose_name = "Card Suggested Action"
+        verbose_name_plural = "Card Suggested Actions"
+
     def __str__(self):
         return self.action_title
     
@@ -28,6 +32,10 @@ class StatusCardMetrics(models.Model):
      
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Status Card Metrics"
+        verbose_name_plural = "Status Card Metrics"
 
     def __str__(self):
         return self.user.phone_no

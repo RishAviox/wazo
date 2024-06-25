@@ -11,16 +11,22 @@ class CustomAdminSite(AdminSite):
             if app['name'] == 'Api':
                 # Define the desired order of models
                 desired_order = [
-                    'Wajo users',
+                    'Wajo Users',
+                    'Wajo User Devices',
                     'Onboarding Flow',
-                    'Wajo user devices',
-                    'Daily wellness questionnaires',
-                    'Daily wellness user responses',
-                    'Rpe questionnaires',
-                    'Rpe user responses',
-                    'Card suggested actions',
-                    'Otp stores',
-                    'Api logs',
+                    'Status Card Metrics',
+                    'Daily Wellness Questionnaire',
+                    'Daily Wellness User Responses',
+                    'RPE Questionnaire',
+                    'RPE User Responses',
+                    'Card Suggested Actions',
+                    'Schedule Planning Questionnaire',
+                    'Schedule Planning User Responses',
+                    'One Time Events',
+                    'Recurring Events',
+                    'OTP Store',
+                    'API Logs',
+                    'Activities Questionnaire',
                 ]
                 
                 # Sort the models according to the desired order

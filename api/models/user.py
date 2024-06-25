@@ -36,6 +36,10 @@ class WajoUser(models.Model):
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        verbose_name = "Wajo User"
+        verbose_name_plural = "Wajo Users"
+
 
     def clean(self):
         # Ensure that only players can have a coach
@@ -69,4 +73,6 @@ class WajoUserDevice(models.Model):
     
     class Meta:
         unique_together = ('user', 'fcm_token')
+        verbose_name = "Wajo User Device"
+        verbose_name_plural = "Wajo User Devices"
 

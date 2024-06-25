@@ -19,6 +19,10 @@ class DailyWellnessQuestionnaire(models.Model):
 
     def __str__(self):
         return f"{self.q_id} - {self.name}"
+    
+    class Meta:
+        verbose_name = "Daily Wellness Questionnaire"
+        verbose_name_plural = "Daily Wellness Questionnaire"
 
 
 class DailyWellnessUserResponse(models.Model):
@@ -30,6 +34,10 @@ class DailyWellnessUserResponse(models.Model):
 
     def __str__(self):
         return f"{self.user.name}"
+    
+    class Meta:
+        verbose_name = "Daily Wellness User Response"
+        verbose_name_plural = "Daily Wellness User Responses"
     
 
 # RPE Questionnaire
@@ -50,6 +58,10 @@ class RPEQuestionnaire(models.Model):
 
     def __str__(self):
         return f"{self.q_id} - {self.name}"
+    
+    class Meta:
+        verbose_name = "RPE Questionnaire"
+        verbose_name_plural = "RPE Questionnaire"
 
 
 class RPEUserResponse(models.Model):
@@ -61,6 +73,10 @@ class RPEUserResponse(models.Model):
 
     def __str__(self):
         return f"{self.user.name}"
+    
+    class Meta:
+        verbose_name = "RPE User Response"
+        verbose_name_plural = "RPE User Responses"
     
 
 # Activities Questionnaire
@@ -84,6 +100,10 @@ class ActivitiesQuestionnaire(models.Model):
     def __str__(self):
         return str(self.activity_id)
     
+    class Meta:
+        verbose_name = "Activities Questionnaire"
+        verbose_name_plural = "Activities Questionnaire"
+    
 
 # Q&A Table for Schedule Planning
 class SchedulePlanningQuestionnaire(models.Model):
@@ -104,6 +124,10 @@ class SchedulePlanningQuestionnaire(models.Model):
     def __str__(self):
         return str(self.question_id)
     
+    class Meta:
+        verbose_name = "Schedule Planning Questionnaire"
+        verbose_name_plural = "Schedule Planning Questionnaire"
+    
 
 class SchedulePlanningResponse(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='shchedule_planning_response')
@@ -114,4 +138,8 @@ class SchedulePlanningResponse(models.Model):
 
     def __str__(self):
         return f"{self.user.name}"
+    
+    class Meta:
+        verbose_name = "Schedule Planning User Response"
+        verbose_name_plural = "Schedule Planning User Responses"
     
