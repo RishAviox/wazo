@@ -5,6 +5,8 @@ from ..models import (
                     DailyWellnessQuestionnaire, DailyWellnessUserResponse,
                     RPEQuestionnaire, RPEUserResponse,
                     CardSuggestedAction, StatusCardMetrics,
+                    ActivitiesQuestionnaire, SchedulePlanningQuestionnaire,
+                    SchedulePlanningResponse, RecurringEvents, OneTimeEvents,
                 )   
 
 from .customize import admin_site
@@ -54,6 +56,26 @@ class StatusCardMetricsAdmin(admin.ModelAdmin):
                     'fatigue_score', 'mood_score', 'play_time', 'created_on', 'updated_on']
 
 
+class ActivitiesQuestionnaireAdmin(admin.ModelAdmin):
+    list_display = ['activity_id', 'language', 'user_role', 'category', 'icon', 'created_on', 'updated_on']
+
+
+class SchedulePlanningQuestionnaireAdmin(admin.ModelAdmin):
+    list_display = ['question_id', 'language', 'user_role', 'age', 'category', 'created_on', 'updated_on']
+
+
+class SchedulePlanningResponseAdmin(admin.ModelAdmin):
+    list_display = ['user', 'response', 'created_on', 'updated_on']
+
+
+class RecurringEventsAdmin(admin.ModelAdmin):
+    list_display = ['user', 'event_type', 'event', 'date', 'created_on', 'updated_on']
+
+
+class OneTimeEventsAdmin(admin.ModelAdmin):
+    list_display = ['user', 'event_type', 'event', 'date', 'created_on', 'updated_on']
+
+
 admin_site.register(WajoUser, WajoUserAdmin)
 admin_site.register(APILog, APILogAdmin)
 admin_site.register(OTPStore, OTPStoreAdmin)
@@ -65,3 +87,8 @@ admin_site.register(RPEQuestionnaire, RPEQuestionnaireAdmin)
 admin_site.register(RPEUserResponse, RPEUserResponseAdmin)
 admin_site.register(CardSuggestedAction, CardSuggestedActionAdmin)
 admin_site.register(StatusCardMetrics, StatusCardMetricsAdmin)
+admin_site.register(ActivitiesQuestionnaire, ActivitiesQuestionnaireAdmin)
+admin_site.register(SchedulePlanningQuestionnaire, SchedulePlanningQuestionnaireAdmin)
+admin_site.register(SchedulePlanningResponse, SchedulePlanningResponseAdmin)
+admin_site.register(RecurringEvents, RecurringEventsAdmin)
+admin_site.register(OneTimeEvents, OneTimeEventsAdmin)

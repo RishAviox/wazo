@@ -62,3 +62,56 @@ class RPEUserResponse(models.Model):
     def __str__(self):
         return f"{self.user.name}"
     
+
+# Activities Questionnaire
+class ActivitiesQuestionnaire(models.Model):
+    activity_id = models.BigIntegerField()
+    language = models.CharField(max_length=10)
+
+    user_role = models.CharField(max_length=150, null=True, blank=True)
+    category = models.CharField(max_length=150, null=True, blank=True)
+    activity_type = models.CharField(max_length=150, null=True, blank=True)
+    event_description = models.TextField(null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    duration = models.CharField(max_length=150, null=True, blank=True)
+    typical_time = models.CharField(max_length=150, null=True, blank=True)
+    warnings_or_considerations = models.TextField(null=True, blank=True)
+    icon = models.CharField(max_length=150, null=True, blank=True)
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return str(self.activity_id)
+    
+
+# Q&A Table for Schedule Planning
+class SchedulePlanningQuestionnaire(models.Model):
+    question_id = models.CharField(max_length=20)
+    step = models.IntegerField()
+    language = models.CharField(max_length=10)
+
+    user_role = models.CharField(max_length=150, null=True, blank=True)
+    age = models.CharField(max_length=150, null=True, blank=True)
+    category = models.CharField(max_length=150, null=True, blank=True)
+    question = models.TextField(null=True, blank=True)
+    response_type = models.CharField(max_length=150, null=True, blank=True)
+    options_or_instructions = models.TextField(null=True, blank=True)
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return str(self.question_id)
+    
+
+class SchedulePlanningResponse(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='shchedule_planning_response')
+    response = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.name}"
+    
