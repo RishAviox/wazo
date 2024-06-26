@@ -22,8 +22,13 @@ class JWTAuthentication(authentication.BaseAuthentication):
     def authenticate_credentials(self, token):
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+
+            if payload['token_type'] != 'access':
+                raise exceptions.AuthenticationFailed('Invalid token type, expected access token')
+
             user = WajoUser.objects.get(phone_no=payload['id'])
             return (user, None)
+        
         except jwt.ExpiredSignatureError:
             raise exceptions.AuthenticationFailed('Token has expired')
         except jwt.DecodeError:

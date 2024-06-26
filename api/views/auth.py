@@ -2,10 +2,13 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from django.conf import settings
+
+import jwt
 import re
 
 from ..models import WajoUser, OnboardingStep, WajoUserDevice
-from ..utils import generate_and_send_otp, validate_otp, create_token
+from ..utils import generate_and_send_otp, validate_otp, generate_access_token, generate_refresh_token
 
 
 
@@ -55,7 +58,8 @@ class LoginAPI(APIView):
             # method to validate OTP
             if validate_otp(phone_no, otp):
                 user, created = WajoUser.objects.get_or_create(phone_no=phone_no)
-                token = create_token(user)
+                access_token = generate_access_token(user)
+                refresh_token = generate_refresh_token(user)
                 
                 # for redirecting to screen after LOGIN on mobile app.
                 if created:
@@ -71,7 +75,8 @@ class LoginAPI(APIView):
                 print("Wajo User Device: ", device, _)
 
                 return Response({
-                    'token': token,
+                    'token': access_token,
+                    'refresh': refresh_token,
                     'step': step,
                     'selected_language': user.selected_language
                 }, status=status.HTTP_200_OK)
@@ -98,3 +103,21 @@ class LogoutAPI(APIView):
         print("remove user device: ", device, _)
         return Response({ 'message': 'logout successful'}, status=status.HTTP_200_OK)
 
+
+# token refresh
+class RefreshTokenAPI(APIView):
+    def post(self, request):
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response({'error': 'Refresh token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=['HS256'])
+        if not payload or payload['token_type'] != 'refresh':
+            return Response({'error': 'Invalid refresh token.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = WajoUser.objects.get(phone_no=payload['id'])
+            access_token = generate_access_token(user)
+            return Response({'token': access_token}, status=status.HTTP_200_OK)
+        except WajoUser.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_400_BAD_REQUEST)

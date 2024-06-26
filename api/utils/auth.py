@@ -10,12 +10,25 @@ import jwt
 from api.models import OTPStore
 
 
-def create_token(user):
-    return jwt.encode({
-            'id': user.phone_no,
-            'exp': timezone.now() + timezone.timedelta(hours=24),
-            'iat': timezone.now()
-        }, settings.SECRET_KEY, algorithm='HS256')
+def generate_access_token(user):
+    payload = {
+        'id': user.phone_no,
+        'exp': timezone.now() + timezone.timedelta(hours=24),  # Short-lived
+        'iat': timezone.now(),
+        'token_type': 'access',
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+
+def generate_refresh_token(user):
+    payload = {
+        'id': user.phone_no,
+        'exp': timezone.now() + timezone.timedelta(days=7),  # Long-lived
+        'iat': timezone.now(),
+        'token_type': 'refresh',
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+
+
 
 
 # generate, store and send otp
