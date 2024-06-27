@@ -1,4 +1,4 @@
-from .models import WajoUser, OnboardingStep, CardSuggestedAction, StatusCardMetrics
+from .models import WajoUser, OnboardingStep, CardSuggestedAction, StatusCardMetrics, DailyWellnessUserResponse
 from rest_framework import serializers
 import re
 
@@ -36,3 +36,8 @@ class StatusCardMetricsSerializer(serializers.ModelSerializer):
     class Meta:
         model = StatusCardMetrics
         fields = ["overall_score", "srpe_score", "readiness_score", "sleep_quality", "fatigue_score", "mood_score", "play_time"]
+
+class DailyWellnessUserResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DailyWellnessUserResponse
+        fields = ['id', 'user', 'response', 'created_on', 'updated_on']
