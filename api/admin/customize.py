@@ -1,4 +1,6 @@
 from django.contrib.admin import AdminSite
+from django.contrib.auth.models import User
+from django.contrib.auth.admin import UserAdmin
 
 class CustomAdminSite(AdminSite):
     site_header = 'Wajo Administration'
@@ -39,3 +41,6 @@ class CustomAdminSite(AdminSite):
 
 # Initialize the custom admin site
 admin_site = CustomAdminSite(name='custom_admin')
+
+# add user to panel
+admin_site.register(User, UserAdmin)
