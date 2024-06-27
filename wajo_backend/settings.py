@@ -63,6 +63,7 @@ MIDDLEWARE = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'api.middlewares.authentication.JWTAuthentication',
+        'api.middlewares.authentication.AdminJWTAuthentication',
     )
 }
 
