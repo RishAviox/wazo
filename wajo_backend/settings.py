@@ -67,6 +67,10 @@ REST_FRAMEWORK = {
     )
 }
 
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',  # Default authentication
+]
+
 ROOT_URLCONF = "wajo_backend.urls"
 
 TEMPLATES = [
