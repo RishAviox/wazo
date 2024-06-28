@@ -5,11 +5,12 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework import status
 from django.contrib.auth import authenticate
 from django.utils import timezone
+from django.utils.timezone import make_aware, now, datetime
 from django.conf import settings
 import jwt
 
 from api.serializer import DailyWellnessUserResponseSerializer
-from api.models import WajoUser
+from api.models import WajoUser, DailyWellnessUserResponse
 
 # chatbot admin user is used to push data from chabot responses
 # make sure to use _Bearer instead of Bearer during API call
@@ -61,6 +62,10 @@ class IsAdminUser(BasePermission):
     
 
 # DailyWellness User Responses
+# Check if an entry for the user already exists for the current day.
+# If an entry exists, update the JSON field.
+# If no entry exists, create a new one.
+
 class DailyWellnessUserResponseCreateView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -76,10 +81,35 @@ class DailyWellnessUserResponseCreateView(APIView):
         except WajoUser.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        data['user'] = user
-        serializer = DailyWellnessUserResponseSerializer(data=data)
-        if serializer.is_valid():
-            serializer.save()
-            print(serializer.data)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        today = timezone.make_aware(datetime.combine(now().date(), datetime.min.time()))
+        user_response = DailyWellnessUserResponse.objects.filter(user=user, created_on__gte=today).first()
+        
+        new_response_data = data.get('response', [])
+        print("new_response_data: ", new_response_data)
+    
+        if user_response:
+            existing_response = user_response.response
+            # Update the existing JSON field
+            for new_entry in new_response_data:
+                updated = False
+                for existing_entry in existing_response:
+                    if existing_entry['question_id'] == new_entry['question_id']:
+                        existing_entry['answer_id'] = new_entry['answer_id']
+                        updated = True
+                        break
+                # if not updated existing entry, then append to JSON list.
+                if not updated:
+                    existing_response.append(new_entry)
+
+            user_response.response = existing_response
+            user_response.save()
+            serializer = DailyWellnessUserResponseSerializer(user_response)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            data['user'] = user
+            serializer = DailyWellnessUserResponseSerializer(data=data)
+            if serializer.is_valid():
+                serializer.save()
+                print(serializer.data)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -18,5 +18,5 @@ urlpatterns = [
 
     # obtain admin(staff) for chatbot to push data to API
     path('admin/login', AdminTokenObtainView.as_view(), name='admin_token_obtain'),
-    path('admin/daily-wellness-response/', DailyWellnessUserResponseCreateView.as_view(), name='create_daily_wellness_user_response'),
+    path('admin/daily-wellness-response', DailyWellnessUserResponseCreateView.as_view(), name='create_daily_wellness_user_response'),
 ]

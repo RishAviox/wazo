@@ -16,6 +16,7 @@ from .utils import *
 # auto create entrypoint
 @receiver(post_save, sender=WajoUser)
 def create_onboarding_entryflow(sender, instance, created, **kwargs):
+    print("Signal triggered: Onboard Entrypoint Creator")
     if created:
         OnboardingStep.objects.create(user=instance)
 
@@ -26,6 +27,7 @@ def create_onboarding_entryflow(sender, instance, created, **kwargs):
 # remove PainLocation, so now count is 7
 @receiver(post_save, sender=DailyWellnessUserResponse, weak=False)
 def process_daily_wellness_responses(sender, instance, created, **kwargs):
+    print("Signal triggered: DailyWellness User Response")
     responses_count = len(instance.response) if instance.response else 0
     # number of questions(7) can be made dynamic
     if responses_count > 0 and responses_count < 7:
@@ -33,14 +35,15 @@ def process_daily_wellness_responses(sender, instance, created, **kwargs):
         # get the latest, if less than for 30 minutes
         # schedule notification to inform user
         # here just skip it
-        print("Responses count: ", responses_count)
+        print("but responses count is: ", responses_count)
     else:
         # create/save metrics table
         calculate_and_store_status_card_metrics(instance.user)
 
 # 14 questions
 @receiver(post_save, sender=RPEUserResponse, weak=False)
-def process_daily_wellness_responses(sender, instance, created, **kwargs):
+def process_rpe_responses(sender, instance, created, **kwargs):
+    print("Signal triggered: RPE User Response")
     responses_count = len(instance.response) if instance.response else 0
     # number of questions(14) can be made dynamic
     if responses_count > 0 and responses_count < 14:
@@ -48,7 +51,7 @@ def process_daily_wellness_responses(sender, instance, created, **kwargs):
         # get the latest, if less than for 30 minutes
         # schedule notification to inform user
         # here just skip it
-        print("Responses count: ", responses_count)
+        print("but esponses count is: ", responses_count)
     else:
         # create/save metrics table
         calculate_and_store_status_card_metrics(instance.user)
