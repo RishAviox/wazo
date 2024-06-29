@@ -9,8 +9,8 @@ from django.utils.timezone import make_aware, now, datetime
 from django.conf import settings
 import jwt
 
-from api.serializer import DailyWellnessUserResponseSerializer
-from api.models import WajoUser, DailyWellnessUserResponse
+from api.serializer import DailyWellnessUserResponseSerializer, RPEUserResponseSerializer
+from api.models import WajoUser, DailyWellnessUserResponse, RPEUserResponse
 
 # chatbot admin user is used to push data from chabot responses
 # make sure to use _Bearer instead of Bearer during API call
@@ -108,6 +108,55 @@ class DailyWellnessUserResponseCreateView(APIView):
         else:
             data['user'] = user
             serializer = DailyWellnessUserResponseSerializer(data=data)
+            if serializer.is_valid():
+                serializer.save()
+                print(serializer.data)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RPEUserResponseCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request, *args, **kwargs):
+        data = request.data.copy() # mutable copy
+        print(data)
+        phone_no = data.get('phone_no', None)
+        if not phone_no:
+            return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = WajoUser.objects.get(phone_no=phone_no)
+        except WajoUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        today = timezone.make_aware(datetime.combine(now().date(), datetime.min.time()))
+        user_response = RPEUserResponse.objects.filter(user=user, created_on__gte=today).first()
+        
+        new_response_data = data.get('response', [])
+        print("new_response_data: ", new_response_data)
+    
+        if user_response:
+            existing_response = user_response.response
+            # Update the existing JSON field
+            for new_entry in new_response_data:
+                updated = False
+                for existing_entry in existing_response:
+                    if existing_entry['question_id'] == new_entry['question_id']:
+                        existing_entry['answer_id'] = new_entry['answer_id']
+                        updated = True
+                        break
+                # if not updated existing entry, then append to JSON list.
+                if not updated:
+                    existing_response.append(new_entry)
+
+            user_response.response = existing_response
+            user_response.save()
+            serializer = RPEUserResponseSerializer(user_response)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            data['user'] = user
+            serializer = RPEUserResponseSerializer(data=data)
             if serializer.is_valid():
                 serializer.save()
                 print(serializer.data)

@@ -1,6 +1,6 @@
 from django.urls import path
 from .views.auth import SendOTPAPI, LoginAPI, LogoutAPI, RefreshTokenAPI
-from .views.chatbot_admin import AdminTokenObtainView, DailyWellnessUserResponseCreateView
+from .views.chatbot_admin import AdminTokenObtainView, DailyWellnessUserResponseCreateView, RPEUserResponseCreateView
 from .views.onboarding import OnboardingAPI, OnboardingFlowEntrypoint
 from .views.user import WajoUserProfileDetails
 from .views.card import CardSuggestedActionsAPI, StatusCardMetricAPI
@@ -19,4 +19,5 @@ urlpatterns = [
     # obtain admin(staff) for chatbot to push data to API
     path('admin/login', AdminTokenObtainView.as_view(), name='admin_token_obtain'),
     path('admin/daily-wellness-response', DailyWellnessUserResponseCreateView.as_view(), name='create_daily_wellness_user_response'),
+    path('admin/rpe-response', RPEUserResponseCreateView.as_view(), name='create_rpe_user_response'),
 ]

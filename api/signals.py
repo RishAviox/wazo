@@ -51,7 +51,7 @@ def process_rpe_responses(sender, instance, created, **kwargs):
         # get the latest, if less than for 30 minutes
         # schedule notification to inform user
         # here just skip it
-        print("but esponses count is: ", responses_count)
+        print("but responses count is: ", responses_count)
     else:
         # create/save metrics table
         calculate_and_store_status_card_metrics(instance.user)
