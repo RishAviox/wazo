@@ -6,7 +6,7 @@ class RecurringEvents(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='recurring_events')
     event_type = models.CharField(max_length=50, null=True, blank=True)
     event = models.TextField(null=True, blank=True)
-    date = models.DateField(null=True, blank=True)
+    date = models.DateTimeField(null=True, blank=True)
     source = models.CharField(max_length=150, null=True, blank=True)
 
     created_on = models.DateTimeField(auto_now_add=True)
@@ -25,7 +25,7 @@ class OneTimeEvents(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='one_time_events')
     event_type = models.CharField(max_length=50, null=True, blank=True)
     event = models.TextField(null=True, blank=True)
-    date = models.DateField(null=True, blank=True)
+    date = models.DateTimeField(null=True, blank=True)
     source = models.CharField(max_length=150, null=True, blank=True)
 
     created_on = models.DateTimeField(auto_now_add=True)
