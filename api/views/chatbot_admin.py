@@ -9,8 +9,14 @@ from django.utils.timezone import make_aware, now, datetime
 from django.conf import settings
 import jwt
 
-from api.serializer import DailyWellnessUserResponseSerializer, RPEUserResponseSerializer
-from api.models import WajoUser, DailyWellnessUserResponse, RPEUserResponse
+from api.serializer import (
+                        DailyWellnessUserResponseSerializer, RPEUserResponseSerializer,
+                        RecurringEventsSerializer, OneTimeEventsSerializer
+                    )
+from api.models import (
+                        WajoUser, DailyWellnessUserResponse, 
+                        RPEUserResponse, RecurringEvents, OneTimeEvents
+                    )
 
 # chatbot admin user is used to push data from chabot responses
 # make sure to use _Bearer instead of Bearer during API call
@@ -162,3 +168,53 @@ class RPEUserResponseCreateView(APIView):
                 print(serializer.data)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# Recurring Events
+class RecurringEventsCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request, *args, **kwargs):
+        data = request.data.copy() # mutable copy
+        print(data)
+        phone_no = data.get('phone_no', None)
+        if not phone_no:
+            return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = WajoUser.objects.get(phone_no=phone_no)
+        except WajoUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        data['user'] = user
+        serializer = RecurringEventsSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            print(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# One Time Events
+class OneTimeEventsCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request, *args, **kwargs):
+        data = request.data.copy() # mutable copy
+        print(data)
+        phone_no = data.get('phone_no', None)
+        if not phone_no:
+            return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = WajoUser.objects.get(phone_no=phone_no)
+        except WajoUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        data['user'] = user
+        serializer = OneTimeEventsSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            print(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

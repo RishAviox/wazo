@@ -1,4 +1,9 @@
-from .models import WajoUser, OnboardingStep, CardSuggestedAction, StatusCardMetrics, DailyWellnessUserResponse, RPEUserResponse
+from .models import (
+                    WajoUser, OnboardingStep, 
+                    CardSuggestedAction, StatusCardMetrics, 
+                    DailyWellnessUserResponse, RPEUserResponse,
+                    OneTimeEvents, RecurringEvents,
+                )
 from rest_framework import serializers
 import re
 
@@ -46,3 +51,14 @@ class RPEUserResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = RPEUserResponse
         fields = ['id', 'user', 'response', 'created_on', 'updated_on']
+
+
+class OneTimeEventsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OneTimeEvents
+        fields = "__all__"
+
+class RecurringEventsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RecurringEvents
+        fields = "__all__"

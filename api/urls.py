@@ -1,6 +1,10 @@
 from django.urls import path
 from .views.auth import SendOTPAPI, LoginAPI, LogoutAPI, RefreshTokenAPI
-from .views.chatbot_admin import AdminTokenObtainView, DailyWellnessUserResponseCreateView, RPEUserResponseCreateView
+from .views.chatbot_admin import (
+                        AdminTokenObtainView, RPEUserResponseCreateView,
+                        DailyWellnessUserResponseCreateView, 
+                        RecurringEventsCreateView, OneTimeEventsCreateView,
+                    )
 from .views.onboarding import OnboardingAPI, OnboardingFlowEntrypoint
 from .views.user import WajoUserProfileDetails
 from .views.card import CardSuggestedActionsAPI, StatusCardMetricAPI
@@ -20,4 +24,6 @@ urlpatterns = [
     path('admin/login', AdminTokenObtainView.as_view(), name='admin_token_obtain'),
     path('admin/daily-wellness-response', DailyWellnessUserResponseCreateView.as_view(), name='create_daily_wellness_user_response'),
     path('admin/rpe-response', RPEUserResponseCreateView.as_view(), name='create_rpe_user_response'),
+    path('admin/recurring-event', RecurringEventsCreateView.as_view(), name='create_recurring_event'),
+    path('admin/one-time-event', OneTimeEventsCreateView.as_view(), name='create_one_time_event'),
 ]
