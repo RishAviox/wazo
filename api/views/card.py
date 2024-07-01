@@ -40,7 +40,7 @@ class StatusCardMetricAPI(APIView):
                 serializer = StatusCardMetricsSerializer(metrics)
                 return Response(serializer.data, status=status.HTTP_200_OK)
             except:
-                return Response({ 'error': 'status metrics data not found'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({}, status=status.HTTP_200_OK)
 
 
 
