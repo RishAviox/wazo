@@ -37,26 +37,28 @@ def calculate_recurrence_dates(event, start_date, end_date):
     dates = []
     current_date = timezone.localtime(event.date)
 
-    while current_date <= end_date:
-        if current_date >= start_date:
-            dates.append(current_date)
-        current_date += timedelta(days=1)
-    # if event.recurrence_pattern == 'daily':
-    #     while current_date <= end_date:
-    #         if current_date >= start_date:
-    #             dates.append(current_date)
-    #         current_date += timedelta(days=1)
+    if event.frequency == 'Daily':
+        while current_date <= end_date:
+            if current_date >= start_date:
+                dates.append(current_date)
+            current_date += timedelta(days=1)
     
-    # elif event.recurrence_pattern == 'weekly':
-    #     while current_date <= end_date:
-    #         if current_date >= start_date:
-    #             dates.append(current_date)
-    #         current_date += timedelta(weeks=1)
+    elif event.frequency == 'Weekly':
+        while current_date <= end_date:
+            if current_date >= start_date:
+                dates.append(current_date)
+            current_date += timedelta(weeks=1)
     
-    # elif event.recurrence_pattern == 'monthly':
-    #     while current_date <= end_date:
-    #         if current_date >= start_date:
-    #             dates.append(current_date)
-    #         current_date += timedelta(days=30)  # Simple monthly increment, adjust as needed
+    elif event.frequency == 'Monthly':
+        while current_date <= end_date:
+            if current_date >= start_date:
+                dates.append(current_date)
+            current_date += timedelta(days=30)  # Simple monthly increment, adjust as needed
+    
+    elif event.frequency == 'Yearly':
+        while current_date <= end_date:
+            if current_date >= start_date:
+                dates.append(current_date)
+            current_date += timedelta(days=365)  # Simple monthly increment, adjust as needed
 
     return dates

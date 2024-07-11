@@ -2,12 +2,23 @@ from django.db import models
 from .user import WajoUser
 
 # Recurring Events Table
+FREQUENCY_CHOICES = [
+    ('Daily', 'Daily'),
+    ('Weekly', 'Weekly'),
+    ('Monthly', 'Monthly'),
+    ('Yearly', 'Yearly'),
+]
 class RecurringEvents(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='recurring_events')
     event_type = models.CharField(max_length=50, null=True, blank=True)
     event = models.TextField(null=True, blank=True)
     date = models.DateTimeField(null=True, blank=True)
     source = models.CharField(max_length=150, null=True, blank=True)
+    frequency = models.CharField(
+                            max_length=15,
+                            choices=FREQUENCY_CHOICES,
+                            default='Daily'
+                        )
 
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)

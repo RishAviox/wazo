@@ -70,7 +70,7 @@ class SchedulePlanningResponseAdmin(admin.ModelAdmin):
 
 
 class RecurringEventsAdmin(admin.ModelAdmin):
-    list_display = ['user', 'event_type', 'event', 'date', 'created_on', 'updated_on']
+    list_display = ['user', 'event_type', 'event', 'date', 'frequency', 'created_on', 'updated_on']
 
 
 class OneTimeEventsAdmin(admin.ModelAdmin):
