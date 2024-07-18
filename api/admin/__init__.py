@@ -1,4 +1,6 @@
 from django.contrib import admin
+import os
+
 from ..models import (
                     WajoUser, APILog, OTPStore, 
                     OnboardingStep, WajoUserDevice,
@@ -7,7 +9,7 @@ from ..models import (
                     CardSuggestedAction, StatusCardMetrics,
                     # ActivitiesQuestionnaire, 
                     SchedulePlanningQuestionnaire, SchedulePlanningResponse, 
-                    RecurringEvents, OneTimeEvents,
+                    RecurringEvents, OneTimeEvents, MatchEventsDataFile,
                 )   
 
 from .customize import admin_site
@@ -77,6 +79,14 @@ class OneTimeEventsAdmin(admin.ModelAdmin):
     list_display = ['user', 'event_type', 'event', 'date', 'created_on', 'updated_on']
 
 
+class MatchEventsDataFileAdmin(admin.ModelAdmin):
+    list_display = ['name', 'get_filename', 'notes', 'created_on', 'updated_on']
+
+    def get_filename(self, obj):
+        return os.path.basename(obj.file.name)
+    get_filename.short_description = 'File'
+
+
 admin_site.register(WajoUser, WajoUserAdmin)
 admin_site.register(APILog, APILogAdmin)
 admin_site.register(OTPStore, OTPStoreAdmin)
@@ -93,3 +103,4 @@ admin_site.register(SchedulePlanningQuestionnaire, SchedulePlanningQuestionnaire
 admin_site.register(SchedulePlanningResponse, SchedulePlanningResponseAdmin)
 admin_site.register(RecurringEvents, RecurringEventsAdmin)
 admin_site.register(OneTimeEvents, OneTimeEventsAdmin)
+admin_site.register(MatchEventsDataFile, MatchEventsDataFileAdmin)

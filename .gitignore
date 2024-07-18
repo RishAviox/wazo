@@ -8,3 +8,5 @@ media
 static
 *_old.py
 management
+.vscode
+test_*

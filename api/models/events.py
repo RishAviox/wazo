@@ -1,4 +1,7 @@
 from django.db import models
+import os
+from django.core.exceptions import ValidationError
+
 from .user import WajoUser
 
 # Recurring Events Table
@@ -48,3 +51,38 @@ class OneTimeEvents(models.Model):
 
     def __str__(self):
         return self.user.phone_no
+    
+
+
+# MatchEventsData to upload .xlsx file
+"""
+File will contain many sheets of Match Events.
+1. Send JSON of particular event(ex. Goal) for Video Player.
+2. On File upload, calculate metrics for screens 6,7,8
+"""
+
+def validate_file_extension(value):
+    ext = os.path.splitext(value.name)[1]  # [0] returns path + filename
+    valid_extensions = ['.xlsx']
+    if not ext.lower() in valid_extensions:
+        raise ValidationError('Unsupported file extension. Allowed extensions: .xlsx')
+
+def match_events_data_file_path(instnace, filename):
+    # MEDIA_ROOT / uploads/match_events_data_file/<filename>
+    return 'uploads/match_events_data_file/{0}'.format(filename)
+
+class MatchEventsDataFile(models.Model):
+    name = models.CharField(max_length=50, null=True, blank=True)
+    file = models.FileField(upload_to=match_events_data_file_path, validators=[validate_file_extension])
+    notes = models.TextField(null=True, blank=True)
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Match Events Data File"
+        verbose_name_plural = "Match Events Data Files"
+
+    def __str__(self):
+        return self.file.name
+    

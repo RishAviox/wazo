@@ -26,6 +26,7 @@ class CustomAdminSite(AdminSite):
                     'Schedule Planning User Responses',
                     'One Time Events',
                     'Recurring Events',
+                    'Match Events Data Files',
                     'OTP Store',
                     'API Logs',
                     'Activities Questionnaire',
