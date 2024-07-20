@@ -20,7 +20,7 @@ from openai import AzureOpenAI
 from api.serializer import (CardSuggestedActionsSerializer, 
                             StatusCardMetricsSerializer, WajoUserSerializer,
                         )
-from api.models import CardSuggestedAction, StatusCardMetrics, PerformanceMetrics
+from api.models import CardSuggestedAction, StatusCardMetrics, PerformanceMetrics, OffensivePerformanceMetrics
 from api.utils import *
 
 
@@ -166,6 +166,126 @@ class PerformanceMetricsAPI(APIView):
         print(f"performance metrics for the user({request.user}): ", results)
         return Response(results, status=status.HTTP_200_OK)
         
+
+# card no. 9, Offensive Performance Metrics API
+class OffensivePerformanceMetricsAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        user = request.user
+        metrics_data = OffensivePerformanceMetrics.objects.filter(user=user)
+        
+        # Return an empty dictionary if no data is available for the user
+        if not metrics_data.exists():
+            return Response({}, status=status.HTTP_200_OK)
+        
+        results = {}
+        FULL_GAME_TIME = 90 * 60 * 1000  # in miliseconds
+
+        play_time = metrics_data.aggregate(total_play_time=Sum(ExpressionWrapper(Coalesce(Cast(KeyTextTransform('value', 'metrics__play_time'), FloatField()), 0), output_field=FloatField())))['total_play_time']
+        
+        if not play_time or play_time == 0:
+            return Response({}, status=status.HTTP_200_OK)
+
+        
+        def get_metric(metric_name):
+            return metrics_data.aggregate(total=Sum(ExpressionWrapper(Coalesce(Cast(KeyTextTransform('value', f'metrics__{metric_name}'), FloatField()), 0), output_field=FloatField())))['total']
+
+        def normalized_count(metric_name):
+            return round((get_metric(metric_name) / play_time) * FULL_GAME_TIME, 2)
+
+
+        goals = normalized_count('goal')
+        assists = normalized_count('assist')
+        shot_on_target = normalized_count('shot_on_target')
+        shot_off_target = normalized_count('shot_off_target')
+        total_shot = normalized_count('total_shot')
+        shot_blocked = normalized_count('shot_blocked')
+        shot_in_PA = normalized_count('shot_in_PA')
+        # shot_outside_of_PA = normalized_count('shot_outside_of_PA')
+        # penalty_kick = normalized_count('penalty_kick')
+        pass_total = normalized_count('pass')
+        pass_succeeded = normalized_count('pass_succeeded')
+        pass_failed = normalized_count('pass_failed')
+        forward_pass = normalized_count('forward_pass')
+        forward_pass_succeeded = normalized_count('forward_pass_succeeded')
+        # cross = normalized_count('cross')
+        cross_succeeded = normalized_count('cross_succeeded')
+        # long_pass = normalized_count('long_pass')
+        long_pass_succeeded = normalized_count('long_pass_succeeded')
+        # short_pass = normalized_count('short_pass')
+        # short_pass_succeeded = normalized_count('short_pass_succeeded')
+        take_on = normalized_count('take_on')
+        take_on_succeeded = normalized_count('take_on_succeeded')
+        # key_pass = normalized_count('key_pass')
+        # final_third_pass = normalized_count('final_third_area_pass')
+        final_third_pass_succeeded = normalized_count('final_third_area_pass_succeeded')
+        # middle_area_pass = normalized_count('middle_area_pass')
+        # middle_area_pass_succeeded = normalized_count('middle_area_pass_succeeded')
+        # backward_pass = normalized_count('backward_pass')
+        # backward_pass_succeeded = normalized_count('backward_pass_succeeded')
+        # defensive_area_pass = normalized_count('defensive_area_pass')
+        # defensive_area_pass_succeeded = normalized_count('defensive_area_pass_succeeded')
+
+        # pass_accuracy = round((pass_succeeded / pass_total) * 100, 2) if pass_total else 0
+        xp = round(pass_succeeded / pass_total, 2) if pass_total else 0
+        xreceiver = round((take_on_succeeded / take_on) * (forward_pass_succeeded / forward_pass), 2) if take_on and forward_pass else 0
+        xthreat = round(forward_pass_succeeded * 1.2 + final_third_pass_succeeded * 1.5 * 2, 2)
+
+        weighted_passes_per_full_game = round(((pass_succeeded * 1 + forward_pass_succeeded * 1.2 + cross_succeeded * 1.5 + long_pass_succeeded * 1.3 - pass_failed * 0.5) / (play_time / FULL_GAME_TIME)), 2)
+        overall_passing_score = round(weighted_passes_per_full_game * (pass_succeeded / pass_total) if pass_total else 0, 2)
+
+        weighted_shots_per_full_game = round(((shot_on_target * 2 + shot_in_PA * 1.5 - shot_off_target - shot_blocked * 0.5) / (play_time / FULL_GAME_TIME)), 2)
+        # shooting_accuracy = round((shot_on_target / total_shot) * 100, 2) if total_shot else 0
+        overall_shooting_score = round(weighted_shots_per_full_game * (shot_on_target / total_shot) if total_shot else 0, 2)
+
+        weighted_dribbles_per_full_game = round(((take_on_succeeded * 2 + take_on * 2 - take_on_succeeded - take_on_succeeded) / (play_time / FULL_GAME_TIME)), 2)
+        # dribbling_success_rate = round((take_on_succeeded / take_on) * 100, 2) if take_on else 0
+        overall_dribbling_score = round(weighted_dribbles_per_full_game * (take_on_succeeded / take_on) if take_on else 0, 2)
+
+        overall_offensive_skills_score = round((0.35 * goals + 0.15 * assists + 0.15 * overall_shooting_score + 0.15 * overall_passing_score + 0.1 * overall_dribbling_score + 0.05 * xp + 0.05 * xreceiver), 2)
+
+        results.update({
+            'Overall Offensive Skills Score': overall_offensive_skills_score,
+            'Goals': goals,
+            'Assists': assists,
+            # 'Shots on Target': shot_on_target,
+            # 'Shots off Target': shot_off_target,
+            # 'Total Shots': total_shot,
+            # 'Shots Blocked': shot_blocked,
+            # 'Shots in PA': shot_in_PA,
+            # 'Shots Outside PA': shot_outside_of_PA,
+            # 'Penalty Kicks': penalty_kick,
+            'Overall Shooting Score': overall_shooting_score,
+            # 'Passes': pass_total,
+            # 'Pass Accuracy (%)': pass_accuracy,
+            'Overall Passing Score': overall_passing_score,
+            # 'Key Passes': key_pass,
+            # 'Crosses': cross,
+            # 'Crosses Completed': cross_succeeded,
+            # 'Long Passes': long_pass,
+            # 'Long Passes Completed': long_pass_succeeded,
+            # 'Short Passes': short_pass,
+            # 'Short Passes Completed': short_pass_succeeded,
+            # 'Forward Passes': forward_pass,
+            # 'Forward Passes Completed': forward_pass_succeeded,
+            # 'Final Third Passes': final_third_pass,
+            # 'Final Third Passes Completed': final_third_pass_succeeded,
+            # 'Middle Area Passes': middle_area_pass,
+            # 'Middle Area Passes Completed': middle_area_pass_succeeded,
+            # 'Backward Passes': backward_pass,
+            # 'Backward Passes Completed': backward_pass_succeeded,
+            # 'Defensive Area Passes': defensive_area_pass,
+            # 'Defensive Area Passes Completed': defensive_area_pass_succeeded,
+            'Overall Dribbling Score': overall_dribbling_score,
+            # 'Take Ons': take_on,
+            # 'Take Ons Completed': take_on_succeeded,
+            'Expected Pass Completion (xP)': xp,
+            'Expected Receiver (xReceiver)': xreceiver,
+            'Expected Threat (xThreat)': xthreat,
+        })
+            
+        return Response(results, status=status.HTTP_200_OK)
 
 
 # getCardSuggestedActions

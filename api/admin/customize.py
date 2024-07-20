@@ -18,6 +18,7 @@ class CustomAdminSite(AdminSite):
                     'Onboarding Flow',
                     'Status Card Metrics',
                     'Performance Metrics',
+                    'Offensive Performance Metrics',
                     'Daily Wellness Questionnaire',
                     'Daily Wellness User Responses',
                     'RPE Questionnaire',

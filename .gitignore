@@ -10,3 +10,4 @@ static
 management
 .vscode
 test_*
+wajo_local_db.session.sql

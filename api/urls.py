@@ -7,7 +7,10 @@ from .views.chatbot_admin import (
                     )
 from .views.onboarding import OnboardingAPI, OnboardingFlowEntrypoint
 from .views.user import WajoUserProfileDetails
-from .views.card import CardSuggestedActionsAPI, StatusCardMetricAPI, DailySnapshortCardAPI, PerformanceMetricsAPI
+from .views.card import (
+                    CardSuggestedActionsAPI, StatusCardMetricAPI, DailySnapshortCardAPI, 
+                    PerformanceMetricsAPI, OffensivePerformanceMetricsAPI,
+                )
 
 urlpatterns = [
     path('auth/sendOTP', SendOTPAPI.as_view(), name='send-otp'),
@@ -21,6 +24,7 @@ urlpatterns = [
     path('status-card-metrics', StatusCardMetricAPI.as_view(), name='status-card-metrics'),
     path('daily-snapshot', DailySnapshortCardAPI.as_view(), name='daily-snapshot'),
     path('performance-metrics', PerformanceMetricsAPI.as_view(), name='performance-metrics'),
+    path('offensive-performance-metrics', OffensivePerformanceMetricsAPI.as_view(), name='offensive-performance-metrics'),
 
     # obtain admin(staff) for chatbot to push data to API
     path('admin/login', AdminTokenObtainView.as_view(), name='admin_token_obtain'),

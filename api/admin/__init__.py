@@ -7,6 +7,7 @@ from ..models import (
                     DailyWellnessQuestionnaire, DailyWellnessUserResponse,
                     RPEQuestionnaire, RPEUserResponse,
                     CardSuggestedAction, StatusCardMetrics, PerformanceMetrics,
+                    OffensivePerformanceMetrics,
                     # ActivitiesQuestionnaire, 
                     SchedulePlanningQuestionnaire, SchedulePlanningResponse, 
                     RecurringEvents, OneTimeEvents, MatchEventsDataFile,
@@ -95,6 +96,10 @@ class PerformanceMetricsAdmin(admin.ModelAdmin):
     list_display = ['user', 'metrics', 'created_on', 'updated_on']
 
 
+class OffensivePerformanceMetricsAdmin(admin.ModelAdmin):
+    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+
+
 admin_site.register(WajoUser, WajoUserAdmin)
 admin_site.register(APILog, APILogAdmin)
 admin_site.register(OTPStore, OTPStoreAdmin)
@@ -114,3 +119,4 @@ admin_site.register(OneTimeEvents, OneTimeEventsAdmin)
 admin_site.register(MatchEventsDataFile, MatchEventsDataFileAdmin)
 admin_site.register(PlayerIDMapping, PlayerIDMappingAdmin)
 admin_site.register(PerformanceMetrics, PerformanceMetricsAdmin)
+admin_site.register(OffensivePerformanceMetrics, OffensivePerformanceMetricsAdmin)
