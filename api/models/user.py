@@ -89,5 +89,5 @@ class PlayerIDMapping(models.Model):
         return self.player_id
     
     class Meta:
-        verbose_name = "Player ID Mapping"
+        verbose_name = "Player ID Mappings"
         verbose_name_plural = "Player ID Mappings"
