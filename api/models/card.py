@@ -40,4 +40,18 @@ class StatusCardMetrics(models.Model):
     def __str__(self):
         return self.user.phone_no
 
+
+# Card No: 7, Performance Metrics
+class PerformanceMetrics(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='performance_metrics')
+    metrics = models.JSONField()
     
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Performance Metrics"
+        verbose_name_plural = "Performance Metrics"
+
+    def __str__(self):
+        return f"Performance Metrics for {self.user.phone_no}"

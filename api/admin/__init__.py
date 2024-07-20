@@ -2,11 +2,11 @@ from django.contrib import admin
 import os
 
 from ..models import (
-                    WajoUser, APILog, OTPStore, 
+                    WajoUser, APILog, OTPStore, PlayerIDMapping,
                     OnboardingStep, WajoUserDevice,
                     DailyWellnessQuestionnaire, DailyWellnessUserResponse,
                     RPEQuestionnaire, RPEUserResponse,
-                    CardSuggestedAction, StatusCardMetrics,
+                    CardSuggestedAction, StatusCardMetrics, PerformanceMetrics,
                     # ActivitiesQuestionnaire, 
                     SchedulePlanningQuestionnaire, SchedulePlanningResponse, 
                     RecurringEvents, OneTimeEvents, MatchEventsDataFile,
@@ -87,6 +87,14 @@ class MatchEventsDataFileAdmin(admin.ModelAdmin):
     get_filename.short_description = 'File'
 
 
+class PlayerIDMappingAdmin(admin.ModelAdmin):
+    list_display = ['user', 'player_id', 'created_on', 'updated_on']
+
+
+class PerformanceMetricsAdmin(admin.ModelAdmin):
+    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+
+
 admin_site.register(WajoUser, WajoUserAdmin)
 admin_site.register(APILog, APILogAdmin)
 admin_site.register(OTPStore, OTPStoreAdmin)
@@ -104,3 +112,5 @@ admin_site.register(SchedulePlanningResponse, SchedulePlanningResponseAdmin)
 admin_site.register(RecurringEvents, RecurringEventsAdmin)
 admin_site.register(OneTimeEvents, OneTimeEventsAdmin)
 admin_site.register(MatchEventsDataFile, MatchEventsDataFileAdmin)
+admin_site.register(PlayerIDMapping, PlayerIDMappingAdmin)
+admin_site.register(PerformanceMetrics, PerformanceMetricsAdmin)

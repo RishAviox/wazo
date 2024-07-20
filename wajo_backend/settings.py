@@ -160,6 +160,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 WAJO_OTP_SERVICE_URL = env_config['WAJO_OTP_SERVICE_URL']
 
+WAJO_AZURE_OPENAI_KEY = env_config['WAJO_AZURE_OPENAI_KEY']
+
+WAJO_AZURE_OPENAI_ENDPOINT = env_config['WAJO_AZURE_OPENAI_ENDPOINT']
+
 """
 ?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting. 
 If your entire site is served only over SSL, you may want to consider setting a value and enabling HTTP Strict Transport Security. 

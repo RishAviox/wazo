@@ -58,7 +58,7 @@ class OneTimeEvents(models.Model):
 """
 File will contain many sheets of Match Events.
 1. Send JSON of particular event(ex. Goal) for Video Player.
-2. On File upload, calculate metrics for screens 6,7,8
+2. On File upload, calculate metrics for screens 7,8,9
 """
 
 def validate_file_extension(value):

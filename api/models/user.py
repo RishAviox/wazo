@@ -76,3 +76,18 @@ class WajoUserDevice(models.Model):
         verbose_name = "Wajo User Device"
         verbose_name_plural = "Wajo User Devices"
 
+
+# Map player id with the user
+class PlayerIDMapping(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="player_ids")
+    player_id = models.CharField(max_length=255)
+    
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return self.player_id
+    
+    class Meta:
+        verbose_name = "Player ID Mapping"
+        verbose_name_plural = "Player ID Mappings"
