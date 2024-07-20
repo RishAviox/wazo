@@ -63,7 +63,7 @@ class StatusCardMetricAPI(APIView):
             except:
                 return Response({}, status=status.HTTP_200_OK)
 
-# Get 5 days events for the DailySnapshot card
+# Get 5 days events for the DailySnapshot card --> changed to per-day
 class DailySnapshortCardAPI(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -75,11 +75,10 @@ class DailySnapshortCardAPI(APIView):
         else:
             start_date = datetime.today()
 
-        one_time_events, recurring_events = get_events_for_next_5_days(user=request.user, start_date=start_date)
+        one_time_events, recurring_events = get_events_for_date(user=request.user, event_date=start_date)
 
-        # one_time_events_data = OneTimeEventsSerializer(one_time_events, many=True).data
         one_time_events_data = [
-            {       
+            {
                 'event_type': event.event_type,
                 'event': event.event,
                 'date': timezone.localtime(event.date),
@@ -87,23 +86,46 @@ class DailySnapshortCardAPI(APIView):
             }
             for event in one_time_events
         ]
-    
+
         combined_events = one_time_events_data + recurring_events
-        events_by_date = defaultdict(list)
-        for event in combined_events:
-            event_date = event['date'].date().isoformat()
-            events_by_date[event_date].append(event)
 
-        # Sort events for each day by time (latest first)
-        for event_date in events_by_date:
-            events_by_date[event_date].sort(key=lambda x: x['date'])
+        combined_events.sort(key=lambda x: x['date'])
+
+        response = {
+            'events': combined_events
+        }
+
+        return Response(response, status=status.HTTP_200_OK)
+
+        # one_time_events, recurring_events = get_events_for_next_5_days(user=request.user, start_date=start_date)
+
+        # # one_time_events_data = OneTimeEventsSerializer(one_time_events, many=True).data
+        # one_time_events_data = [
+        #     {       
+        #         'event_type': event.event_type,
+        #         'event': event.event,
+        #         'date': timezone.localtime(event.date),
+        #         'source': event.source,
+        #     }
+        #     for event in one_time_events
+        # ]
+    
+        # combined_events = one_time_events_data + recurring_events
+        # events_by_date = defaultdict(list)
+        # for event in combined_events:
+        #     event_date = event['date'].date().isoformat()
+        #     events_by_date[event_date].append(event)
+
+        # # Sort events for each day by time (latest first)
+        # for event_date in events_by_date:
+        #     events_by_date[event_date].sort(key=lambda x: x['date'])
 
 
-        # Sort the dictionary by date keys (ascending order)
-        events_by_date = OrderedDict(sorted(events_by_date.items()))
+        # # Sort the dictionary by date keys (ascending order)
+        # events_by_date = OrderedDict(sorted(events_by_date.items()))
 
 
-        return Response(events_by_date, status=status.HTTP_200_OK)
+        # return Response(events_by_date, status=status.HTTP_200_OK)
 
 
 # card no. 7, performance metrics API

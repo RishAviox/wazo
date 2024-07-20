@@ -32,6 +32,35 @@ def get_events_for_next_5_days(user, start_date):
     return one_time_events, recurring_events
 
 
+def get_events_for_date(user, event_date):
+    # Ensure event_date is timezone-aware
+    if timezone.is_naive(event_date):
+        event_date = timezone.make_aware(event_date, timezone.get_current_timezone())
+
+    # Get one-time events
+    one_time_events = OneTimeEvents.objects.filter(user=user, date__date=event_date.date())
+
+    # Get recurring events
+    recurring_events = []
+
+    # Set end_date to the last minute of the day
+    end_date = event_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    for event in RecurringEvents.objects.filter(user=user):
+        recurrence_dates = calculate_recurrence_dates(event, event_date, end_date)
+        for recurrence_date in recurrence_dates:
+            if recurrence_date.date() == event_date.date():
+                recurring_events.append({
+                    'event_type': event.event_type,
+                    'event': event.event,
+                    'date': recurrence_date,
+                    'source': event.source
+                })
+
+    return one_time_events, recurring_events
+
+
+
 
 def calculate_recurrence_dates(event, start_date, end_date):
     dates = []
