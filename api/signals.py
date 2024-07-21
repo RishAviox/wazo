@@ -88,9 +88,6 @@ def process_file(sender, instance, created, **kwargs):
                 performance_metrics = calculate_performance_metrics(row)
                 offensive_performance_metrics = calculate_offensive_performance_metrics(row)
                 
-                # print("performance_metrics: ", performance_metrics)
-                print("offensive_performance_metrics: ", offensive_performance_metrics)
-
                 # Create or update the performance metrics for the user
                 PerformanceMetrics.objects.update_or_create(
                     user_id=user_id,

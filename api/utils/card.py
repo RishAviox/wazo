@@ -134,6 +134,8 @@ def calculate_performance_metrics(row):
 def calculate_offensive_performance_metrics(row):
     return {
             "play_time": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('play_time', 0)},
+            "goal": {"skill": "Goals", "category": "Performance Metrics", "value": row.get('goal', 0)},
+            "assist": {"skill": "Assists", "category": "Performance Metrics", "value": row.get('assist', 0)},
             "shot_on_target": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('shot_on_target', 0)},
             "shot_off_target": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('shot_off_target', 0)},
             "total_shot": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('total_shot', 0)},
@@ -152,6 +154,7 @@ def calculate_offensive_performance_metrics(row):
             "short_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('short_pass', 0)},
             "sideways_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('sideways_pass', 0)},
             "cross": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('cross', 0)},
+            "cross_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('cross_succeeded', 0)},
             "pass_failed": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('pass_failed', 0)},
             "pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('pass_succeeded', 0)},
             "forward_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('forward_pass_succeeded', 0)},
