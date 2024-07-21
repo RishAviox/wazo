@@ -12,15 +12,17 @@ from django.db.models.functions import Cast, Coalesce
 from django.db.models.fields.json import KeyTextTransform
 
 
-from collections import defaultdict, OrderedDict
-
 from openai import AzureOpenAI
 
 
-from api.serializer import (CardSuggestedActionsSerializer, 
-                            StatusCardMetricsSerializer, WajoUserSerializer,
-                        )
-from api.models import CardSuggestedAction, StatusCardMetrics, PerformanceMetrics, OffensivePerformanceMetrics
+from api.serializer import (
+                        CardSuggestedActionsSerializer, StatusCardMetricsSerializer, 
+                        WajoUserSerializer,
+                    )
+from api.models import (
+                    CardSuggestedAction, StatusCardMetrics, PerformanceMetrics, 
+                    DefensivePerformanceMetrics, OffensivePerformanceMetrics,
+                )
 from api.utils import *
 
 
@@ -165,7 +167,133 @@ class PerformanceMetricsAPI(APIView):
 
         print(f"performance metrics for the user({request.user}): ", results)
         return Response(results, status=status.HTTP_200_OK)
+
+# card no. 8, Defensive Performance Metrics API
+class DefensivePerformanceMetricsAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        user = request.user
+        metrics_data = DefensivePerformanceMetrics.objects.filter(user=user)
         
+        # Return an empty dictionary if no data is available for the user
+        if not metrics_data.exists():
+            return Response({}, status=status.HTTP_200_OK)
+        
+        results = {}
+        FULL_GAME_TIME = 90 * 60 * 1000  # in miliseconds
+
+        play_time = metrics_data.aggregate(total_play_time=Sum(ExpressionWrapper(Coalesce(Cast(KeyTextTransform('value', 'metrics__play_time'), FloatField()), 0), output_field=FloatField())))['total_play_time']
+        
+        if not play_time or play_time == 0:
+            return Response({}, status=status.HTTP_200_OK)
+        
+
+        def get_metric(metric_name):
+            return metrics_data.aggregate(total=Sum(ExpressionWrapper(Coalesce(Cast(KeyTextTransform('value', f'metrics__{metric_name}'), FloatField()), 0), output_field=FloatField())))['total']
+
+        def normalized_count(metric_name):
+            return round((get_metric(metric_name) / play_time) * FULL_GAME_TIME, 2)
+
+        # aerial_clearance = normalized_count('aerial_clearance')
+        aerial_clearance_failed = normalized_count('aerial_clearance_failed')
+        aerial_clearance_succeeded = normalized_count('aerial_clearance_succeeded')
+        clearance = normalized_count('clearance')
+        # block = normalized_count('block')
+        # intercept = normalized_count('intercept')
+        # intervention = normalized_count('intervention')
+        tackle = normalized_count('tackle')
+        tackle_succeeded = normalized_count('tackle_succeeded')
+        # foul = normalized_count('foul')
+        # foul_won = normalized_count('foul_won')
+        # aerial_duel = normalized_count('aerial_duel')
+        aerial_duel_failed = normalized_count('aerial_duel_failed')
+        aerial_duel_succeeded = normalized_count('aerial_duel_succeeded')
+        # ground_duel = normalized_count('ground_duel')
+        ground_duel_failed = normalized_count('ground_duel_failed')
+        ground_duel_succeeded = normalized_count('ground_duel_succeeded')
+        # loose_ball_duel = normalized_count('loose_ball_duel')
+        loose_ball_duel_failed = normalized_count('loose_ball_duel_failed')
+        loose_ball_duel_succeeded = normalized_count('loose_ball_duel_succeeded')
+        # defensive_line_support = normalized_count('defensive_line_support')
+        defensive_line_support_failed = normalized_count('defensive_line_support_failed')
+        defensive_line_support_succeeded = normalized_count('defensive_line_support_succeeded')
+        # recovery = normalized_count('recovery')
+        # goal_conceded = normalized_count('goal_conceded')
+        # goal_kick = normalized_count('goal_kick')
+        # goal_kick_succeeded = normalized_count('goal_kick_succeeded')
+        # save_by_catching = normalized_count('save_by_catching')
+        # save_by_punching = normalized_count('save_by_punching')
+        # control_under_pressure = normalized_count('control_under_pressure')
+        mistake = normalized_count('mistake')
+        offside = normalized_count('offside')
+        # own_goal = normalized_count('own_goal')
+
+        clearance_success_rate = round((aerial_clearance_succeeded + clearance) / (aerial_clearance_succeeded + aerial_clearance_failed + clearance) * 100, 2) if (aerial_clearance_succeeded + aerial_clearance_failed + clearance) else 0
+        tackle_success_rate = round(tackle_succeeded / (tackle) * 100, 2) if (tackle) else 0
+        duel_success_rate = round((aerial_duel_succeeded + ground_duel_succeeded + loose_ball_duel_succeeded) / (aerial_duel_succeeded + ground_duel_succeeded + loose_ball_duel_succeeded + aerial_duel_failed + ground_duel_failed + loose_ball_duel_failed) * 100, 2) if (aerial_duel_succeeded + ground_duel_succeeded + loose_ball_duel_succeeded + aerial_duel_failed + ground_duel_failed + loose_ball_duel_failed) else 0
+        discipline_score = round(((mistake * 1) + (offside * 3)) / (play_time / FULL_GAME_TIME), 2)
+
+        weighted_clearances_per_full_game = round(((aerial_clearance_succeeded * 2) + (clearance * 2) - (aerial_clearance_failed * 1)) / (play_time / FULL_GAME_TIME), 2)
+        overall_clearance_score = round(weighted_clearances_per_full_game * (clearance_success_rate / 100), 2)
+
+        weighted_tackles_per_full_game = round(((tackle_succeeded * 2) - ((tackle - tackle_succeeded) * 1)) / (play_time / FULL_GAME_TIME), 2)
+        overall_tackle_score = round(weighted_tackles_per_full_game * (tackle_success_rate / 100), 2)
+
+        weighted_duels_per_full_game = round(((aerial_duel_succeeded * 2) + (ground_duel_succeeded * 2) + (loose_ball_duel_succeeded * 2) - (aerial_duel_failed * 1) - (ground_duel_failed * 1) - (loose_ball_duel_failed * 1)) / (play_time / FULL_GAME_TIME), 2)
+        overall_duel_score = round(weighted_duels_per_full_game * (duel_success_rate / 100), 2)
+
+        overall_interception_score = normalized_count('intercept') + normalized_count('intervention')
+        overall_recovery_score = normalized_count('recovery')
+
+        overall_defensive_line_support_score = round(((defensive_line_support_succeeded * 2) - (defensive_line_support_failed * 1)) / (play_time / FULL_GAME_TIME), 2)
+
+        overall_defensive_skills_score = round((0.25 * overall_clearance_score + 0.2 * overall_tackle_score + 0.2 * overall_interception_score + 0.15 * overall_duel_score + 0.1 * overall_recovery_score + 0.1 * discipline_score), 2)
+
+        results.update({
+            'Overall Defensive Skills Score': overall_defensive_skills_score,
+            'Clearances': overall_clearance_score,
+            # 'Aerial Clearance': aerial_clearance,
+            # 'Aerial Clearance Succeeded': aerial_clearance_succeeded,
+            # 'Clearance': clearance,
+            # 'Block': block,
+            'Tackles': overall_tackle_score,
+            # 'Tackle': tackle,
+            # 'Tackle Succeeded': tackle_succeeded,
+            # 'Foul': foul,
+            # 'Foul Won': foul_won,
+            'Interceptions': overall_interception_score,
+            # 'Intercept': intercept,
+            # 'Intervention': intervention,
+            'Duels': overall_duel_score,
+            # 'Aerial Duel': aerial_duel,
+            # 'Aerial Duel Succeeded': aerial_duel_succeeded,
+            # 'Aerial Duel Failed': aerial_duel_failed,
+            # 'Ground Duel': ground_duel,
+            # 'Ground Duel Succeeded': ground_duel_succeeded,
+            # 'Ground Duel Failed': ground_duel_failed,
+            # 'Loose Ball Duel': loose_ball_duel,
+            # 'Loose Ball Duel Succeeded': loose_ball_duel_succeeded,
+            # 'Loose Ball Duel Failed': loose_ball_duel_failed,
+            'Defensive Line Support': overall_defensive_line_support_score,
+            # 'Defensive Line Support Succeeded': defensive_line_support_succeeded,
+            # 'Defensive Line Support Failed': defensive_line_support_failed,
+            'Recovery': overall_recovery_score,
+            # 'Goal Conceded': goal_conceded,
+            # 'Goal Kick': goal_kick,
+            # 'Goal Kick Succeeded': goal_kick_succeeded,
+            # 'Save by Catching': save_by_catching,
+            # 'Save by Punching': save_by_punching,
+            # 'Control Under Pressure': control_under_pressure,
+            # 'Mistake': mistake,
+            # 'Offside': offside,
+            # 'Own Goal': own_goal,
+            'Discipline Score': discipline_score,
+        })
+
+        return Response(results, status=status.HTTP_200_OK)
+
+
 
 # card no. 9, Offensive Performance Metrics API
 class OffensivePerformanceMetricsAPI(APIView):

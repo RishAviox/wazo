@@ -9,7 +9,7 @@ from .views.onboarding import OnboardingAPI, OnboardingFlowEntrypoint
 from .views.user import WajoUserProfileDetails
 from .views.card import (
                     CardSuggestedActionsAPI, StatusCardMetricAPI, DailySnapshortCardAPI, 
-                    PerformanceMetricsAPI, OffensivePerformanceMetricsAPI,
+                    PerformanceMetricsAPI, DefensivePerformanceMetricsAPI, OffensivePerformanceMetricsAPI,
                 )
 
 urlpatterns = [
@@ -24,6 +24,7 @@ urlpatterns = [
     path('status-card-metrics', StatusCardMetricAPI.as_view(), name='status-card-metrics'),
     path('daily-snapshot', DailySnapshortCardAPI.as_view(), name='daily-snapshot'),
     path('performance-metrics', PerformanceMetricsAPI.as_view(), name='performance-metrics'),
+    path('defensive-performance-metrics', DefensivePerformanceMetricsAPI.as_view(), name='defensive-performance-metrics'),
     path('offensive-performance-metrics', OffensivePerformanceMetricsAPI.as_view(), name='offensive-performance-metrics'),
 
     # obtain admin(staff) for chatbot to push data to API

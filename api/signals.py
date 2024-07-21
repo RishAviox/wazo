@@ -1,18 +1,13 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.utils import timezone
-from django.db import models
 import pandas as pd
 
 from .models import WajoUser, OnboardingStep 
 from .models import (
-                    DailyWellnessUserResponse, 
-                    DailyWellnessQuestionnaire,
-                    RPEUserResponse,
-                    MatchEventsDataFile,
-                    PlayerIDMapping, PerformanceMetrics, OffensivePerformanceMetrics,
+                    DailyWellnessUserResponse,RPEUserResponse, MatchEventsDataFile,
+                    PlayerIDMapping, PerformanceMetrics, DefensivePerformanceMetrics,
+                    OffensivePerformanceMetrics,
                 )
-from .serializer import StatusCardMetricsSerializer
 from .utils import *
 
 
@@ -86,13 +81,22 @@ def process_file(sender, instance, created, **kwargs):
                 user_id = player_mapping_dict[player_id]
 
                 performance_metrics = calculate_performance_metrics(row)
+                defensive_performance_metrics = calculate_defensive_performance_metrics(row)
                 offensive_performance_metrics = calculate_offensive_performance_metrics(row)
+                
+                print("defensive_performance_metrics: ", defensive_performance_metrics)
                 
                 # Create or update the performance metrics for the user
                 PerformanceMetrics.objects.update_or_create(
                     user_id=user_id,
                     defaults={'metrics': performance_metrics}
                 )
+
+                # Create or update the Defensive performance metrics for the user
+                DefensivePerformanceMetrics.objects.update_or_create(
+                user_id=user_id,
+                defaults={'metrics': defensive_performance_metrics}
+            )
 
                 # Create or update the Offensive performance metrics for the user
                 OffensivePerformanceMetrics.objects.update_or_create(

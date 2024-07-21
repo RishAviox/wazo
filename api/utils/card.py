@@ -131,6 +131,45 @@ def calculate_performance_metrics(row):
             "final_third_area_pass": {"skill": "Final Third Area Pass", "category": "Performance Metrics", "value": row.get('final_third_area_pass', 0)},
         }
 
+def calculate_defensive_performance_metrics(row):
+    return {
+            "play_time": {"skill": "Play Time", "category": "Performance Metrics", "value": row.get('play_time', 0)},
+            "aerial_clearance": {"skill": "Clearances", "category": "Defensive Skills", "value": row.get('aerial_clearance', 0)},
+            "aerial_clearance_failed": {"skill": "Clearances", "category": "Defensive Skills", "value": row.get('aerial_clearance_failed', 0)},
+            "aerial_clearance_succeeded": {"skill": "Clearances", "category": "Defensive Skills", "value": row.get('aerial_clearance_succeeded', 0)},
+            "clearance": {"skill": "Clearances", "category": "Defensive Skills", "value": row.get('clearance', 0)},
+            "block": {"skill": "Clearances", "category": "Defensive Skills", "value": row.get('block', 0)},
+            "intercept": {"skill": "Interceptions", "category": "Defensive Skills", "value": row.get('intercept', 0)},
+            "intervention": {"skill": "Interceptions", "category": "Defensive Skills", "value": row.get('intervention', 0)},
+            "tackle": {"skill": "Tackling", "category": "Defensive Skills", "value": row.get('tackle', 0)},
+            "tackle_succeeded": {"skill": "Tackling", "category": "Defensive Skills", "value": row.get('tackle_succeeded', 0)},
+            "foul": {"skill": "Tackling", "category": "Defensive Skills", "value": row.get('foul', 0)},
+            "foul_won": {"skill": "Tackling", "category": "Defensive Skills", "value": row.get('foul_won', 0)},
+            "aerial_duel": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('aerial_duel', 0)},
+            "aerial_duel_failed": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('aerial_duel_failed', 0)},
+            "aerial_duel_succeeded": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('aerial_duel_succeeded', 0)},
+            "ground_duel": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('ground_duel', 0)},
+            "ground_duel_failed": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('ground_duel_failed', 0)},
+            "ground_duel_succeeded": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('ground_duel_succeeded', 0)},
+            "loose_ball_duel": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('loose_ball_duel', 0)},
+            "loose_ball_duel_failed": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('loose_ball_duel_failed', 0)},
+            "loose_ball_duel_succeeded": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('loose_ball_duel_succeeded', 0)},
+            "defensive_line_support": {"skill": "Support Play", "category": "Defensive Skills", "value": row.get('defensive_line_support', 0)},
+            "defensive_line_support_failed": {"skill": "Support Play", "category": "Defensive Skills", "value": row.get('defensive_line_support_failed', 0)},
+            "defensive_line_support_succeeded": {"skill": "Support Play", "category": "Defensive Skills", "value": row.get('defensive_line_support_succeeded', 0)},
+            "recovery": {"skill": "Recovery", "category": "Defensive Skills", "value": row.get('recovery', 0)},
+            "goal": {"skill": "Goals", "category": "Performance Metrics", "value": row.get('goal', 0)},
+            "goal_conceded": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": row.get('goal_conceded', 0)},
+            "goal_kick": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": row.get('goal_kick', 0)},
+            "goal_kick_succeeded": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": row.get('goal_kick_succeeded', 0)},
+            "save_by_catching": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": row.get('save_by_catching', 0)},
+            "save_by_punching": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": row.get('save_by_punching', 0)},
+            "control_under_pressure": {"skill": "Ball Control", "category": "Defensive Skills", "value": row.get('control_under_pressure', 0)},
+            "mistake": {"skill": "Negative Performance", "category": "Defensive Skills", "value": row.get('mistake', 0)},
+            "offside": {"skill": "Negative Performance", "category": "Defensive Skills", "value": row.get('offside', 0)},
+            "own_goal": {"skill": "Negative Performance", "category": "Defensive Skills", "value": row.get('own_goal', 0)},
+        }
+
 def calculate_offensive_performance_metrics(row):
     return {
             "play_time": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('play_time', 0)},
