@@ -429,7 +429,157 @@ class CardSuggestedActionsAPI(APIView):
             return Response({ 'error': 'card data not found'}, status=status.HTTP_400_BAD_REQUEST)
         
 
-# cards greetings api
-class CardGreetingsAPI(APIView):
+# greetings api, universal for all cards
+class GreetingAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        today = datetime.today()
+
+        one_time_events, recurring_events = get_events_for_date(user=request.user, event_date=today)
+
+        one_time_events_data = [
+            {
+                'event_type': event.event_type,
+                'event': event.event,
+                'date': timezone.localtime(event.date),
+                'source': event.source,
+            }
+            for event in one_time_events
+        ]
+
+        combined_events = one_time_events_data + recurring_events
+
+        combined_events.sort(key=lambda x: x['date'])
+
+        metrics_data = {}
+        try:
+            metrics = StatusCardMetrics.objects.filter(user=request.user).latest('updated_on')
+            metrics_data = StatusCardMetricsSerializer(metrics).data
+        except:
+            metrics_data = {}
+
+        user_data = {
+            "name": request.user.name,
+            "wellness": metrics_data,
+            "calender": combined_events,
+            "current_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        print("*" * 100)
+        print("user_data: ", user_data)
+
+        # json_data = json.dumps(user_data)
+        prompt = f"Generate a two-liner greeting for the user with the following data. Keep the word count less than 40 and make it crisp and to the point for a athelete. Do not include JSON data. From the data passed, see what should be his main focus for the day.: {user_data}"
+
+        deployment_name = "Completion"
+        response = openai_client.completions.create(
+                                        model=deployment_name,
+                                        prompt=prompt,
+                                        max_tokens=50
+                                )
+
+        # Extract the greeting from the response
+        greeting = response.choices[0].text.strip()
+
+        print("greeting: ", greeting)
+
+        return Response({'greeting': greeting}, status=status.HTTP_200_OK)
+    
+
+# ai-insight API, unique for each card
+
+def get_prompt_for_insight(user, card):
+    if card == "StatusCard":
+        if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                try:
+                    metrics = StatusCardMetrics.objects.filter(user=player).latest('updated_on')
+                    player_data.append(StatusCardMetricsSerializer(metrics).data)
+
+                except StatusCardMetrics.DoesNotExist:
+                    player_data.append({'overall_score': 'Not Available', 'srpe_score': 'Not Available', 'readiness_score': 'Not Available', 'sleep_quality': 'Not Available', 'fatigue_score': 'Not Available', 'mood_score': 'Not Available', 'play_time': 'Not Available'})
+
+            user_data = {
+                'team-wellness': player_data
+            }
+            print("player_data for coach: ", user_data)
+            
+            prompt = f"Generate a concise expert analysis for a coach from the provided wellness data of players, highlighting key points that could impact athlete performance. Keep the word count under 30 words. Exclude JSON data. Wellness scores range from 1 to 5, with 1 being the lowest and 5 the highest. Note that low overall scores often correlate with sub-optimal performance. Encourage athletes to improve in areas where they are lacking. Data provided: {user_data}. Example: 'Overall wellness is relatively low, with fatigue and sleep quality as key areas for improvement. Encourage better rest and recovery to maximize performance.'"
+            return prompt
+        
+        else:
+            try:
+                metrics = StatusCardMetrics.objects.filter(user=user).latest('updated_on')
+                serializer = StatusCardMetricsSerializer(metrics)
+                user_data = {
+                    'wellness': serializer.data
+                }
+                prompt = f"Generate a one-liner analysis for the user with the following data which is crisp and helpful from the perspective of an expert directly to the athelete. Keep the word count less than 30 words. Do not include JSON data. The data being passed is for wellness and it is expected that you will bring attention to something that might impact their performance as an athelete. Wellness Scores are 1-5 where 1 is the lowest and 5 is the highest. It is generally noticed that low overall scores lead to sub-optimal performace. We always want to push atheletes to do better in sections where they are lacking. Data passed: {user_data}"
+                return prompt
+            except:
+                user_data = {
+                    'wellness': {'overall_score': 'Not Available', 'srpe_score': 'Not Available', 'readiness_score': 'Not Available', 'sleep_quality': 'Not Available', 'fatigue_score': 'Not Available', 'mood_score': 'Not Available', 'play_time': 'Not Available'}
+                }
+                prompt = f"Generate a one-liner analysis for the user with the following data which is crisp and helpful from the perspective of an expert directly to the athelete. Keep the word count less than 30 words. Do not include JSON data. The data being passed is for wellness and it is expected that you will bring attention to something that might impact their performance as an athelete. Wellness Scores are 1-5 where 1 is the lowest and 5 is the highest. It is generally noticed that low overall scores lead to sub-optimal performace. We always want to push atheletes to do better in sections where they are lacking. Data passed: {user_data}"
+                return prompt
+            
+    elif card == 'DailySnapshot':
+        if user.role == 'Coach':
+            role = 'Coach'
+        else:
+            role = 'Athlete'
+
+        today = datetime.today()
+
+        one_time_events, recurring_events = get_events_for_date(user=user, event_date=today)
+
+        one_time_events_data = [
+            {
+                'event_type': event.event_type,
+                'event': event.event,
+                'date': timezone.localtime(event.date),
+                'source': event.source,
+            }
+            for event in one_time_events
+        ]
+
+        combined_events = one_time_events_data + recurring_events
+
+        combined_events.sort(key=lambda x: x['date'])
+
+        user_data = {
+            "calender": combined_events,
+        }
+
+        prompt=f"Generate a concise expert analysis for {role} based on the provided calendar data, highlighting key events, training sessions, rest periods, and suggesting reschedules for conflicts keeping games as immovable. Keep it under 50 words and avoid mentioning the data passed to you or atheletes and coaches. Data provided: {user_data}."
+
+        return prompt
+
+
+class InsightAPI(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, card):
-        pass
+        # current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            prompt = get_prompt_for_insight(request.user, card)
+            print("prompt: ", prompt)
+
+            if prompt == None:
+                return Response({ 'error': 'unknown card'}, status=status.HTTP_400_BAD_REQUEST)
+
+            deployment_name = "Completion"
+            response = openai_client.completions.create(
+                                            model=deployment_name,
+                                            prompt=prompt,
+                                            max_tokens=50
+                                    )
+
+            # Extract the insight from the response
+            insight = response.choices[0].text.strip()
+
+            print("insight: ", insight)
+            return Response({ 'insight': insight }, status=status.HTTP_200_OK)
+        except:
+            return Response({ 'error': 'card data not found'}, status=status.HTTP_400_BAD_REQUEST)
+        
