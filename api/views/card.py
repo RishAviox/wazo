@@ -12,10 +12,8 @@ from django.conf import settings
 from openai import AzureOpenAI
 
 
-from api.serializer import (
-                        CardSuggestedActionsSerializer, StatusCardMetricsSerializer, 
-                    )
-from api.models import CardSuggestedAction, StatusCardMetrics
+from api.serializer import CardSuggestedActionsSerializer
+from api.models import CardSuggestedAction, MatchEventsDataFile
 from api.utils import *
 
 
@@ -205,4 +203,86 @@ class InsightAPI(APIView):
             return Response({ 'insight': insight }, status=status.HTTP_200_OK)
         except:
             return Response({ 'error': 'card data not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# Video Card API
+class VideoAnalysisCardAPI(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        # JSON of Category & Sub Category
+        return Response({
+                "Pass": [
+                    "Successful",
+                    "Unsuccessful"
+                ],
+                "Pass Received": [],
+                "Clearance": [],
+                "Duel": [
+                    "Unsuccessful",
+                    "Successful"
+                ],
+                "Recovery": [],
+                "Block": [],
+                "Intervention": [],
+                "Set Piece": [],
+                "Foul": [],
+                "Foul Won": [],
+                "Tackle": [
+                    "Unsuccessful",
+                    "Successful"
+                ],
+                "Cross Received": [],
+                "Error": [],
+                "Shot": [
+                    "Off Target",
+                    "Blocked",
+                    "On Target",
+                    "Goal",
+                    "Keeper Rush-Out"
+                ],
+                "Hit": [],
+                "Save": [],
+                "Interception": [],
+                "Ball Received": [],
+                "Take-On": [
+                    "Unsuccessful",
+                    "Successful"
+                ],
+                "Defensive Line Support": [
+                    "Successful"
+                ],
+                "Aerial Clearance": [
+                    "Successful",
+                    "Unsuccessful"
+                ],
+                "Goal Conceded": [],
+                "Pause": [],
+                "Carry": [],
+                "Substitution": [],
+                "Offside": []
+            }, status.HTTP_200_OK)
+
+    def post(self, request):
+        category = request.data.get('category', None)
+        sub_category = request.data.get('sub_category', None)
+
+        if not category or not sub_category:
+            return Response({'error': 'both category and sub category are required'}, status.HTTP_400_BAD_REQUEST)
         
+        try:
+            match_events_data_file = MatchEventsDataFile.objects.latest('updated_on')
+        except MatchEventsDataFile.DoesNotExist:
+            return Response({ 'error': 'No Match Event data file found'}, status.HTTP_400_BAD_REQUEST)
+        
+        df = match_events_data_file.get_data()
+
+        filtered_df = df[(df['eventType'] == category) & (df['outcome'] == sub_category)]
+        if 'event_time' not in filtered_df.columns:
+            return Response({'event_time': []}, status.HTTP_200_OK)
+        
+        event_times = filtered_df['event_time'].tolist()
+        print("Events: ", { 'category': category, 'sub_category': sub_category, 'records': len(event_times)})
+        return Response({'event_time': event_times}, status.HTTP_200_OK)
+
+

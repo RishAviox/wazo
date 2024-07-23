@@ -10,7 +10,7 @@ from .views.user import WajoUserProfileDetails
 from .views.card import (
                     CardSuggestedActionsAPI, StatusCardMetricAPI, DailySnapshortCardAPI, 
                     PerformanceMetricsAPI, DefensivePerformanceMetricsAPI, OffensivePerformanceMetricsAPI,
-                    GreetingAPI, InsightAPI,
+                    GreetingAPI, InsightAPI, VideoAnalysisCardAPI,
                 )
 
 urlpatterns = [
@@ -30,6 +30,8 @@ urlpatterns = [
     # openai greeting and insight
     path('greeting', GreetingAPI.as_view(), name='greeting'),
     path('insight/<str:card>', InsightAPI.as_view(), name='insight'),
+    # video card
+    path('video-analysis', VideoAnalysisCardAPI.as_view(), name='video-analysis'),
 
     # obtain admin(staff) for chatbot to push data to API
     path('admin/login', AdminTokenObtainView.as_view(), name='admin_token_obtain'),

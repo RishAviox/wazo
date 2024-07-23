@@ -1,6 +1,7 @@
 from django.db import models
 import os
 from django.core.exceptions import ValidationError
+import pandas as pd
 
 from .user import WajoUser
 
@@ -86,3 +87,6 @@ class MatchEventsDataFile(models.Model):
     def __str__(self):
         return self.file.name
     
+    def get_data(self):
+        event_data = pd.read_excel(self.file.path, sheet_name='EventData_137183')
+        return event_data
