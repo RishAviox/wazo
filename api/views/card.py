@@ -30,8 +30,21 @@ class StatusCardMetricAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        metrics = get_status_card_metrics(user=request.user)
-        return Response(metrics, status=status.HTTP_200_OK)
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_status_card_metrics(player)
+                    })
+
+            print("player_data for coach: ", player_data)
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_status_card_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)
+
 
 
 # Get 5 days events for the DailySnapshot card --> changed to per-day
@@ -59,8 +72,20 @@ class PerformanceMetricsAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, format=None):
-        results = get_performance_metrics(user=request.user)
-        return Response(results, status=status.HTTP_200_OK)
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_performance_metrics(player)
+                    })
+
+            print("performance_metrics for coach: ", player_data)
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_performance_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)
     
 
 # card no. 8, Defensive Performance Metrics API
@@ -68,8 +93,20 @@ class DefensivePerformanceMetricsAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, format=None):
-        results = get_defensive_performance_metrics(user=request.user)
-        return Response(results, status=status.HTTP_200_OK)
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_defensive_performance_metrics(player)
+                    })
+                
+            print("performance_metrics for coach: ", player_data)
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_defensive_performance_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)
 
 
 
@@ -78,8 +115,20 @@ class OffensivePerformanceMetricsAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, format=None):
-        results = get_offensive_performance_metrics(user=request.user)
-        return Response(results, status=status.HTTP_200_OK)
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_offensive_performance_metrics(player)
+                    })
+                
+            print("performance_metrics for coach: ", player_data)
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_offensive_performance_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)
 
 
 # getCardSuggestedActions

@@ -17,32 +17,13 @@ from .metrics_calculations import *
 
 # for status card
 def get_status_card_metrics(user):
-    if user.role == 'Coach':
-        player_data = []
-        for player in user.players.all():
-            try:
-                metrics = StatusCardMetrics.objects.filter(user=player).latest('updated_on')
-                player_data.append({
-                            'profile': WajoUserSerializer(player).data,
-                            'metrics': StatusCardMetricsSerializer(metrics).data
-                        })
-                
-            except StatusCardMetrics.DoesNotExist:
-                player_data.append({
-                            'profile': WajoUserSerializer(player).data,
-                            'metrics': {}
-                        })
-        print("player_data for coach: ", player_data)
-        return player_data
+    try:
+        metrics = StatusCardMetrics.objects.filter(user=user).latest('updated_on')
+        serializer = StatusCardMetricsSerializer(metrics)
+        return serializer.data
     
-    else:
-        try:
-            metrics = StatusCardMetrics.objects.filter(user=user).latest('updated_on')
-            serializer = StatusCardMetricsSerializer(metrics)
-            return serializer.data
-        
-        except:
-            return {}
+    except:
+        return {}
 
 
 # for daily snapshot
@@ -580,8 +561,11 @@ def get_offensive_performance_metrics(user):
 # ai-insight API, unique for each card
 def get_prompt_for_insight(user, card):
     if card == "StatusCard":
-        player_data = get_status_card_metrics(user)
         if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                player_data.append(get_status_card_metrics(player))
+
             user_data = {
                 'team-wellness': player_data
             }
@@ -592,7 +576,7 @@ def get_prompt_for_insight(user, card):
         
         else:
             user_data = {
-                'wellness': player_data
+                'wellness': get_status_card_metrics(user)
             }
             prompt = f"Generate a one-liner analysis for the user with the following data which is crisp and helpful from the perspective of an expert directly to the athelete. Keep the word count less than 20 words. Do not include JSON data. The data being passed is for wellness and it is expected that you will bring attention to something that might impact their performance as an athelete. Wellness Scores are 1-5 where 1 is the lowest and 5 is the highest. It is generally noticed that low overall scores lead to sub-optimal performace. We always want to push atheletes to do better in sections where they are lacking. Data passed: {user_data}"
             return prompt
@@ -612,10 +596,13 @@ def get_prompt_for_insight(user, card):
         return prompt
     
     elif card == 'PerformanceMetrics':
-        performance_metrics = get_performance_metrics(user)
         if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                player_data.append(get_performance_metrics(player))
+
             user_data = {
-                'team-performance-metrics': performance_metrics
+                'team-performance-metrics': player_data
             }
             print("team-performance-metrics for coach: ", user_data)
             prompt = f"Generate a concise expert analysis for coaches based on the provided performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}. Example: 'Players showed high passing accuracy (80%) and successful take-ons (67%) but need to create more goal-scoring opportunities. Suggested drills: Pass and Move, Attacking Overload, and Finishing Under Pressure.'"
@@ -623,16 +610,19 @@ def get_prompt_for_insight(user, card):
         
         else:
             user_data = {
-                'performance-metrics': performance_metrics
+                'performance-metrics': get_performance_metrics(user)
             }
             prompt = f"Generate a concise expert analysis for athletes based on the provided performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the player. Data provided:{user_data}. Example:'You have strong passing and attacking skills, with good goal and assist numbers. Keep working on shooting and disciplinary tendencies. To improve, focus on drills for finishing and maintaining composure in pressure situations.'"
             return prompt
         
     elif card == 'DefensivePerformanceMetrics':
-        defensive_metrics = get_defensive_performance_metrics(user)
         if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                player_data.append(get_defensive_performance_metrics(player))
+
             user_data = {
-                'team-defensive-performance-metrics': defensive_metrics
+                'team-defensive-performance-metrics': player_data
             }
             print("team-defensive-performance-metrics for coach: ", user_data)
             prompt = f"Generate a concise expert analysis for coaches based on the provided defensive performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}."
@@ -640,16 +630,19 @@ def get_prompt_for_insight(user, card):
         
         else:
             user_data = {
-                'defensive-performance-metrics': defensive_metrics
+                'defensive-performance-metrics': get_defensive_performance_metrics(user)
             }
             prompt = f"Generate a concise expert analysis for athletes based on the provided defensive performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Data provided:{user_data}. Example: 'Strong tackling, dueling, and recovery skills shown. Need to work on aerial clearances and improving goalkeeping for a more well-rounded performance. Drills targeting clearing and catching under pressure may benefit.'"
             return prompt
         
     elif card == 'OffensivePerformanceMetrics':
-        offensive_metrics = get_offensive_performance_metrics(user)
         if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                player_data.append(get_offensive_performance_metrics(player))
+
             user_data = {
-                'team-offensive-performance-metrics': offensive_metrics
+                'team-offensive-performance-metrics': player_data
             }
             print("team-offensive-performance-metrics for coach: ", user_data)
             prompt = f"Generate a concise expert analysis for coaches based on the provided defensive performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}."
@@ -657,7 +650,7 @@ def get_prompt_for_insight(user, card):
         
         else:
             user_data = {
-                'offensive-performance-metrics': offensive_metrics
+                'offensive-performance-metrics': get_offensive_performance_metrics(user)
             }
             prompt = f"Generate a concise expert analysis for athletes based on the provided offensive performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Data provided:{user_data}. Example: 'This athlete has strong shooting and passing skills but may benefit from targeted drills to improve pass accuracy. Suggest incorporating dribbling and set piece work to further enhance offensive performance.'"
             return prompt
