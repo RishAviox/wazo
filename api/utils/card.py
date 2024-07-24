@@ -398,21 +398,21 @@ def get_defensive_performance_metrics(user):
     overall_defensive_skills_score = round((0.25 * overall_clearance_score + 0.2 * overall_tackle_score + 0.2 * overall_interception_score + 0.15 * overall_duel_score + 0.1 * overall_recovery_score + 0.1 * discipline_score), 2)
     
     results.update({
-        'Overall Defensive Skills Score': overall_defensive_skills_score,
-        'Clearances': overall_clearance_score,
+        'Overall Defensive Skills Score': float(overall_defensive_skills_score),
+        'Clearances': float(overall_clearance_score),
         # 'Aerial Clearance': aerial_clearance,
         # 'Aerial Clearance Succeeded': aerial_clearance_succeeded,
         # 'Clearance': clearance,
         # 'Block': block,
-        'Tackles': overall_tackle_score,
+        'Tackles': float(overall_tackle_score),
         # 'Tackle': tackle,
         # 'Tackle Succeeded': tackle_succeeded,
         # 'Foul': foul,
         # 'Foul Won': foul_won,
-        'Interceptions': overall_interception_score,
+        'Interceptions': float(overall_interception_score),
         # 'Intercept': intercept,
         # 'Intervention': intervention,
-        'Duels': overall_duel_score,
+        'Duels': float(overall_duel_score),
         # 'Aerial Duel': aerial_duel,
         # 'Aerial Duel Succeeded': aerial_duel_succeeded,
         # 'Aerial Duel Failed': aerial_duel_failed,
@@ -422,10 +422,10 @@ def get_defensive_performance_metrics(user):
         # 'Loose Ball Duel': loose_ball_duel,
         # 'Loose Ball Duel Succeeded': loose_ball_duel_succeeded,
         # 'Loose Ball Duel Failed': loose_ball_duel_failed,
-        'Defensive Line Support': overall_defensive_line_support_score,
+        'Defensive Line Support': float(overall_defensive_line_support_score),
         # 'Defensive Line Support Succeeded': defensive_line_support_succeeded,
         # 'Defensive Line Support Failed': defensive_line_support_failed,
-        'Recovery': overall_recovery_score,
+        'Recovery': float(overall_recovery_score),
         # 'Goal Conceded': goal_conceded,
         # 'Goal Kick': goal_kick,
         # 'Goal Kick Succeeded': goal_kick_succeeded,
@@ -435,7 +435,7 @@ def get_defensive_performance_metrics(user):
         # 'Mistake': mistake,
         # 'Offside': offside,
         # 'Own Goal': own_goal,
-        'Discipline Score': discipline_score,
+        'Discipline Score': float(discipline_score),
     })
 
     return results
@@ -515,9 +515,9 @@ def get_offensive_performance_metrics(user):
     overall_offensive_skills_score = round((0.35 * goals + 0.15 * assists + 0.15 * overall_shooting_score + 0.15 * overall_passing_score + 0.1 * overall_dribbling_score + 0.05 * xp + 0.05 * xreceiver), 2)
 
     results.update({
-        'Overall Offensive Skills Score': overall_offensive_skills_score,
-        'Goals': goals,
-        'Assists': assists,
+        'Overall Offensive Skills Score': float(overall_offensive_skills_score),
+        'Goals': float(goals),
+        'Assists': float(assists),
         # 'Shots on Target': shot_on_target,
         # 'Shots off Target': shot_off_target,
         # 'Total Shots': total_shot,
@@ -525,10 +525,10 @@ def get_offensive_performance_metrics(user):
         # 'Shots in PA': shot_in_PA,
         # 'Shots Outside PA': shot_outside_of_PA,
         # 'Penalty Kicks': penalty_kick,
-        'Overall Shooting Score': overall_shooting_score,
+        'Overall Shooting Score': float(overall_shooting_score),
         # 'Passes': pass_total,
         # 'Pass Accuracy (%)': pass_accuracy,
-        'Overall Passing Score': overall_passing_score,
+        'Overall Passing Score': float(overall_passing_score),
         # 'Key Passes': key_pass,
         # 'Crosses': cross,
         # 'Crosses Completed': cross_succeeded,
@@ -546,13 +546,15 @@ def get_offensive_performance_metrics(user):
         # 'Backward Passes Completed': backward_pass_succeeded,
         # 'Defensive Area Passes': defensive_area_pass,
         # 'Defensive Area Passes Completed': defensive_area_pass_succeeded,
-        'Overall Dribbling Score': overall_dribbling_score,
+        'Overall Dribbling Score': float(overall_dribbling_score),
         # 'Take Ons': take_on,
         # 'Take Ons Completed': take_on_succeeded,
-        'Expected Pass Completion (xP)': xp,
-        'Expected Receiver (xReceiver)': xreceiver,
-        'Expected Threat (xThreat)': xthreat,
+        'Expected Pass Completion (xP)': float(xp),
+        'Expected Receiver (xReceiver)': float(xreceiver),
+        'Expected Threat (xThreat)': float(xthreat),
     })
+
+    print("Types: ", type(float(overall_dribbling_score)), type(goals), type(xp), type(xreceiver), type(xthreat))
 
     return results
 
