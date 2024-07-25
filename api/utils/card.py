@@ -306,7 +306,7 @@ def get_performance_metrics(user):
         )
     )
     results = {
-        'Rating': metrics_data.aggregate(total_rating=Sum(ExpressionWrapper(Coalesce(Cast(KeyTextTransform('value', 'metrics__rating'), FloatField()), 0), output_field=FloatField())))['total_rating'],
+        'Overall Score': metrics_data.aggregate(total_rating=Sum(ExpressionWrapper(Coalesce(Cast(KeyTextTransform('value', 'metrics__rating'), FloatField()), 0), output_field=FloatField())))['total_rating'],
         'Play Time': metrics_data.aggregate(total_play_time=Sum(ExpressionWrapper(Coalesce(Cast(KeyTextTransform('value', 'metrics__play_time'), FloatField()), 0), output_field=FloatField())))['total_play_time'],
         'Goals': metrics_data.aggregate(total_goals=Sum(ExpressionWrapper(Coalesce(Cast(KeyTextTransform('value', 'metrics__goal'), FloatField()), 0), output_field=FloatField())))['total_goals'],
         'Assists': metrics_data.aggregate(total_assists=Sum(ExpressionWrapper(Coalesce(Cast(KeyTextTransform('value', 'metrics__assist'), FloatField()), 0), output_field=FloatField())))['total_assists'],
