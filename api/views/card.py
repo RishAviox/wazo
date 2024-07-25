@@ -267,8 +267,8 @@ class VideoAnalysisCardAPI(APIView):
         category = request.data.get('category', None)
         sub_category = request.data.get('sub_category', None)
 
-        if not category or not sub_category:
-            return Response({'error': 'both category and sub category are required'}, status.HTTP_400_BAD_REQUEST)
+        if not category:
+            return Response({'error': 'category is required'}, status.HTTP_400_BAD_REQUEST)
         
         try:
             match_events_data_file = MatchEventsDataFile.objects.latest('updated_on')
@@ -277,7 +277,11 @@ class VideoAnalysisCardAPI(APIView):
         
         df = match_events_data_file.get_data()
 
-        filtered_df = df[(df['eventType'] == category) & (df['outcome'] == sub_category)]
+        if sub_category:
+            filtered_df = df[(df['eventType'] == category) & (df['outcome'] == sub_category)]
+        else:
+            filtered_df = df[(df['eventType'] == category)]
+        
         if 'event_time' not in filtered_df.columns:
             return Response({'event_time': []}, status.HTTP_200_OK)
         
