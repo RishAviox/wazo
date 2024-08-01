@@ -562,6 +562,11 @@ def get_offensive_performance_metrics(user):
 
 # ai-insight API, unique for each card
 def get_prompt_for_insight(user, card):
+    if user.selected_language == 'he':
+        language = "Hebrew"
+    else:
+        language = "English"
+
     if card == "StatusCard":
         if user.role == 'Coach':
             player_data = []
@@ -573,14 +578,14 @@ def get_prompt_for_insight(user, card):
             }
             print("player_data for coach: ", user_data)
             
-            prompt = f"Generate a concise expert analysis for a coach from the provided wellness data of players, highlighting key points that could impact athlete performance. Keep the word count under 20 words. Exclude JSON data. Wellness scores range from 1 to 5, with 1 being the lowest and 5 the highest. Note that low overall scores often correlate with sub-optimal performance. Encourage athletes to improve in areas where they are lacking. Data provided: {user_data}. Example: 'Overall wellness is relatively low, with fatigue and sleep quality as key areas for improvement. Encourage better rest and recovery to maximize performance.'"
+            prompt = f"Generate a concise expert analysis for a coach only in {language} language from the provided wellness data of players, highlighting key points that could impact athlete performance. Keep the word count under 20 words. Exclude JSON data. Wellness scores range from 1 to 5, with 1 being the lowest and 5 the highest. Note that low overall scores often correlate with sub-optimal performance. Encourage athletes to improve in areas where they are lacking. Data provided: {user_data}. Example: 'Overall wellness is relatively low, with fatigue and sleep quality as key areas for improvement. Encourage better rest and recovery to maximize performance. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}'"
             return prompt
         
         else:
             user_data = {
                 'wellness': get_status_card_metrics(user)
             }
-            prompt = f"Generate a one-liner analysis for the user with the following data which is crisp and helpful from the perspective of an expert directly to the athelete. Keep the word count less than 20 words. Do not include JSON data. The data being passed is for wellness and it is expected that you will bring attention to something that might impact their performance as an athelete. Wellness Scores are 1-5 where 1 is the lowest and 5 is the highest. It is generally noticed that low overall scores lead to sub-optimal performace. We always want to push atheletes to do better in sections where they are lacking. Data passed: {user_data}"
+            prompt = f"Generate a one-liner analysis for the user only in {language} language with the following data which is crisp and helpful from the perspective of an expert directly to the athelete. Keep the word count less than 20 words. Do not include JSON data. The data being passed is for wellness and it is expected that you will bring attention to something that might impact their performance as an athelete. Wellness Scores are 1-5 where 1 is the lowest and 5 is the highest. It is generally noticed that low overall scores lead to sub-optimal performace. We always want to push atheletes to do better in sections where they are lacking. Data passed: {user_data}. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
             
     elif card == 'DailySnapshot':
@@ -594,7 +599,7 @@ def get_prompt_for_insight(user, card):
         user_data = {
             "calender": combined_events,
         }
-        prompt = f"Generate a concise expert analysis for {role} based on the provided calendar data, highlighting key events, training sessions, rest periods, and suggesting reschedules for conflicts keeping games as immovable. Keep it under 20 words and avoid mentioning the data passed to you or atheletes and coaches. Data provided: {user_data}."
+        prompt = f"Generate a concise expert analysis for {role} only in {language} language based on the provided calendar data, highlighting key events, training sessions, rest periods, and suggesting reschedules for conflicts keeping games as immovable. Keep it under 20 words and avoid mentioning the data passed to you or atheletes and coaches. Data provided: {user_data}. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
         return prompt
     
     elif card == 'PerformanceMetrics':
@@ -607,14 +612,14 @@ def get_prompt_for_insight(user, card):
                 'team-performance-metrics': player_data
             }
             print("team-performance-metrics for coach: ", user_data)
-            prompt = f"Generate a concise expert analysis for coaches based on the provided performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}. Example: 'Players showed high passing accuracy (80%) and successful take-ons (67%) but need to create more goal-scoring opportunities. Suggested drills: Pass and Move, Attacking Overload, and Finishing Under Pressure.'"
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}. Example: 'Players showed high passing accuracy (80%) and successful take-ons (67%) but need to create more goal-scoring opportunities. Suggested drills: Pass and Move, Attacking Overload, and Finishing Under Pressure.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
         
         else:
             user_data = {
                 'performance-metrics': get_performance_metrics(user)
             }
-            prompt = f"Generate a concise expert analysis for athletes based on the provided performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the player. Data provided:{user_data}. Example:'You have strong passing and attacking skills, with good goal and assist numbers. Keep working on shooting and disciplinary tendencies. To improve, focus on drills for finishing and maintaining composure in pressure situations.'"
+            prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the player. Data provided:{user_data}. Example:'You have strong passing and attacking skills, with good goal and assist numbers. Keep working on shooting and disciplinary tendencies. To improve, focus on drills for finishing and maintaining composure in pressure situations.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
         
     elif card == 'DefensivePerformanceMetrics':
@@ -627,14 +632,14 @@ def get_prompt_for_insight(user, card):
                 'team-defensive-performance-metrics': player_data
             }
             print("team-defensive-performance-metrics for coach: ", user_data)
-            prompt = f"Generate a concise expert analysis for coaches based on the provided defensive performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}."
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided defensive performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
         
         else:
             user_data = {
                 'defensive-performance-metrics': get_defensive_performance_metrics(user)
             }
-            prompt = f"Generate a concise expert analysis for athletes based on the provided defensive performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Data provided:{user_data}. Example: 'Strong tackling, dueling, and recovery skills shown. Need to work on aerial clearances and improving goalkeeping for a more well-rounded performance. Drills targeting clearing and catching under pressure may benefit.'"
+            prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided defensive performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Data provided:{user_data}. Example: 'Strong tackling, dueling, and recovery skills shown. Need to work on aerial clearances and improving goalkeeping for a more well-rounded performance. Drills targeting clearing and catching under pressure may benefit.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
         
     elif card == 'OffensivePerformanceMetrics':
@@ -647,14 +652,14 @@ def get_prompt_for_insight(user, card):
                 'team-offensive-performance-metrics': player_data
             }
             print("team-offensive-performance-metrics for coach: ", user_data)
-            prompt = f"Generate a concise expert analysis for coaches based on the provided defensive performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}."
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided defensive performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
         
         else:
             user_data = {
                 'offensive-performance-metrics': get_offensive_performance_metrics(user)
             }
-            prompt = f"Generate a concise expert analysis for athletes based on the provided offensive performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Data provided:{user_data}. Example: 'This athlete has strong shooting and passing skills but may benefit from targeted drills to improve pass accuracy. Suggest incorporating dribbling and set piece work to further enhance offensive performance.'"
+            prompt = f"Generate a concise expert analysis for athletes based only in {language} language on the provided offensive performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Data provided:{user_data}. Example: 'This athlete has strong shooting and passing skills but may benefit from targeted drills to improve pass accuracy. Suggest incorporating dribbling and set piece work to further enhance offensive performance.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
     
     return None

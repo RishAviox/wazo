@@ -149,6 +149,12 @@ class GreetingAPI(APIView):
     def get(self, request):
         today = datetime.today()
         user = request.user
+
+        if user.selected_language == 'he':
+            language = "Hebrew"
+        else:
+            language = "English"
+    
         user_data = {
             "name": request.user.name,
             "wellness": get_status_card_metrics(user),
@@ -161,8 +167,13 @@ class GreetingAPI(APIView):
         print("*" * 100)
         print("user_data: ", user_data)
 
-        prompt = f"Generate a two-liner greeting for the user with the following data. Keep the word count less than 40 and make it crisp and to the point for a athelete. Do not include JSON data. From the data passed, see what should be his main focus for the day.: {user_data}"
+        prompt = f"""Generate a two-liner greeting only in {language} language for the user with the following data. 
+                    Keep the word count less than 40 and make it crisp and to the point for a athelete. Do not include JSON data. 
+                    From the data passed, see what should be his main focus for the day.: {user_data}. 
+                    {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}
+                """
 
+        print(prompt)
         deployment_name = "Completion"
         response = openai_client.completions.create(
                                         model=deployment_name,
