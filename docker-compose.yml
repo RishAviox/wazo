@@ -9,8 +9,7 @@ services:
               python manage.py migrate api && 
               python manage.py makemigrations && 
               python manage.py migrate && 
-              # gunicorn wajo_backend.wsgi:application --workers 3 --bind 0.0.0.0:8000 --access-logfile /var/log/gunicorn.access.log --error-logfile /var/log/gunicorn.error.log
-              python manage.py runserver
+              gunicorn wajo_backend.wsgi:application --workers 3 --bind 0.0.0.0:8000 --access-logfile /var/log/gunicorn.access.log --error-logfile /var/log/gunicorn.error.log
             "
     ports:
       - "8000:8000"
