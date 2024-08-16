@@ -56,8 +56,7 @@ class CardSuggestedActionAdmin(admin.ModelAdmin):
 
 
 class StatusCardMetricsAdmin(admin.ModelAdmin):
-    list_display = ['user', 'overall_score', 'srpe_score', 'readiness_score', 'sleep_quality', 
-                    'fatigue_score', 'mood_score', 'play_time', 'created_on', 'updated_on']
+    list_display = ['user', 'metrics', 'created_on', 'updated_on']
 
 
 # class ActivitiesQuestionnaireAdmin(admin.ModelAdmin):

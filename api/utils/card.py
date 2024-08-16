@@ -167,22 +167,74 @@ def get_daily_snapshot(user, event_date):
 
 """ End """
 
+def get_age_adjustment_factor(dob):
+    if not dob:
+        return 1.0
+    current_date = datetime.today()
+    age = current_date.year - dob.year - ((current_date.month, current_date.day) < (dob.month, dob.day))
+    if age <= 14:
+        return 1.05
+    elif age >= 15 and age <= 17:
+        return 1.02
+    elif age >= 18 and age <= 24:
+        return 1.0
+    elif age >= 25 and age <= 29:
+        return 0.98
+    elif age >= 30 and age <= 34:
+        return 0.95
+    elif age >= 35 and age <= 39:
+        return 0.92
+    elif age >= 40:
+        return 0.88
 
 # for wellness signal
 def calculate_and_store_status_card_metrics(user):
+    # Fetch the latest wellness response within the specified date range
+    latest_wellness_response = DailyWellnessUserResponse.objects.filter(
+        user=user
+    ).order_by('-updated_on').first().response
+
+    # Fetch the latest RPE response within the specified date range
+    latest_rpe_response = RPEUserResponse.objects.filter(
+        user=user
+    ).order_by('-updated_on').first().response
+
+    age_adjustment_factor = get_age_adjustment_factor(user.dob)
+    print("age_adjustment_factor: ", age_adjustment_factor)
+    normalized_wellness_response = normalize_wellness_response(latest_wellness_response)
+    normalized_rpe_response = normalize_rpe_response(latest_rpe_response)
+    
+    Wellness =  calculate_wellness_score(normalized_wellness_response, age_adjustment_factor)
+    Readiness =  calculate_readiness_score(normalized_rpe_response, age_adjustment_factor)
+    Fitness =  calculate_fitness_score(
+                                normalized_rpe_response,
+                                normalized_wellness_response, 
+                                distance_covered = 1, 
+                                high_intensity_runs = 1,
+                                age_adjustment_factor=age_adjustment_factor)
+    Morale =  calculate_morale_score(normalized_wellness_response, age_adjustment_factor)
+    # RPE =  calculate_normalized_rpe_score(normalized_rpe_response)
+    # sRPE =  calculate_normalized_srpe_score(rpe_score=RPE)
+    SPI =  calculate_spi_score(normalized_rpe_response, age_adjustment_factor)
+    Recover =  calculate_recovery_score(normalized_rpe_response, normalized_wellness_response, age_adjustment_factor)
+
     metrics = {
-        'overall_score': calculate_overall_score(user, days=7),
-        'srpe_score': calculate_srpe(user),
-        'readiness_score': calculate_readiness_score(user),
-        'sleep_quality': calculate_sleep_quality(user),
-        'fatigue_score': calculate_fatigue_score(user),
-        'mood_score': calculate_mood_score(user),
-        'play_time': calculate_play_time(user)
+        'Status': calculate_overall_status(Wellness, Readiness, SPI, Recover),
+        'Wellness': round(Wellness, 2),
+        'Readiness': round(Readiness, 2),
+        'Fitness': round(Fitness, 2),
+        'Morale': round(Morale, 2),
+        # 'RPE': RPE,
+        # 'sRPE': sRPE,
+        'SPI': round(SPI, 2),
+        'Recover': round(Recover, 2)
     }
     print(metrics)
-    metrics_serializer = StatusCardMetricsSerializer(data=metrics)
-    if metrics_serializer.is_valid():
-        metrics_serializer.save(user=user)
+    
+    StatusCardMetrics.objects.create(
+        user=user,
+        metrics=metrics
+    )
 
 
 # for MatchEventDataFile processing Signal

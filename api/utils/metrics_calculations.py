@@ -2,16 +2,81 @@ from django.utils import timezone
 from api.models import DailyWellnessUserResponse, RPEUserResponse, DailyWellnessQuestionnaire, RPEQuestionnaire
 
 
+SESSION_DURATION = 60
+"""
+    Team Training 90mins
+    Persornal Training 60mins
+    Match Session will come from Bepro
+"""
+
+question_mapping = {
+    'WQ-1': 'Mood',
+    'WQ-2': 'Sleep Quality',
+    'WQ-3': 'Energy Level',
+    'WQ-4': 'Muscle Soreness',
+    'WQ-5': 'Diet',
+    'WQ-6': 'Stress Level',
+    'WQ-7': 'Pain Level',
+    'WQ-8': 'Pain Location',
+}
+
+WEIGHTS = {
+    "Athlete Status": {
+        "Overall Wellness": 0.3,
+        "Readiness": 0.3,
+        "Subjective Performance Index (SPI)": 0.25,
+        "Recovery": 0.15
+    },
+    "Overall Wellness": {
+        "Mood": 0.15,
+        "Sleep Quality": 0.2,
+        "Energy Level": 0.15,
+        "Muscle Soreness": 0.1,
+        "Diet": 0.1,
+        "Stress Level": 0.15,
+        "Pain Level": 0.1,
+        "Hydration Status": 0.05
+    },
+    "RPE": {
+        "RPE": 1.0
+    },
+    "Readiness": {
+        "Muscle Soreness": 0.15,
+        "Stress Level": 0.15,
+        "Pain Level": 0.1,
+        "Fatigue": 0.15,
+        "Recovery": 0.15,
+        "Mood": 0.1,
+        "Sleep Quality": 0.1,
+        "Performance": 0.5,
+        "Satisfaction": 0.3,
+        "Intensity": 0.2
+    },
+    "Recovery": {
+        "Sleep Quality": 0.3,
+        "Muscle Soreness": 0.25,
+        "Fatigue": 0.25,
+        "Recovery": 0.2
+    },
+    "Subjective Performance Index": {
+        "Performance": 0.5,
+        "Satisfaction": 0.3,
+        "Intensity": 0.2
+    },
+    "sRPE": {
+        "SRPE": 1.0
+    }
+}
+
 # some scores have reversed scale(5 is bad, 1 is good), 
 # like Stress, Soreness, Fatigue, General Pain Level
-
 NORMALIZED_SCORES_ID = ['WQ-4', 'WQ-6', 'WQ-7', 'RPE-TT-2', 'RPE-PT-2', 'RPE-MS-2'] # add fatigue from RPE
 
 def normalize_score(question_id, score):
     """Normalize scores to ensure higher scores are consistently better across all questions."""
     if question_id in NORMALIZED_SCORES_ID:
-        return 6 - int(score)  # Reverse the score: 5 becomes 1, 4 becomes 2, etc.
-    return int(score)
+        return ((6 - int(score)) / 5) * 100  # Reverse the score: 5 becomes 1, 4 becomes 2, etc.
+    return (int(score) / 5) * 100
 
 
 # Helper function to extract score from JSON responses
@@ -46,135 +111,173 @@ def get_most_recent_instance_with_count(queryset, required_count):
             return instance
     return None
 
+# Convert answer IDs to normalized values for wellness
+def normalize_wellness_response(response):
+    _data = {}
+    for item in response:
+        question_id = item["question_id"]
+        score = int(item["answer_id"])
+        normalized_score = normalize_score(question_id, score)
+        factor = question_mapping[question_id]
+        _data[factor] = normalized_score
+
+        # print(f"{factor} ---> score: {score}, normalized: {normalized_score}")
+    return _data
+
+def normalize_rpe_response(response):
+    _data = {}
+    for item in response:
+        question_id = item["question_id"]
+        score = int(item["answer_id"])
+        normalized_score = normalize_score(question_id, score)
+        _data[question_id] = normalized_score
+    return _data
+
+# ****************** Helper Scores **************************
+
+
 # ****************** StatusCard Metrics **************************
 
-def calculate_overall_score(user, days=7):
-    end_date = timezone.now()
-    start_date = end_date - timezone.timedelta(days=days)
-    wellness_responses = DailyWellnessUserResponse.objects.filter(
-        user=user,
-        updated_on__range=(start_date, end_date)
+def calculate_wellness_score(normalized_wellness_response, age_adjustment_factor=1.0, weights=WEIGHTS):
+    category = "Overall Wellness"
+    numerator = (
+        (normalized_wellness_response['Mood'] * weights[category]['Mood'] if normalized_wellness_response['Mood'] is not None else 0) +
+        (normalized_wellness_response['Sleep Quality'] * weights[category]['Sleep Quality'] if normalized_wellness_response['Sleep Quality'] is not None else 0) +
+        (normalized_wellness_response['Energy Level'] * weights[category]['Energy Level'] if normalized_wellness_response['Energy Level'] is not None else 0) +
+        (normalized_wellness_response['Muscle Soreness'] * weights[category]['Muscle Soreness'] if normalized_wellness_response['Muscle Soreness'] is not None else 0) +
+        (normalized_wellness_response['Diet'] * weights[category]['Diet'] if normalized_wellness_response['Diet'] is not None else 0) +
+        (normalized_wellness_response['Stress Level'] * weights[category]['Stress Level'] if normalized_wellness_response['Stress Level'] is not None else 0) +
+        (normalized_wellness_response['Pain Level'] * weights[category]['Pain Level'] if normalized_wellness_response['Pain Level'] is not None else 0) +
+        (normalized_wellness_response['Hydration Status'] * weights[category]['Hydration Status'] if 'Hydration Status' in normalized_wellness_response.keys() else 0)
+    )
+    denominator = sum(
+        weights[category][factor] 
+        for factor in weights[category] 
+        if factor in normalized_wellness_response and normalized_wellness_response[factor] is not None
     )
 
-    rpe_responses = RPEUserResponse.objects.filter(
-        user=user,
-        updated_on__range=(start_date, end_date)
-    )
+    return (numerator / denominator) * age_adjustment_factor if denominator else None
 
-    wellness_scores = []
-    rpe_scores = []
 
-    for instance in wellness_responses:
-        if len(instance.response) == 7:  # Ensure response count is 8
-            wellness_scores.extend([normalize_score(item['question_id'], item['answer_id']) for item in instance.response])
-
-    for instance in rpe_responses:
-        if len(instance.response) == 14:  # Ensure response count is 14
-            rpe_scores.extend([normalize_score(item['question_id'], item['answer_id']) for item in instance.response])
-
-    print(wellness_scores)
-    wellness_avg = sum(wellness_scores) / len(wellness_scores) if wellness_scores else 0
-    rpe_avg = sum(rpe_scores) / len(rpe_scores) if rpe_scores else 0
-
-    if not wellness_avg and not rpe_avg:
-        return "NA"
+def calculate_normalized_rpe_score(normalized_rpe_response, age_adjustment_factor=1.0):
+    """
+        Intensity question in the RPE Questionnaire 
+        (
+            RPE-TT-1 for Team Training, RPE-PT-1 for Personal Training, 
+            or RPE-MS-1 for Match Session
+        ).
+    As per the discussion on 13/08/2024, remove RPE & sRPE. Moved to Next Phase
     
-    print("scores: ", wellness_scores, rpe_scores)
-
-    overall_avg = (wellness_avg + rpe_avg) / 2
-    return round(overall_avg, 1)
-
-def calculate_srpe(user):
-    most_recent_training_intensity = RPEUserResponse.objects.filter(
-        user=user
-    ).order_by('-updated_on')
-
-    most_recent_training_intensity = get_most_recent_instance_with_count(most_recent_training_intensity, 14)
-    
-    if most_recent_training_intensity:
-        return get_rpe_score_by_q_name(user, most_recent_training_intensity.response, 'Intensity')
-    return "NA"
-
-def calculate_readiness_score(user, weights={'sleep': 0.4, 'mood': 0.3, 'recovery': 0.3}):
-    most_recent_wellness = DailyWellnessUserResponse.objects.filter(
-        user=user
-    ).order_by('-updated_on')
-
-    most_recent_rpe = RPEUserResponse.objects.filter(
-        user=user
-    ).order_by('-updated_on')
-
-    most_recent_wellness = get_most_recent_instance_with_count(most_recent_wellness, 7)
-    most_recent_rpe = get_most_recent_instance_with_count(most_recent_rpe, 14)
-
-    sleep_score = get_wellness_score_by_q_name(user, most_recent_wellness.response, 'Sleep') if most_recent_wellness else 0
-    mood_score = get_wellness_score_by_q_name(user, most_recent_wellness.response, 'Mood') if most_recent_wellness else 0
-    recovery_score = get_rpe_score_by_q_name(user, most_recent_rpe.response, 'Recovery') if most_recent_rpe else 0
-
-    print('sleep_score: ', sleep_score)
-    print('mood_score: ', mood_score)
-    print('recovery_score: ', recovery_score)
-
-    if not sleep_score and not mood_score and not recovery_score:
-        return "NA"
-
-    readiness_score = (sleep_score * weights['sleep'] + mood_score * weights['mood'] + recovery_score * weights['recovery'])
-    return round(readiness_score, 1)
-
-def calculate_sleep_quality(user):
-    most_recent_wellness = DailyWellnessUserResponse.objects.filter(
-        user=user
-    ).order_by('-updated_on')
-    
-    most_recent_wellness = get_most_recent_instance_with_count(most_recent_wellness, 7)
-
-    return get_wellness_score_by_q_name(user, most_recent_wellness.response, 'Sleep') if most_recent_wellness else "NA"
-
-def calculate_fatigue_score(user):
-    most_recent_rpe = RPEUserResponse.objects.filter(
-        user=user
-    ).order_by('-updated_on')
-
-    most_recent_rpe = get_most_recent_instance_with_count(most_recent_rpe, 14)
-
-    return get_rpe_score_by_q_name(user, most_recent_rpe.response, 'Fatigue') if most_recent_rpe else "NA"
-
-def calculate_mood_score(user):
-    most_recent_wellness = DailyWellnessUserResponse.objects.filter(
-        user=user
-    ).order_by('-updated_on')
-
-    most_recent_wellness = get_most_recent_instance_with_count(most_recent_wellness, 7)
-
-    return get_wellness_score_by_q_name(user, most_recent_wellness.response, 'Mood') if most_recent_wellness else "NA"
-
-def calculate_play_time(user):
-    # data not available
+    rpe = normalized_rpe_response["RPE-PT-1"] if normalized_rpe_response["RPE-PT-1"] else 0
+    print("rpe: ", rpe)
+    return (((rpe - 1) * (20 - 6) / (5 - 1)) + 6 - 6) * (100 / (20 - 6)) * age_adjustment_factor
+    """
     return 0
 
 
+def calculate_normalized_srpe_score(rpe_score, age_adjustment_factor=1.0):
+    """
+    srpe = rpe_score * SESSION_DURATION # (in minutes) for now constant, later from GPS data
+    return (srpe * 2.0) * 10.0 * age_adjustment_factor
+    """
+    return 0
 
-# ****************** Individual Player Alerts **************************
 
-def calculate_wellness_score(user, days=7):
-    end_date = timezone.now()
-    start_date = end_date - timezone.timedelta(days=days)
-    wellness_responses = DailyWellnessUserResponse.objects.filter(
-        user=user,
-        updated_on__range=(start_date, end_date)
-    )
-
-    wellness_scores = []
-
-    for instance in wellness_responses:
-        if len(instance.response) == 7:  # Ensure response count is 8
-            wellness_scores.extend([normalize_score(item['question_id'], item['answer_id']) for item in instance.response])
-
-    wellness_avg = sum(wellness_scores) / len(wellness_scores) if wellness_scores else 0
-
-    if not wellness_avg:
-        return "NA"
+def calculate_readiness_score(normalized_rpe_response, age_adjustment_factor=1.0, weights=WEIGHTS):
+    category = "Readiness"
     
-    print("wellness scores and avg: ", wellness_scores, wellness_avg)
+    # Calculate RPE and sRPE scores
+    # rpe_score = calculate_normalized_rpe_score(normalized_rpe_response)
+    # srpe_score = calculate_normalized_srpe_score(rpe_score)
+    
+    # Calculate numerator
+    numerator = (
+        # (rpe_score * weights["RPE"]["RPE"] if rpe_score is not None else 0) +
+        # (srpe_score * weights["sRPE"]["SRPE"] if srpe_score is not None else 0) +
+        (normalized_rpe_response['RPE-PT-1'] * weights[category]['Intensity'] if 'RPE-PT-1' in normalized_rpe_response and normalized_rpe_response['RPE-PT-1'] is not None else 0) +
+        (normalized_rpe_response['RPE-PT-2'] * weights[category]['Fatigue'] if 'RPE-PT-2' in normalized_rpe_response and normalized_rpe_response['RPE-PT-2'] is not None else 0) +
+        (normalized_rpe_response['RPE-PT-3'] * weights[category]['Recovery'] if 'RPE-PT-3' in normalized_rpe_response and normalized_rpe_response['RPE-PT-3'] is not None else 0) +
+        (normalized_rpe_response['RPE-PT-5'] * weights[category]['Performance'] if 'RPE-PT-5' in normalized_rpe_response and normalized_rpe_response['RPE-PT-5'] is not None else 0) +
+        (normalized_rpe_response['RPE-PT-4'] * weights[category]['Satisfaction'] if 'RPE-PT-4' in normalized_rpe_response and normalized_rpe_response['RPE-PT-4'] is not None else 0)
+    )
+    
+    # Calculate denominator
+    denominator = (
+        # (weights["RPE"]["RPE"] if rpe_score is not None else 0) +
+        # (weights["sRPE"]["SRPE"] if srpe_score is not None else 0) +
+        (weights[category]['Intensity'] if 'RPE-PT-1' in normalized_rpe_response and normalized_rpe_response['RPE-PT-1'] is not None else 0) +
+        (weights[category]['Fatigue'] if 'RPE-PT-2' in normalized_rpe_response and normalized_rpe_response['RPE-PT-2'] is not None else 0) +
+        (weights[category]['Recovery'] if 'RPE-PT-3' in normalized_rpe_response and normalized_rpe_response['RPE-PT-3'] is not None else 0) +
+        (weights[category]['Performance'] if 'RPE-PT-5' in normalized_rpe_response and normalized_rpe_response['RPE-PT-5'] is not None else 0) +
+        (weights[category]['Satisfaction'] if 'RPE-PT-4' in normalized_rpe_response and normalized_rpe_response['RPE-PT-4'] is not None else 0)
+    )
+    
+    return (numerator / denominator) * age_adjustment_factor if denominator else None
 
-    return round(wellness_avg, 1)
+
+def calculate_recovery_score(normalized_rpe_response, normalized_wellness_response, age_adjustment_factor=1.0, weights=WEIGHTS):
+    category = "Recovery"
+    numerator = (
+        (normalized_wellness_response['Sleep Quality'] * weights[category]['Sleep Quality'] if normalized_wellness_response['Sleep Quality'] is not None else 0) +
+        (normalized_wellness_response['Muscle Soreness'] * weights[category]['Muscle Soreness'] if normalized_wellness_response['Muscle Soreness'] is not None else 0) +
+        (normalized_rpe_response['RPE-PT-2'] * weights[category]['Fatigue'] if normalized_rpe_response['RPE-PT-2'] is not None else 0) +
+        (normalized_rpe_response['RPE-PT-3'] * weights[category]['Recovery'] if normalized_rpe_response['RPE-PT-3'] is not None else 0)
+    )
+    denominator = (
+        (weights[category]['Fatigue'] if 'RPE-PT-2' in normalized_rpe_response and normalized_rpe_response['RPE-PT-2'] is not None else 0) +
+        (weights[category]['Recovery'] if 'RPE-PT-3' in normalized_rpe_response and normalized_rpe_response['RPE-PT-3'] is not None else 0) +
+        (weights[category]['Sleep Quality'] if 'Sleep Quality' in normalized_wellness_response and normalized_wellness_response['Sleep Quality'] is not None else 0) +
+        (weights[category]['Muscle Soreness'] if 'Muscle Soreness' in normalized_wellness_response and normalized_wellness_response['Muscle Soreness'] is not None else 0)
+    )
+    return (numerator / denominator) * age_adjustment_factor if denominator else None
+
+
+def calculate_fitness_score(normalized_rpe_response, normalized_wellness_response, distance_covered, high_intensity_runs, play_time=SESSION_DURATION, age_adjustment_factor=1.0, weights=WEIGHTS):
+    category = "Recovery"
+    recovery_score = calculate_recovery_score(normalized_rpe_response, normalized_wellness_response, age_adjustment_factor)
+    gps_data = ((distance_covered + high_intensity_runs) / play_time) * 90
+    numerator = (
+        (recovery_score * weights[category]['Recovery'] if recovery_score is not None else 0) +
+        (normalized_wellness_response['Energy Level'] * weights["Overall Wellness"]['Energy Level'] if normalized_wellness_response['Energy Level'] is not None else 0) +
+        (gps_data * 1)  # Assuming GPS Data has a weight of 1
+    )
+    denominator = (
+        (weights[category]['Recovery'] if recovery_score is not None else 0) +
+        (weights["Overall Wellness"]['Energy Level'] if normalized_wellness_response['Energy Level'] is not None else 0) +
+        (1)
+    )
+    return (numerator / denominator) * age_adjustment_factor
+
+
+def calculate_morale_score(normalized_wellness_response, age_adjustment_factor=1.0, weights=WEIGHTS):
+    category = "Overall Wellness"
+    numerator = (
+        normalized_wellness_response['Mood'] * weights[category]['Mood'] +
+        (100 - normalized_wellness_response['Stress Level']) * weights[category]['Stress Level']
+    )
+    denominator = weights[category]['Mood'] + weights[category]['Stress Level']
+    return (numerator / denominator) * age_adjustment_factor
+
+def calculate_spi_score(normalized_rpe_response, age_adjustment_factor=1.0, weights=WEIGHTS):
+    category = "Subjective Performance Index"
+    # Performance for Athlete is 0
+    numerator = (
+        (0 * weights[category]['Performance'] ) +
+        (normalized_rpe_response['RPE-PT-4'] * weights[category]['Satisfaction'] if normalized_rpe_response['RPE-PT-4'] is not None else 0) +
+        (normalized_rpe_response['RPE-PT-1'] * weights[category]['Intensity'] if normalized_rpe_response['RPE-PT-1'] is not None else 0)
+    )
+    denominator = weights[category]['Satisfaction'] + weights[category]['Intensity']
+
+    return (numerator / denominator) * age_adjustment_factor if denominator else None
+
+
+def calculate_overall_status(overall_wellness_score, readiness_score, spi_score, recovery_score, weights=WEIGHTS):
+    category = "Athlete Status"
+    numerator = (
+        overall_wellness_score * weights[category]['Overall Wellness'] +
+        readiness_score * weights[category]['Readiness'] +
+        spi_score * weights[category]['Subjective Performance Index (SPI)'] +
+        recovery_score * weights[category]['Recovery']
+    )
+    denominator = sum(weights[category].values())
+    return round(numerator / denominator, 2)

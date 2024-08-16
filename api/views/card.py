@@ -133,7 +133,63 @@ class OffensivePerformanceMetricsAPI(APIView):
 class CardSuggestedActionsAPI(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, card):
+    def get(self, request):
+        # data = {
+        #     "Calendar": {
+        #         "actions": [
+        #         {
+        #             "name": "Add Schedule",
+        #             "postback": "add_schedule"
+        #         },
+        #         {
+        #             "name": "Update tomorrow's schedule",
+        #             "postback": "add_eventsfortomorrow"
+        #         }
+        #         ]
+        #     },
+        #     "Wellness": {
+        #         "actions": [
+        #         {
+        #             "name": "Update Wellness",
+        #             "postback": "update_wellness"
+        #         },
+        #         {
+        #             "name": "Update RPE",
+        #             "postback": "log_rpe"
+        #         },
+        #         {
+        #             "name": "How am I doing?",
+        #             "postback": "get_insights"
+        #         }
+        #         ]
+        #     },
+        #     "Performance Metrics": {
+        #         "actions": [
+        #         {
+        #             "name": "How am I doing?",
+        #             "postback": "get_insights"
+        #         }
+        #         ]
+        #     },
+        #     "Defensive Metrics": {
+        #         "actions": [
+        #         {
+        #             "name": "How am I doing?",
+        #             "postback": "get_insights"
+        #         }
+        #         ]
+        #     },
+        #     "Offensive Metrics": {
+        #         "actions": [
+        #         {
+        #             "name": "How am I doing?",
+        #             "postback": "get_insights"
+        #         }
+        #         ]
+        #     }
+        # }
+        # return Response(data, status=status.HTTP_200_OK)
+        
         try:
             actions = CardSuggestedAction.objects.filter(card_name=card).all()
             serializer = CardSuggestedActionsSerializer(actions, many=True)

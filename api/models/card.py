@@ -22,13 +22,7 @@ class CardSuggestedAction(models.Model):
 # Status Card Metrics
 class StatusCardMetrics(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='status_card_metrics')
-    overall_score =  models.CharField(max_length=10, null=True, blank=True)
-    srpe_score =  models.CharField(max_length=10, null=True, blank=True)
-    readiness_score =  models.CharField(max_length=10, null=True, blank=True)
-    sleep_quality =  models.CharField(max_length=10, null=True, blank=True)
-    fatigue_score =  models.CharField(max_length=10, null=True, blank=True)
-    mood_score =  models.CharField(max_length=10, null=True, blank=True)
-    play_time =  models.CharField(max_length=10, null=True, blank=True)
+    metrics = models.JSONField(default=dict)
      
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)

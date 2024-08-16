@@ -40,7 +40,7 @@ class CardSuggestedActionsSerializer(serializers.ModelSerializer):
 class StatusCardMetricsSerializer(serializers.ModelSerializer):
     class Meta:
         model = StatusCardMetrics
-        fields = ["overall_score", "srpe_score", "readiness_score", "sleep_quality", "fatigue_score", "mood_score", "play_time"]
+        fields = "__all__"
 
 class DailyWellnessUserResponseSerializer(serializers.ModelSerializer):
     class Meta:
