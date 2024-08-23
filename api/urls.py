@@ -8,7 +8,7 @@ from .views.chatbot_admin import (
 from .views.onboarding import OnboardingAPI, OnboardingFlowEntrypoint
 from .views.user import WajoUserProfileDetails
 from .views.card import (
-                    CardSuggestedActionsAPI, ____StatusCardMetricAPI, StatusCardMetricAPI, DailySnapshortCardAPI, 
+                    CardSuggestedActionsAPI, ____CardSuggestedActionsAPI, ____StatusCardMetricAPI, StatusCardMetricAPI, DailySnapshortCardAPI, 
                     PerformanceMetricsAPI, DefensivePerformanceMetricsAPI, OffensivePerformanceMetricsAPI,
                     GreetingAPI, InsightAPI, VideoAnalysisCardAPI, GameStatsAPI, SeasonOverviewMetricsAPI,
                 )
@@ -21,10 +21,13 @@ urlpatterns = [
     path('onboarding/<str:field>', OnboardingAPI.as_view(), name='onboarding'),
     path('onboarding_flow/entrypoint', OnboardingFlowEntrypoint.as_view(), name='onboarding-flow-entrypoint'),
     path('user-details', WajoUserProfileDetails.as_view(), name='user-profile-details'),
-    path('card-suggested-actions/<str:card>', CardSuggestedActionsAPI.as_view(), name='card-suggested-actions'),
+    
+    # old builds and v1
+    path('card-suggested-actions/<str:card>', ____CardSuggestedActionsAPI.as_view(), name='____card-suggested-actions'),
+    path('v1/card-suggested-actions', CardSuggestedActionsAPI.as_view(), name='card-suggested-actions'),
     
     # for old app builds, send dummy data, v1 is the latest one
-    path('status-card-metrics', ____StatusCardMetricAPI.as_view(), name='status-card-metrics'),
+    path('status-card-metrics', ____StatusCardMetricAPI.as_view(), name='____status-card-metrics'),
     path('v1/status-card-metrics', StatusCardMetricAPI.as_view(), name='status-card-metrics'),
     
     path('daily-snapshot', DailySnapshortCardAPI.as_view(), name='daily-snapshot'),
