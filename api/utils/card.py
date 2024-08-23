@@ -9,7 +9,7 @@ from django.utils.timezone import datetime
 from api.models import (
                         OneTimeEvents, RecurringEvents, PerformanceMetrics, 
                         DefensivePerformanceMetrics, OffensivePerformanceMetrics,
-                        StatusCardMetrics,
+                        StatusCardMetrics, GameStats, SeasonOverviewMetrics,
                     )
 from api.serializer import StatusCardMetricsSerializer, WajoUserSerializer
 from .metrics_calculations import *
@@ -19,12 +19,27 @@ from .metrics_calculations import *
 def get_status_card_metrics(user):
     try:
         metrics = StatusCardMetrics.objects.filter(user=user).latest('updated_on')
-        serializer = StatusCardMetricsSerializer(metrics)
-        return serializer.data
+        return metrics.metrics
     
     except:
         return {}
-
+    
+# for game stats
+def get_game_stats(user):
+    try:
+        metrics = GameStats.objects.filter(user=user).latest('updated_on')
+        return metrics.metrics
+    except:
+        return {}
+    
+# for season overview metrics
+def get_season_overview_metrics(user):
+    try:
+        metrics = SeasonOverviewMetrics.objects.filter(user=user).latest('updated_on')
+        return metrics.metrics
+    except:
+        return {}
+    
 
 # for daily snapshot
 def get_events_for_next_5_days(user, start_date):
@@ -238,6 +253,40 @@ def calculate_and_store_status_card_metrics(user):
 
 
 # for MatchEventDataFile processing Signal
+def calculate_game_stats(row):
+    return {
+            "Overall Game Score": round(row.get('rating', 0), 2),
+            "Minutes Played": round(row.get('play_time', 0) / (60 * 1000), 2), # mili seconds to minutes
+            "Successful Crosses": round(row.get('cross_succeeded', 0), 2),
+            "Key Passes": round(row.get('key_pass', 0), 2),
+            "Pass Accuracy": round(100 * row.get('cross_succeeded', 0) / row.get('pass', 0), 2) if row.get('pass', 0) > 0 else 0.0,
+            "Total Shots": round(row.get('total_shot', 0), 2),
+            "Shots on Target": round(row.get('shot_on_target', 0), 2),
+            "Clearances": round(row.get('clearance', 0), 2),
+            "Tackles": round(row.get('tackle', 0), 2),
+            "Interceptions": round(row.get('intercept', 0), 2),
+            "Duels Won": round(100 * (row.get('ground_duel_succeeded', 0) + row.get('aerial_duel_succeeded', 0)) / (row.get('ground_duel', 0) + row.get('aerial_duel', 0)), 2) if (row.get('ground_duel', 0) + row.get('aerial_duel', 0)) > 0 else 0.0,
+            "Aerial Duels Won": round(row.get('aerial_duel_succeeded', 0), 2),
+            "Distance Covered": round(row.get('distance_covered', 0), 2), # get from GPS data
+            "Saves": round(row.get('save_by_catching', 0) + row.get('save_by_punching', 0), 2),
+            "% Save": round(100 * (row.get('save_by_catching', 0) + row.get('save_by_punching', 0)) / (row.get('save_by_catching', 0) + row.get('save_by_punching', 0) + row.get('goal_conceded', 0)), 2) if (row.get('save_by_catching', 0) + row.get('save_by_punching', 0) + row.get('goal_conceded', 0)) > 0 else 0.0,
+        }
+
+def calculate_season_overview_metrics(row):
+    return {
+            "Overall Score": round(row.get('rating', 0), 2),
+            "Matches Played": round(row.get('play_time', 0) / (90 * 60 * 1000), 2),
+            "Goals": round(row.get('goal', 0), 2),
+            "Assists": round(row.get('assist', 0), 2),
+            "Own Goals": round(row.get('own_goal', 0), 2),
+            "Goals Conceded": round(row.get('goal_conceded', 0), 2),
+            "Clean Sheets": 1 if row.get('goal_conceded') == 0 else 0,
+            "Yellow Cards": round(row.get('yellow_card', 0), 2),
+            "Red Cards": round(row.get('red_card', 0), 2),
+            "Substituted In": 1 if row.get('play_time', 0) / (60 * 1000) < 90 else 0,
+            "Substituted Out": 1 if row.get('play_time', 0) / (60 * 1000) < 90 else 0,
+        }
+
 def calculate_performance_metrics(row):
     return {
             "rating": {"skill": "Rating", "category": "Performance Metrics", "value": row.get('rating', 0)},

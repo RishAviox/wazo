@@ -81,3 +81,33 @@ class OffensivePerformanceMetrics(models.Model):
 
     def __str__(self):
         return f"Offensive Performance Metrics for {self.user.phone_no}"
+
+
+class GameStats(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="game_stats")
+    metrics = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Game Stats"
+        verbose_name_plural = "Game Stats"
+
+    def __str__(self):
+        return f"Game Stats for {self.user.phone_no}"
+
+
+class SeasonOverviewMetrics(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="season_overview_metrics")
+    metrics = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Season Overview Metrics"
+        verbose_name_plural = "Season Overview Metrics"
+
+    def __str__(self):
+        return f"Season Overview Metrics for {self.user.phone_no}"

@@ -8,9 +8,9 @@ from .views.chatbot_admin import (
 from .views.onboarding import OnboardingAPI, OnboardingFlowEntrypoint
 from .views.user import WajoUserProfileDetails
 from .views.card import (
-                    CardSuggestedActionsAPI, StatusCardMetricAPI, DailySnapshortCardAPI, 
+                    CardSuggestedActionsAPI, ____StatusCardMetricAPI, StatusCardMetricAPI, DailySnapshortCardAPI, 
                     PerformanceMetricsAPI, DefensivePerformanceMetricsAPI, OffensivePerformanceMetricsAPI,
-                    GreetingAPI, InsightAPI, VideoAnalysisCardAPI,
+                    GreetingAPI, InsightAPI, VideoAnalysisCardAPI, GameStatsAPI, SeasonOverviewMetricsAPI,
                 )
 
 urlpatterns = [
@@ -22,7 +22,11 @@ urlpatterns = [
     path('onboarding_flow/entrypoint', OnboardingFlowEntrypoint.as_view(), name='onboarding-flow-entrypoint'),
     path('user-details', WajoUserProfileDetails.as_view(), name='user-profile-details'),
     path('card-suggested-actions/<str:card>', CardSuggestedActionsAPI.as_view(), name='card-suggested-actions'),
-    path('status-card-metrics', StatusCardMetricAPI.as_view(), name='status-card-metrics'),
+    
+    # for old app builds, send dummy data, v1 is the latest one
+    path('status-card-metrics', ____StatusCardMetricAPI.as_view(), name='status-card-metrics'),
+    path('v1/status-card-metrics', StatusCardMetricAPI.as_view(), name='status-card-metrics'),
+    
     path('daily-snapshot', DailySnapshortCardAPI.as_view(), name='daily-snapshot'),
     path('performance-metrics', PerformanceMetricsAPI.as_view(), name='performance-metrics'),
     path('defensive-performance-metrics', DefensivePerformanceMetricsAPI.as_view(), name='defensive-performance-metrics'),
@@ -32,6 +36,10 @@ urlpatterns = [
     path('insight/<str:card>', InsightAPI.as_view(), name='insight'),
     # video card
     path('video-analysis', VideoAnalysisCardAPI.as_view(), name='video-analysis'),
+    # game stats
+    path('game-stats', GameStatsAPI.as_view(), name='game-stats'),
+    # season overiview metrics
+    path('season-overview-metrics', SeasonOverviewMetricsAPI.as_view(), name='season-overview-metrics'),
 
     # obtain admin(staff) for chatbot to push data to API
     path('admin/login', AdminTokenObtainView.as_view(), name='admin_token_obtain'),

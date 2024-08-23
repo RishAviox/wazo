@@ -11,6 +11,7 @@ from ..models import (
                     # ActivitiesQuestionnaire, 
                     SchedulePlanningQuestionnaire, SchedulePlanningResponse, 
                     RecurringEvents, OneTimeEvents, MatchEventsDataFile,
+                    GameStats, SeasonOverviewMetrics,
                 )   
 
 from .customize import admin_site
@@ -100,6 +101,11 @@ class DefensivePerformanceMetricsAdmin(admin.ModelAdmin):
 class OffensivePerformanceMetricsAdmin(admin.ModelAdmin):
     list_display = ['user', 'metrics', 'created_on', 'updated_on']
 
+class GameStatsAdmin(admin.ModelAdmin):
+    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+
+class SeasonOverviewMetricsAdmin(admin.ModelAdmin):
+    list_display = ['user', 'metrics', 'created_on', 'updated_on']
 
 admin_site.register(WajoUser, WajoUserAdmin)
 admin_site.register(APILog, APILogAdmin)
@@ -122,3 +128,5 @@ admin_site.register(PlayerIDMapping, PlayerIDMappingAdmin)
 admin_site.register(PerformanceMetrics, PerformanceMetricsAdmin)
 admin_site.register(DefensivePerformanceMetrics, DefensivePerformanceMetricsAdmin)
 admin_site.register(OffensivePerformanceMetrics, OffensivePerformanceMetricsAdmin)
+admin_site.register(GameStats, GameStatsAdmin)
+admin_site.register(SeasonOverviewMetrics, SeasonOverviewMetricsAdmin)

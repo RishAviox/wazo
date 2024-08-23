@@ -23,7 +23,26 @@ openai_client = AzureOpenAI(
                 api_key=settings.WAJO_AZURE_OPENAI_KEY
             )
 
-# getStatusCardMetric
+# getStatusCardMetric, dummy data for the previous app builds
+class ____StatusCardMetricAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': {}
+                    })
+
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = {}
+            return Response(metrics, status=status.HTTP_200_OK)
+
+# latest, /api/v1/
 class StatusCardMetricAPI(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -36,7 +55,6 @@ class StatusCardMetricAPI(APIView):
                         'metrics': get_status_card_metrics(player)
                     })
 
-            print("player_data for coach: ", player_data)
             return Response(player_data, status=status.HTTP_200_OK)
         
         else:
@@ -357,3 +375,40 @@ class VideoAnalysisCardAPI(APIView):
         return Response({'event_time': event_times}, status.HTTP_200_OK)
 
 
+# Game Stats
+class GameStatsAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_game_stats(player)
+                    })
+
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_game_stats(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)
+        
+# Season Overview Metrics
+class SeasonOverviewMetricsAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_season_overview_metrics(player)
+                    })
+
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_season_overview_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)

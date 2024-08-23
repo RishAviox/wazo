@@ -6,7 +6,7 @@ from .models import WajoUser, OnboardingStep
 from .models import (
                     DailyWellnessUserResponse,RPEUserResponse, MatchEventsDataFile,
                     PlayerIDMapping, PerformanceMetrics, DefensivePerformanceMetrics,
-                    OffensivePerformanceMetrics,
+                    OffensivePerformanceMetrics, GameStats, SeasonOverviewMetrics,
                 )
 from .utils import *
 
@@ -80,11 +80,26 @@ def process_file(sender, instance, created, **kwargs):
                 print(int(player_id))
                 user_id = player_mapping_dict[player_id]
 
+                game_stats = calculate_game_stats(row)
                 performance_metrics = calculate_performance_metrics(row)
                 defensive_performance_metrics = calculate_defensive_performance_metrics(row)
                 offensive_performance_metrics = calculate_offensive_performance_metrics(row)
-                
-                print("defensive_performance_metrics: ", defensive_performance_metrics)
+                season_overview = calculate_season_overview_metrics(row)
+
+                print(f"season_overview for user {user_id}: ", season_overview)
+
+                # Create or update the game stats for the user
+                GameStats.objects.update_or_create(
+                    user_id=user_id,
+                    defaults={'metrics': game_stats}
+                    # metrics= game_stats
+                )
+
+                # Create or update the Season Overiview Metrics for the user
+                SeasonOverviewMetrics.objects.update_or_create(
+                    user_id=user_id,
+                    defaults={'metrics': season_overview}
+                )
                 
                 # Create or update the performance metrics for the user
                 PerformanceMetrics.objects.update_or_create(
@@ -94,9 +109,9 @@ def process_file(sender, instance, created, **kwargs):
 
                 # Create or update the Defensive performance metrics for the user
                 DefensivePerformanceMetrics.objects.update_or_create(
-                user_id=user_id,
-                defaults={'metrics': defensive_performance_metrics}
-            )
+                    user_id=user_id,
+                    defaults={'metrics': defensive_performance_metrics}
+                )
 
                 # Create or update the Offensive performance metrics for the user
                 OffensivePerformanceMetrics.objects.update_or_create(
