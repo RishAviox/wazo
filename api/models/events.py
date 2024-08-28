@@ -72,8 +72,13 @@ def match_events_data_file_path(instnace, filename):
     # MEDIA_ROOT / uploads/match_events_data_file/<filename>
     return 'uploads/match_events_data_file/{0}'.format(filename)
 
+DATA_FILE_TYPES = [
+    ('BEPRO', 'BEPRO'),
+    ('GPS', 'GPS'),
+]
 class MatchEventsDataFile(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
+    _type = models.CharField(choices=DATA_FILE_TYPES, max_length=10, default='BEPRO')
     file = models.FileField(upload_to=match_events_data_file_path, validators=[validate_file_extension])
     notes = models.TextField(null=True, blank=True)
 
