@@ -81,7 +81,7 @@ class OneTimeEventsAdmin(admin.ModelAdmin):
 
 
 class MatchEventsDataFileAdmin(admin.ModelAdmin):
-    list_display = ['name', 'get_filename', 'notes', 'created_on', 'updated_on']
+    list_display = ['name', 'get_filename', '_type', 'notes', 'created_on', 'updated_on']
 
     def get_filename(self, obj):
         return os.path.basename(obj.file.name)
@@ -89,7 +89,7 @@ class MatchEventsDataFileAdmin(admin.ModelAdmin):
 
 
 class PlayerIDMappingAdmin(admin.ModelAdmin):
-    list_display = ['user', 'player_id', 'created_on', 'updated_on']
+    list_display = ['user', 'player_id', 'player_position', 'created_on', 'updated_on']
 
 
 class PerformanceMetricsAdmin(admin.ModelAdmin):

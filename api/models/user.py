@@ -78,9 +78,27 @@ class WajoUserDevice(models.Model):
 
 
 # Map player id with the user
+POSITION_CHOICES = [
+        ('GK', 'Goalkeeper'),
+        ('CB', 'Center Back'),
+        ('LB', 'Left Back'),
+        ('RB', 'Right Back'),
+        ('LWB', 'Left Wing Back'),
+        ('RWB', 'Right Wing Back'),
+        ('CDM', 'Central Defensive Midfielder'),
+        ('CM', 'Central Midfielder'),
+        ('CAM', 'Central Attacking Midfielder'),
+        ('LM', 'Left Midfielder'),
+        ('RM', 'Right Midfielder'),
+        ('LW', 'Left Winger'),
+        ('RW', 'Right Winger'),
+        ('ST', 'Striker'),
+        ('CF', 'Center Forward'),
+    ]
 class PlayerIDMapping(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="player_ids")
-    player_id = models.CharField(max_length=255)
+    player_id = models.CharField(max_length=10, unique=True)
+    player_position = models.CharField(max_length=10, choices=POSITION_CHOICES, default='ST')
     
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
@@ -91,3 +109,6 @@ class PlayerIDMapping(models.Model):
     class Meta:
         verbose_name = "Player ID Mappings"
         verbose_name_plural = "Player ID Mappings"
+        constraints = [
+            models.UniqueConstraint(fields=['user'],  name='unique_user_player_id_mapping')
+        ]
