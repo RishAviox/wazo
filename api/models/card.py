@@ -111,3 +111,19 @@ class SeasonOverviewMetrics(models.Model):
 
     def __str__(self):
         return f"Season Overview Metrics for {self.user.phone_no}"
+    
+
+class WajoPerformanceIndex(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="wajo_performance_index")
+    metrics = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Wajo Performance Index"
+        verbose_name_plural = "Wajo Performance Index"
+
+    def __str__(self):
+        return f"Wajo Performance Index for {self.user.phone_no}"
+    

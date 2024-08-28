@@ -12,7 +12,7 @@ from api.models import (
                         StatusCardMetrics, GameStats, SeasonOverviewMetrics,
                     )
 from api.serializer import StatusCardMetricsSerializer, WajoUserSerializer
-from .metrics_calculations import *
+from .status_metrics_calculations import *
 
 
 # for status card

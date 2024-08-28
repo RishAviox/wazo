@@ -1,6 +1,7 @@
 from django.utils import timezone
 from api.models import DailyWellnessUserResponse, RPEUserResponse, DailyWellnessQuestionnaire, RPEQuestionnaire
 
+from .calculation_weights import STATUS_METRIC_WEIGHTS
 
 SESSION_DURATION = 60
 """
@@ -20,53 +21,6 @@ question_mapping = {
     'WQ-8': 'Pain Location',
 }
 
-WEIGHTS = {
-    "Athlete Status": {
-        "Overall Wellness": 0.3,
-        "Readiness": 0.3,
-        "Subjective Performance Index (SPI)": 0.25,
-        "Recovery": 0.15
-    },
-    "Overall Wellness": {
-        "Mood": 0.15,
-        "Sleep Quality": 0.2,
-        "Energy Level": 0.15,
-        "Muscle Soreness": 0.1,
-        "Diet": 0.1,
-        "Stress Level": 0.15,
-        "Pain Level": 0.1,
-        "Hydration Status": 0.05
-    },
-    "RPE": {
-        "RPE": 1.0
-    },
-    "Readiness": {
-        "Muscle Soreness": 0.15,
-        "Stress Level": 0.15,
-        "Pain Level": 0.1,
-        "Fatigue": 0.15,
-        "Recovery": 0.15,
-        "Mood": 0.1,
-        "Sleep Quality": 0.1,
-        "Performance": 0.5,
-        "Satisfaction": 0.3,
-        "Intensity": 0.2
-    },
-    "Recovery": {
-        "Sleep Quality": 0.3,
-        "Muscle Soreness": 0.25,
-        "Fatigue": 0.25,
-        "Recovery": 0.2
-    },
-    "Subjective Performance Index": {
-        "Performance": 0.5,
-        "Satisfaction": 0.3,
-        "Intensity": 0.2
-    },
-    "sRPE": {
-        "SRPE": 1.0
-    }
-}
 
 # some scores have reversed scale(5 is bad, 1 is good), 
 # like Stress, Soreness, Fatigue, General Pain Level
@@ -138,7 +92,7 @@ def normalize_rpe_response(response):
 
 # ****************** StatusCard Metrics **************************
 
-def calculate_wellness_score(normalized_wellness_response, age_adjustment_factor=1.0, weights=WEIGHTS):
+def calculate_wellness_score(normalized_wellness_response, age_adjustment_factor=1.0, weights=STATUS_METRIC_WEIGHTS):
     category = "Overall Wellness"
     numerator = (
         (normalized_wellness_response['Mood'] * weights[category]['Mood'] if normalized_wellness_response['Mood'] is not None else 0) +
@@ -183,7 +137,7 @@ def calculate_normalized_srpe_score(rpe_score, age_adjustment_factor=1.0):
     return 0
 
 
-def calculate_readiness_score(normalized_rpe_response, age_adjustment_factor=1.0, weights=WEIGHTS):
+def calculate_readiness_score(normalized_rpe_response, age_adjustment_factor=1.0, weights=STATUS_METRIC_WEIGHTS):
     category = "Readiness"
     
     # Calculate RPE and sRPE scores
@@ -215,7 +169,7 @@ def calculate_readiness_score(normalized_rpe_response, age_adjustment_factor=1.0
     return (numerator / denominator) * age_adjustment_factor if denominator else None
 
 
-def calculate_recovery_score(normalized_rpe_response, normalized_wellness_response, age_adjustment_factor=1.0, weights=WEIGHTS):
+def calculate_recovery_score(normalized_rpe_response, normalized_wellness_response, age_adjustment_factor=1.0, weights=STATUS_METRIC_WEIGHTS):
     category = "Recovery"
     numerator = (
         (normalized_wellness_response['Sleep Quality'] * weights[category]['Sleep Quality'] if normalized_wellness_response['Sleep Quality'] is not None else 0) +
@@ -232,7 +186,7 @@ def calculate_recovery_score(normalized_rpe_response, normalized_wellness_respon
     return (numerator / denominator) * age_adjustment_factor if denominator else None
 
 
-def calculate_fitness_score(normalized_rpe_response, normalized_wellness_response, distance_covered, high_intensity_runs, play_time=SESSION_DURATION, age_adjustment_factor=1.0, weights=WEIGHTS):
+def calculate_fitness_score(normalized_rpe_response, normalized_wellness_response, distance_covered, high_intensity_runs, play_time=SESSION_DURATION, age_adjustment_factor=1.0, weights=STATUS_METRIC_WEIGHTS):
     category = "Recovery"
     recovery_score = calculate_recovery_score(normalized_rpe_response, normalized_wellness_response, age_adjustment_factor)
     gps_data = ((distance_covered + high_intensity_runs) / play_time) * 90
@@ -249,7 +203,7 @@ def calculate_fitness_score(normalized_rpe_response, normalized_wellness_respons
     return (numerator / denominator) * age_adjustment_factor
 
 
-def calculate_morale_score(normalized_wellness_response, age_adjustment_factor=1.0, weights=WEIGHTS):
+def calculate_morale_score(normalized_wellness_response, age_adjustment_factor=1.0, weights=STATUS_METRIC_WEIGHTS):
     category = "Overall Wellness"
     numerator = (
         normalized_wellness_response['Mood'] * weights[category]['Mood'] +
@@ -258,7 +212,7 @@ def calculate_morale_score(normalized_wellness_response, age_adjustment_factor=1
     denominator = weights[category]['Mood'] + weights[category]['Stress Level']
     return (numerator / denominator) * age_adjustment_factor
 
-def calculate_spi_score(normalized_rpe_response, age_adjustment_factor=1.0, weights=WEIGHTS):
+def calculate_spi_score(normalized_rpe_response, age_adjustment_factor=1.0, weights=STATUS_METRIC_WEIGHTS):
     category = "Subjective Performance Index"
     # Performance for Athlete is 0
     numerator = (
@@ -271,7 +225,7 @@ def calculate_spi_score(normalized_rpe_response, age_adjustment_factor=1.0, weig
     return (numerator / denominator) * age_adjustment_factor if denominator else None
 
 
-def calculate_overall_status(overall_wellness_score, readiness_score, spi_score, recovery_score, weights=WEIGHTS):
+def calculate_overall_status(overall_wellness_score, readiness_score, spi_score, recovery_score, weights=STATUS_METRIC_WEIGHTS):
     category = "Athlete Status"
     numerator = (
         overall_wellness_score * weights[category]['Overall Wellness'] +
