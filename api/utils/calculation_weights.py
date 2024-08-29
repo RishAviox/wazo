@@ -101,7 +101,7 @@ WPI_WEIGHTS = {
             'Game Intelligence': 1.3,
             'Composure': 1.3,
         },
-        'RB/LB' : {
+        'RB' : {
             'Pace': 1.3,
             'Shooting': 0.7,
             'Passing': 1.2,
@@ -111,7 +111,17 @@ WPI_WEIGHTS = {
             'Game Intelligence': 1.2,
             'Composure': 1.1,
         },
-        'RW/LW' : {
+        'LB' : {
+            'Pace': 1.3,
+            'Shooting': 0.7,
+            'Passing': 1.2,
+            'Dribbling': 1.1,
+            'Defending': 1.3,
+            'Physicality': 1.2,
+            'Game Intelligence': 1.2,
+            'Composure': 1.1,
+        },
+        'RW' : {
             'Pace': 1.4,
             'Shooting': 1.3,
             'Passing': 1.2,
@@ -121,7 +131,27 @@ WPI_WEIGHTS = {
             'Game Intelligence': 1.3,
             'Composure': 1.2,
         },
-        'ST/CF' : {
+        'LW' : {
+            'Pace': 1.4,
+            'Shooting': 1.3,
+            'Passing': 1.2,
+            'Dribbling': 1.4,
+            'Defending': 0.9,
+            'Physicality': 1.1,
+            'Game Intelligence': 1.3,
+            'Composure': 1.2,
+        },
+        'ST' : {
+            'Pace': 1.3,
+            'Shooting': 1.5,
+            'Passing': 1,
+            'Dribbling': 1.2,
+            'Defending': 0.8,
+            'Physicality': 1.3,
+            'Game Intelligence': 1.4,
+            'Composure': 1.3,
+        },
+        'CF' : {
             'Pace': 1.3,
             'Shooting': 1.5,
             'Passing': 1,
@@ -187,10 +217,14 @@ WPI_WEIGHTS = {
         },
         'Physicality': {
             'Aerial Duel Succeeded': 0.35,
+            'Aerial Duel Failed': 1,
             'Ground Duel Succeeded': 0.3,
+            'Ground Duel Failed': 1,
             'Recovery': 0.2,
             'High Intensity Acceleration': 0.08,
+            'Max Intensity Acceleration': 1,
             'High Intensity Deceleration': 0.07,
+            'Max Intensity Deceleration': 1,
         },
         'Game Intelligence': {
             'Key Pass': 0.25,
@@ -198,59 +232,78 @@ WPI_WEIGHTS = {
             'Offside': -0.08,
             'Own Goal': -0.25,
             'Intervention': 0.15,
+            'Intercept': 1,
             'Assist': 0.15,
+            'Pass Accuracy Ratio': 1,
+        },
+        'Composure': {
+            'Yellow Card': -0.3,
+            'Red Card': -0.4,
+            'Foul': -0.15,
+            'Mistake': -0.2,
+            'Control Under Pressure': 0.25,
+            'Intervention': 0.15,
+            'Recovery': 0.1,
+            'Block': 1,
+            'Offside': 1,
+            'Own Goal': 1,
+            'Aerial Duel Succeeded': 1,
+            'Aerial Duel Failed': 1,
+            'Ground Duel Succeeded': 1,
+            'Ground Duel Failed': 1,
+            'Pass Accuracy Ratio': 1,
+        },
+        'Goal Keeping': {
+            'Saves': 0.35,
+            'Save Percentage': 0.25,
+            'Clean Sheets': 0.2,
+            'Goal Conceded': -0.3,
+            'Save By Punching': 0.05,
+            'Save By Catching': 0.05,
+            'Aerial Clearance Succeeded': 0.05,
+            'Aerial Duel Succeeded': 0.05,
+            'Goal Kick Succeeded': 0.05,
+            'Control Under Pressure': 1,
+            'Intervention': 1,
         }
     },
-    'Position Modifiers': {
-        'ST': {
-            'SHO': 1.2,
-            'PHY': 1.05
+    'Position Boosters': {
+        'Pace': {
+            'LB': 1.05,
+            'RB': 1.05
         },
-        'LW': {
-            'SHO': 1.15,
-            'DRI': 1.1
+        'Shooting': {
+            'ST': 1.2,
+            'LW': 1.15,
+            'RW': 1.15
         },
-        'RW': {
-            'SHO': 1.15,
-            'DRI': 1.1
+        'Passing': {
+            'CAM': 1.1,
+            'CM': 1.1,
+            'RM': 1.1,
+            'LM': 1.1,
         },
-        'CAM': {
-            'PAS': 1.1,
-            'DRI': 1.1
+        'Dribbling': {
+            'LW': 1.1,
+            'RW': 1.1,
+            'CAM': 1.1,
+            'CF': 1.1,
+            'RM': 1.05,
+            'LM': 1.05,
         },
-        'CDM': {
-            'DEF': 1.1,
+        'Defending': {
+            'CDM': 1.1,
+            'CB': 1.2,
+            'LB': 1.15,
+            'RB': 1.15,
         },
-        'CB': {
-            'DEF': 1.2,
-            'PHY': 1.1
+        'Physicality': {
+            'ST': 1.05,
+            'CB': 1.1
         },
-        'LB': {
-            'DEF': 1.15,
-            'PAC': 1.05
-        },
-        'RB': {
-            'DEF': 1.15,
-            'PAC': 1.05
-        },
-        'CF': {
-            'SHO': 1.2,
-            'DRI': 1.1
-        },
-        'CM': {
-            'PAS': 1.1,
-        },
-        'RM': {
-            'PAS': 1.1,
-            'DRI': 1.05
-        },
-        'LM': {
-            'PAS': 1.1,
-            'DRI': 1.05
-        },
-        'GK': {
-            'GK': 1.3,
-        },
+        'Goal Keeping': {
+            'GK': 1.3
+        }
     },
     'Injury History': {
         'No Injuries': 1,
@@ -299,7 +352,7 @@ WPI_WEIGHTS = {
             'Peak Age': 30,
             'Decline Rate': 0.02
         },
-        'Goalkeeping': {
+        'Goal Keeping': {
             'Peak Age': 30,
             'Decline Rate': 0.02
         },
