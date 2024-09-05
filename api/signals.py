@@ -7,8 +7,15 @@ from .models import (
                     DailyWellnessUserResponse,RPEUserResponse, MatchEventsDataFile,
                     PlayerIDMapping, PerformanceMetrics, DefensivePerformanceMetrics,
                     OffensivePerformanceMetrics, GameStats, SeasonOverviewMetrics,
+                    WajoPerformanceIndex,
                 )
 from .utils import *
+
+from datetime import date
+
+def calculate_age(dob):
+    today = date.today()
+    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
 # auto create entrypoint
@@ -63,61 +70,213 @@ def process_rpe_responses(sender, instance, created, **kwargs):
 def process_file(sender, instance, created, **kwargs):
     print("Match Events Data File Signal is called.")
 
-    try:
-        # Read sheet_name='PlayerStats_137183'
-        stats_sheet = pd.read_excel(instance.file, sheet_name='PlayerStats_137183')
+    if instance._type == 'BEPRO':
+        stats_instance = instance
+        gps_instance = MatchEventsDataFile.objects.filter(_type='GPS').order_by('-updated_on').first()
+    elif instance._type == 'GPS':
+        stats_instance = MatchEventsDataFile.objects.filter(_type='BEPRO').order_by('-updated_on').first()
+        gps_instance = instance
 
-        player_mappings = PlayerIDMapping.objects.select_related('user').all().values('player_id', 'user__phone_no')
-        player_mapping_dict = {mapping['player_id']: mapping['user__phone_no'] for mapping in player_mappings}
+    if stats_instance and gps_instance:
+        stats_sheet = pd.read_excel(stats_instance.file, sheet_name='PlayerStats_137183')
+        gps_sheet = pd.read_excel(gps_instance.file, sheet_name='Oliver GPS Metrcis')
+        
+        player_mappings = PlayerIDMapping.objects.select_related('user').all().values(
+                    'player_id', 
+                    'player_position', 
+                    'user__phone_no', 
+                    'user__dob'
+                )
+        
+        player_mapping_dict = {
+            str(mapping['player_id']): {
+                'phone_no': mapping['user__phone_no'],
+                'position': mapping['player_position'],
+                'dob': mapping['user__dob']
+            }
+            for mapping in player_mappings
+        }
         
         print("player_mapping_dict: ", player_mapping_dict)
+        
+        player_ids = set(player_mapping_dict.keys())
+        # print("player_ids: ", player_ids, player_mapping_dict.keys())
 
-        # Process each row in the DataFrame
-        for _, row in stats_sheet.iterrows():
-            player_id = row['player_id']
-            player_id = str(int(player_id))
-            if player_id in player_mapping_dict:
-                print(int(player_id))
-                user_id = player_mapping_dict[player_id]
+        # Convert player_id columns to strings for consistent comparison
+        stats_sheet['player_id'] = stats_sheet['player_id'].astype(int).astype(str)
+        gps_sheet['Player ID'] = gps_sheet['Player ID'].astype(int).astype(str)
 
-                game_stats = calculate_game_stats(row)
-                performance_metrics = calculate_performance_metrics(row)
-                defensive_performance_metrics = calculate_defensive_performance_metrics(row)
-                offensive_performance_metrics = calculate_offensive_performance_metrics(row)
-                season_overview = calculate_season_overview_metrics(row)
 
-                print(f"season_overview for user {user_id}: ", season_overview)
+        # Filter stats_sheet and gps_sheet once based on player_ids
+        filtered_stats_sheet = stats_sheet[stats_sheet['player_id'].isin(player_ids)]
+        filtered_gps_sheet = gps_sheet[gps_sheet['Player ID'].isin(player_ids)]
+            
+        # print("filtered_stats_sheet: ", filtered_stats_sheet)
+        # print("filtered_gps_sheet: ", filtered_gps_sheet)
 
-                # Create or update the game stats for the user
-                GameStats.objects.update_or_create(
-                    user_id=user_id,
-                    defaults={'metrics': game_stats}
-                    # metrics= game_stats
+        for player_id, player_info in player_mapping_dict.items():
+            user_phone = player_info['phone_no']
+            player_position = player_info['position']
+            player_dob = player_info['dob']
+
+            stats_row = filtered_stats_sheet[filtered_stats_sheet['player_id'] == player_id]
+            gps_row = filtered_gps_sheet[filtered_gps_sheet['Player ID'] == player_id]
+            
+            if stats_row.empty or gps_row.empty:
+                print("Either stats data or gps data is not available.")
+            else:
+                # Calculate age based on DOB
+                player_age = calculate_age(player_dob)
+                
+                # Extract data from rows
+                stats_data = stats_row.iloc[0].to_dict()
+                gps_data = gps_row.iloc[0].to_dict()
+
+                # Calculate game statistics and performance metrics
+                game_stats = calculate_game_stats(stats_data)
+                performance_metrics = calculate_performance_metrics(stats_data)
+                defensive_performance_metrics = calculate_defensive_performance_metrics(stats_data)
+                offensive_performance_metrics = calculate_offensive_performance_metrics(stats_data)
+                season_overview = calculate_season_overview_metrics(stats_data)
+
+                # Calculate pace and shooting scores
+                pace_score = calculate_pace_score(
+                    gps_row=gps_data,
+                    player_position=player_position,
+                    player_age=player_age
+                )
+                shooting_score = calculate_shooting_score(
+                    gps_row=gps_data,
+                    stats_row=stats_data,
+                    player_position=player_position,
+                    player_age=player_age
                 )
 
-                # Create or update the Season Overiview Metrics for the user
+                passing_score = calculate_passing_score(
+                    gps_row=gps_data,
+                    stats_row=stats_data,
+                    player_position=player_position,
+                    player_age=player_age
+                )
+
+                dribbling_score = calculate_dribbling_score(
+                    gps_row=gps_data,
+                    stats_row=stats_data,
+                    player_position=player_position,
+                    player_age=player_age
+                )
+
+                defending_score = calculate_defending_score(
+                    gps_row=gps_data,
+                    stats_row=stats_data,
+                    player_position=player_position,
+                    player_age=player_age
+                )
+
+                physicality_score = calculate_physicality_score(
+                    gps_row=gps_data,
+                    stats_row=stats_data,
+                    player_position=player_position,
+                    player_age=player_age
+                )
+
+                game_intelligence_score = calculate_game_intelligence_score(
+                    gps_row=gps_data,
+                    stats_row=stats_data,
+                    player_position=player_position,
+                    player_age=player_age
+                )
+
+                composure_score = calculate_composure_score(
+                    gps_row=gps_data,
+                    stats_row=stats_data,
+                    player_position=player_position,
+                    player_age=player_age
+                )
+
+                goal_keeping_score = calculate_goal_keeping_score(
+                    gps_row=gps_data,
+                    stats_row=stats_data,
+                    player_position=player_position,
+                    player_age=player_age
+                )
+
+                overall_score = calculate_overall_score(
+                    pace_score,
+                    shooting_score,
+                    passing_score,
+                    dribbling_score,
+                    defending_score,
+                    physicality_score,
+                    game_intelligence_score,
+                    composure_score,
+                    goal_keeping_score,
+                    player_position=player_position
+                )
+                # print(f"game_stats for user {user_phone}: ", game_stats)
+                # print(f"performance_metrics for user {user_phone}: ", performance_metrics)
+                # print(f"defensive_performance_metrics for user {user_phone}: ", defensive_performance_metrics)
+                # print(f"offensive_performance_metrics for user {user_phone}: ", offensive_performance_metrics)
+                # print(f"season_overview for user {user_phone}: ", season_overview)
+                print("*"*100)
+                print(f"pace_score for user {user_phone}: ", pace_score)
+                print(f"shooting_score for user {user_phone}: ", shooting_score)
+                print(f"passing_score for user {user_phone}: ", passing_score)
+                print(f"passing_score for user {user_phone}: ", passing_score)
+                print(f"dribbling_score for user {user_phone}: ", dribbling_score)
+                print(f"defending_score for user {user_phone}: ", defending_score)
+                print(f"physicality_score for user {user_phone}: ", physicality_score)
+                print(f"game_intelligence_score for user {user_phone}: ", game_intelligence_score)
+                print(f"composure_score for user {user_phone}: ", composure_score)
+                print(f"goal_keeping_score for user {user_phone}: ", goal_keeping_score)
+                print(f"overall_score for user {user_phone}: ", overall_score)
+
+                # Create or update the wajo performance index for the user
+                WajoPerformanceIndex.objects.update_or_create(
+                    user_id=user_phone,
+                    defaults={'metrics': {
+                        "pace_score": pace_score,
+                        "shooting_score": shooting_score,
+                        "passing_score": passing_score,
+                        "dribbling_score": dribbling_score,
+                        "defending_score": defending_score,
+                        "physicality_score": physicality_score,
+                        "game_intelligence_score": game_intelligence_score,
+                        "composure_score": composure_score,
+                        "goal_keeping_score": goal_keeping_score,
+                        "overall_score": overall_score
+                    }}
+                )
+        
+                # Create or update the game stats for the user
+                GameStats.objects.update_or_create(
+                    user_id=user_phone,
+                    defaults={'metrics': game_stats}
+                )
+
+                # # Create or update the Season Overiview Metrics for the user
                 SeasonOverviewMetrics.objects.update_or_create(
-                    user_id=user_id,
+                    user_id=user_phone,
                     defaults={'metrics': season_overview}
                 )
                 
-                # Create or update the performance metrics for the user
+                # # Create or update the performance metrics for the user
                 PerformanceMetrics.objects.update_or_create(
-                    user_id=user_id,
+                    user_id=user_phone,
                     defaults={'metrics': performance_metrics}
                 )
 
-                # Create or update the Defensive performance metrics for the user
+                # # Create or update the Defensive performance metrics for the user
                 DefensivePerformanceMetrics.objects.update_or_create(
-                    user_id=user_id,
+                    user_id=user_phone,
                     defaults={'metrics': defensive_performance_metrics}
                 )
 
-                # Create or update the Offensive performance metrics for the user
+                # # Create or update the Offensive performance metrics for the user
                 OffensivePerformanceMetrics.objects.update_or_create(
-                    user_id=user_id,
+                    user_id=user_phone,
                     defaults={'metrics': offensive_performance_metrics}
                 )
-    except:
-        print("Worksheet named 'PlayerStats_137183' not found")
+    else:
+        print("Either Stats or GPS file is not available.")
 

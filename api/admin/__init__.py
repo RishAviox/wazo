@@ -11,7 +11,7 @@ from ..models import (
                     # ActivitiesQuestionnaire, 
                     SchedulePlanningQuestionnaire, SchedulePlanningResponse, 
                     RecurringEvents, OneTimeEvents, MatchEventsDataFile,
-                    GameStats, SeasonOverviewMetrics,
+                    GameStats, SeasonOverviewMetrics, WajoPerformanceIndex,
                 )   
 
 from .customize import admin_site
@@ -59,6 +59,8 @@ class CardSuggestedActionAdmin(admin.ModelAdmin):
 class StatusCardMetricsAdmin(admin.ModelAdmin):
     list_display = ['user', 'metrics', 'created_on', 'updated_on']
 
+class WajoPerformanceIndexAdmin(admin.ModelAdmin):
+    list_display = ['user', 'metrics', 'created_on', 'updated_on']
 
 # class ActivitiesQuestionnaireAdmin(admin.ModelAdmin):
 #     list_display = ['activity_id', 'language', 'user_role', 'category', 'icon', 'created_on', 'updated_on']
@@ -130,3 +132,4 @@ admin_site.register(DefensivePerformanceMetrics, DefensivePerformanceMetricsAdmi
 admin_site.register(OffensivePerformanceMetrics, OffensivePerformanceMetricsAdmin)
 admin_site.register(GameStats, GameStatsAdmin)
 admin_site.register(SeasonOverviewMetrics, SeasonOverviewMetricsAdmin)
+admin_site.register(WajoPerformanceIndex, WajoPerformanceIndexAdmin)

@@ -301,6 +301,10 @@ WPI_WEIGHTS = {
             'ST': 1.05,
             'CB': 1.1
         },
+        'Game Intelligence': {
+            'ST': 1,
+            'CB': 1
+        },
         'Goal Keeping': {
             'GK': 1.3
         }
@@ -340,7 +344,7 @@ WPI_WEIGHTS = {
             'Peak Age': 29,
             'Decline Rate': 0.03
         },
-        'Phisicality': {
+        'Physicality': {
             'Peak Age': 28,
             'Decline Rate': 0.03
         },

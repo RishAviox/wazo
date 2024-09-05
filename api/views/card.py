@@ -421,3 +421,24 @@ class SeasonOverviewMetricsAPI(APIView):
         else:
             metrics = get_season_overview_metrics(request.user)
             return Response(metrics, status=status.HTTP_200_OK)
+        
+
+class WajoPerformanceIndexAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_wajo_performance_index_metrics(player)
+                    })
+
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_wajo_performance_index_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)
+
+

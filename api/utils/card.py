@@ -9,7 +9,7 @@ from django.utils.timezone import datetime
 from api.models import (
                         OneTimeEvents, RecurringEvents, PerformanceMetrics, 
                         DefensivePerformanceMetrics, OffensivePerformanceMetrics,
-                        StatusCardMetrics, GameStats, SeasonOverviewMetrics,
+                        StatusCardMetrics, GameStats, SeasonOverviewMetrics, WajoPerformanceIndex,
                     )
 from api.serializer import StatusCardMetricsSerializer, WajoUserSerializer
 from .status_metrics_calculations import *
@@ -37,6 +37,16 @@ def get_season_overview_metrics(user):
     try:
         metrics = SeasonOverviewMetrics.objects.filter(user=user).latest('updated_on')
         return metrics.metrics
+    except:
+        return {}
+    
+
+# for status card
+def get_wajo_performance_index_metrics(user):
+    try:
+        metrics = WajoPerformanceIndex.objects.filter(user=user).latest('updated_on')
+        return metrics.metrics
+    
     except:
         return {}
     

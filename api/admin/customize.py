@@ -17,6 +17,7 @@ class CustomAdminSite(AdminSite):
                     'Wajo User Devices',
                     'Onboarding Flow',
                     'Status Card Metrics',
+                    'Wajo Performance Index',
                     'Game Stats',
                     'Season Overview Metrics',
                     'Performance Metrics',

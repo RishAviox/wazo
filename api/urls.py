@@ -11,6 +11,7 @@ from .views.card import (
                     CardSuggestedActionsAPI, ____CardSuggestedActionsAPI, ____StatusCardMetricAPI, StatusCardMetricAPI, DailySnapshortCardAPI, 
                     PerformanceMetricsAPI, DefensivePerformanceMetricsAPI, OffensivePerformanceMetricsAPI,
                     GreetingAPI, InsightAPI, VideoAnalysisCardAPI, GameStatsAPI, SeasonOverviewMetricsAPI,
+                    WajoPerformanceIndexAPI,
                 )
 
 urlpatterns = [
@@ -43,6 +44,8 @@ urlpatterns = [
     path('game-stats', GameStatsAPI.as_view(), name='game-stats'),
     # season overiview metrics
     path('season-overview-metrics', SeasonOverviewMetricsAPI.as_view(), name='season-overview-metrics'),
+    # wajo performance index metrics
+    path('wajo-performance-index', WajoPerformanceIndexAPI.as_view(), name='wajo-performance-index-metrics'),
 
     # obtain admin(staff) for chatbot to push data to API
     path('admin/login', AdminTokenObtainView.as_view(), name='admin_token_obtain'),

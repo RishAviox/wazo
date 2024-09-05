@@ -30,7 +30,6 @@ def calculate_pace_score(gps_row, player_position, player_age, wpi_weights=WPI_W
         high_intensity_acceleration * wpi_weights['Metric Specific'][Category]['High Intensity Acceleration'] +
         max_intensity_acceleration * wpi_weights['Metric Specific'][Category]['Max Intensity Acceleration']
     )
-    
     # Calculate pace score per minute
     pace_score = (weighted_sum / play_time) * MAX_GAME_TIME
     
@@ -345,7 +344,7 @@ def calculate_game_intelligence_score(gps_row, stats_row, player_position, playe
     return final_score
 
 
-def calculate_composure_score(gps_row, stats_row, player_age, wpi_weights=WPI_WEIGHTS):
+def calculate_composure_score(gps_row, stats_row, player_position, player_age, wpi_weights=WPI_WEIGHTS):
     """
         Reg: GPS and Player Stats Data
     """
