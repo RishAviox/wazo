@@ -12,6 +12,7 @@ from ..models import (
                     SchedulePlanningQuestionnaire, SchedulePlanningResponse, 
                     RecurringEvents, OneTimeEvents, MatchEventsDataFile,
                     GameStats, SeasonOverviewMetrics, WajoPerformanceIndex,
+                    Notification,
                 )   
 
 from .customize import admin_site
@@ -93,6 +94,8 @@ class MatchEventsDataFileAdmin(admin.ModelAdmin):
 class PlayerIDMappingAdmin(admin.ModelAdmin):
     list_display = ['user', 'player_id', 'player_position', 'created_on', 'updated_on']
 
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ['user', 'device', 'title', 'body', 'postback', 'created_on']
 
 class PerformanceMetricsAdmin(admin.ModelAdmin):
     list_display = ['user', 'metrics', 'created_on', 'updated_on']
@@ -127,6 +130,7 @@ admin_site.register(RecurringEvents, RecurringEventsAdmin)
 admin_site.register(OneTimeEvents, OneTimeEventsAdmin)
 admin_site.register(MatchEventsDataFile, MatchEventsDataFileAdmin)
 admin_site.register(PlayerIDMapping, PlayerIDMappingAdmin)
+admin_site.register(Notification, NotificationAdmin)
 admin_site.register(PerformanceMetrics, PerformanceMetricsAdmin)
 admin_site.register(DefensivePerformanceMetrics, DefensivePerformanceMetricsAdmin)
 admin_site.register(OffensivePerformanceMetrics, OffensivePerformanceMetricsAdmin)

@@ -69,7 +69,7 @@ class WajoUserDevice(models.Model):
     updated_on = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
-        return self.user.phone_no
+        return str(self.user.phone_no) + "--->" + self.fcm_token
     
     class Meta:
         unique_together = ('user', 'fcm_token')
@@ -112,3 +112,21 @@ class PlayerIDMapping(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['user'],  name='unique_user_player_id_mapping')
         ]
+
+
+# Save notifications to DB in Notifications Service, serve via API
+class Notification(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="notifications")
+    device = models.ForeignKey(WajoUserDevice, on_delete=models.CASCADE, related_name='notifications')
+    title = models.CharField(max_length=100)
+    body = models.CharField(max_length=255)
+    postback = models.CharField(max_length=24)
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return self.user.phone_no
+    
+    class Meta:
+        verbose_name = "Notification"
+        verbose_name_plural = "Notifications"
+        
