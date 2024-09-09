@@ -27,10 +27,18 @@ class WajoUser(models.Model):
     picture = models.ImageField(blank=True, null=True, upload_to=profile_picture_path)
 
     # Self-referential many-to-many relationship
-    coach = models.ForeignKey('self', related_name='players', null=True,
-                                blank=True, on_delete=models.SET_NULL,
-                                limit_choices_to={'role': 'Coach'}
+    coach = models.ManyToManyField('self', related_name='players',
+                                blank=True,
+                                limit_choices_to={'role': 'Coach'},
+                                symmetrical=False, 
                             )
+    """
+        symmetrical=False meaning
+        if Player1 has Coach1 as a coach, 
+        it doesn't mean that Coach1 automatically has Player1 as a coach. 
+        The relationship is one-way: coaches are assigned to players,
+        but not the other way around.
+    """
 
     
     created_on = models.DateTimeField(auto_now_add=True)
@@ -43,7 +51,8 @@ class WajoUser(models.Model):
 
     def clean(self):
         # Ensure that only players can have a coach
-        if self.role == 'Coach' and self.coach is not None:
+        print(self.coach.exists())
+        if self.role == 'Coach' and self.coach.exists():
             raise ValidationError("A coach cannot have another coach assigned.")
 
     def save(self, *args, **kwargs):
@@ -51,7 +60,7 @@ class WajoUser(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.phone_no
+        return self.phone_no + " - " + self.name if self.name else self.phone_no
     
     @property
     def is_authenticated(self):
