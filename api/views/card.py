@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.conf import settings
 
 
-from openai import AzureOpenAI
+import google.generativeai as genai
 
 
 from api.serializer import CardSuggestedActionsSerializer
@@ -17,11 +17,8 @@ from api.models import CardSuggestedAction, MatchEventsDataFile
 from api.utils import *
 
 
-openai_client = AzureOpenAI(
-                azure_endpoint=settings.WAJO_AZURE_OPENAI_ENDPOINT,
-                api_version="2022-12-01",
-                api_key=settings.WAJO_AZURE_OPENAI_KEY
-            )
+genai.configure(api_key=settings.WAJO_GOOGLE_GEMINI_API_KEY)
+gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
 # getStatusCardMetric, dummy data for the previous app builds
 class ____StatusCardMetricAPI(APIView):
@@ -241,35 +238,26 @@ class GreetingAPI(APIView):
         user_data = {
             "name": request.user.name,
             "wellness": get_status_card_metrics(user),
-            "calender": get_daily_snapshot(user, today),
+            "calendar": get_daily_snapshot(user, today),
             "performance-metrics": get_performance_metrics(user),
             "defensive-performance-metrics": get_defensive_performance_metrics(user),
             "offensive-performance-metrics": get_offensive_performance_metrics(user),
             "current_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         print("*" * 100)
-        print("user_data: ", user_data)
+        print("user_data for greeting generation: ", user_data)
 
         prompt = f"""Generate a two-liner greeting only in {language} language for the user with the following data. 
-                    Keep the word count less than 40 and make it crisp and to the point for a athelete. Do not include JSON data. 
+                    Keep the word count around 60 words and make it crisp and to the point for a athelete. Do not include JSON data. 
                     From the data passed, see what should be his main focus for the day.: {user_data}. 
                     {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}
                 """
 
-        print(prompt)
-        deployment_name = "Completion"
-        response = openai_client.completions.create(
-                                        model=deployment_name,
-                                        prompt=prompt,
-                                        max_tokens=50
-                                )
+        greeting = gemini_model.generate_content(prompt)
 
-        # Extract the greeting from the response
-        greeting = response.choices[0].text.strip()
+        print("greeting: ", greeting.text)
 
-        print("greeting: ", greeting)
-
-        return Response({'greeting': greeting}, status=status.HTTP_200_OK)
+        return Response({'greeting': greeting.text}, status=status.HTTP_200_OK)
     
 
 # ai-insight API, unique for each card
@@ -283,18 +271,11 @@ class InsightAPI(APIView):
             if prompt == None:
                 return Response({ 'error': 'unknown card'}, status=status.HTTP_400_BAD_REQUEST)
 
-            deployment_name = "Completion"
-            response = openai_client.completions.create(
-                                            model=deployment_name,
-                                            prompt=prompt,
-                                            max_tokens=50
-                                    )
+            insight = gemini_model.generate_content(prompt)
 
-            # Extract the insight from the response
-            insight = response.choices[0].text.strip()
+            print("insight: ", insight.text)
 
-            print("insight: ", insight)
-            return Response({ 'insight': insight }, status=status.HTTP_200_OK)
+            return Response({ 'insight': insight.text }, status=status.HTTP_200_OK)
         except:
             return Response({ 'error': 'card data not found'}, status=status.HTTP_400_BAD_REQUEST)
 

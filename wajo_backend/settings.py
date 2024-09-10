@@ -159,10 +159,7 @@ MEDIA_URL = '/media/'
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 WAJO_OTP_SERVICE_URL = env_config['WAJO_OTP_SERVICE_URL']
-
-WAJO_AZURE_OPENAI_KEY = env_config['WAJO_AZURE_OPENAI_KEY']
-
-WAJO_AZURE_OPENAI_ENDPOINT = env_config['WAJO_AZURE_OPENAI_ENDPOINT']
+WAJO_GOOGLE_GEMINI_API_KEY = env_config['WAJO_GOOGLE_GEMINI_API_KEY']
 
 """
 ?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting. 
