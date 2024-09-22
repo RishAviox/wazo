@@ -11,7 +11,7 @@ from .views.card import (
                     CardSuggestedActionsAPI, ____CardSuggestedActionsAPI, ____StatusCardMetricAPI, StatusCardMetricAPI, DailySnapshortCardAPI, 
                     PerformanceMetricsAPI, DefensivePerformanceMetricsAPI, OffensivePerformanceMetricsAPI,
                     GreetingAPI, InsightAPI, VideoAnalysisCardAPI, GameStatsAPI, SeasonOverviewMetricsAPI,
-                    WajoPerformanceIndexAPI, AttackingSkillsAPI,
+                    WajoPerformanceIndexAPI, AttackingSkillsAPI, VideoCardDefensiveAPI,
                 )
 
 urlpatterns = [
@@ -48,6 +48,8 @@ urlpatterns = [
     path('wajo-performance-index', WajoPerformanceIndexAPI.as_view(), name='wajo-performance-index-metrics'),
     # attacking skills
     path('attacking-skills', AttackingSkillsAPI.as_view(), name='attacking-skills-metrics'),
+    # videocard defensive skills
+    path('videocard-defensive', VideoCardDefensiveAPI.as_view(), name='videocard-defensive-metrics'),
     
     path('notifications/<str:fcm_token>', NotificationsAPI.as_view(), name='wajo-notifications'),
 

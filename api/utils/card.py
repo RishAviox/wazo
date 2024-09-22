@@ -10,7 +10,7 @@ from api.models import (
                         OneTimeEvents, RecurringEvents, PerformanceMetrics, 
                         DefensivePerformanceMetrics, OffensivePerformanceMetrics,
                         StatusCardMetrics, GameStats, SeasonOverviewMetrics, WajoPerformanceIndex,
-                        AttackingSkills,
+                        AttackingSkills, VideoCardDefensive, 
                     )
 from api.serializer import StatusCardMetricsSerializer, WajoUserSerializer
 from .status_metrics_calculations import *
@@ -56,6 +56,16 @@ def get_wajo_performance_index_metrics(user):
 def get_attacking_skills_metrics(user):
     try:
         metrics = AttackingSkills.objects.filter(user=user).latest('updated_on')
+        return metrics.metrics
+    
+    except:
+        return {}
+    
+
+# for video card Defensive skills
+def get_videocard_defensive_metrics(user):
+    try:
+        metrics = VideoCardDefensive.objects.filter(user=user).latest('updated_on')
         return metrics.metrics
     
     except:
@@ -528,6 +538,147 @@ def calculate_attacking_skills(row, match_sheet):
 
     return attacking_skills_value_mapping
 
+
+def calculate_videocard_defensive(row, match_sheet):
+
+    # List of column names to map
+    videocard_defensive_mapping = [
+        "rating",
+        "tackle_succeeded",
+        "tackle",
+        "aerial_clearance_succeeded",
+        "aerial_clearance",
+        "aerial_duel_succeeded",
+        "aerial_duel",
+        "ground_duel_succeeded",
+        "ground_duel",
+        "loose_ball_duel_succeeded",
+        "loose_ball_duel",
+        "intercept",
+        "intervention",
+        "block",
+        "shot_blocked",
+        "defensive_area_pass_succeeded",
+        "defensive_area_pass",
+        "defensive_line_support_succeeded",
+        "defensive_line_support_succeeded",
+        "defensive_line_support_failed",
+        "recovery",
+        "mistake",
+        "own_goal",
+    ]
+
+    # Initialize the dictionary for value mapping
+    defensive_value_mapping = {}
+
+    # Helper function to calculate percentage with error handling
+    def calculate_percentage(numerator_key: str, denominator_key: str):
+        numerator = defensive_value_mapping[numerator_key]
+        denominator = defensive_value_mapping[denominator_key]
+        defensive_value_mapping.pop(numerator_key)
+        defensive_value_mapping.pop(denominator_key)
+        try:
+            return round(((numerator / denominator) * 100), 1)
+        except ZeroDivisionError:
+            return 0.0
+
+    # Process 'minutes' column
+    minutes_column = "play_time"
+    defensive_value_mapping["Play time"] = int(
+        int(row[minutes_column]) / 60000
+    )
+
+    # Process other columns
+    for column_name in videocard_defensive_mapping:
+        defensive_value_mapping[column_name] = int(row[column_name])
+
+
+    # Calculate percentage values
+    defensive_value_mapping["Tackles"] = calculate_percentage(
+        "tackle_succeeded",
+        "tackle",
+    )
+
+    defensive_value_mapping["Aerial Clearances"] = calculate_percentage(
+        "aerial_clearance_succeeded",
+        "aerial_clearance",
+    )
+
+    defensive_value_mapping["Aerial Duels"] = calculate_percentage(
+        "aerial_duel_succeeded",
+        "aerial_duel",
+    )
+
+    defensive_value_mapping["Ground Duels"] = calculate_percentage(
+        "ground_duel_succeeded",
+        "ground_duel",
+    )
+
+    defensive_value_mapping["Loose Ball Duels"] = calculate_percentage(
+        "loose_ball_duel_succeeded",
+        "loose_ball_duel",
+    )
+
+    defensive_value_mapping["Defensive Area Passes"] = calculate_percentage(
+        "defensive_area_pass_succeeded",
+        "defensive_area_pass",
+    )
+
+    try:
+        defensive_value_mapping["Defensive Line Support"] = (
+            defensive_value_mapping["defensive_line_support_succeeded"]
+            / (
+                defensive_value_mapping["defensive_line_support_succeeded"]
+                + defensive_value_mapping["defensive_line_support_failed"]
+            )
+        ) * 100
+    except ZeroDivisionError:
+        defensive_value_mapping["Defensive Line Support"] = 0.0
+
+    defensive_value_mapping["Play time"] = (
+        f"{defensive_value_mapping['Play time']}/{int(match_sheet.iloc[0]['full_time']) + int(match_sheet.iloc[0]['extra_full_time'])}"
+    )
+
+    defensive_value_mapping["Game Rating"] = float(row["rating"]).__round__(1)
+
+
+    rename_dict = {
+        "rating": "Game Rating",
+        "goals_scored": "Goals",
+        "assist": "Assists",
+        "shot_blocked": "Shots Blocked",
+        "shot_in_PA": "Shots in PA",
+        "shot_outside_of_PA": "Shots Outside PA",
+        "key_pass": "Key Passes",
+        "control_under_pressure": "Control Under Pressure",
+        "offside": "Offside",
+    }
+
+    # Rename the dict keys
+    defensive_value_mapping = {
+        rename_dict.get(k, k): v for k, v in defensive_value_mapping.items()
+    }
+
+    print("defensive_value_mapping: ", defensive_value_mapping)
+
+    # Keys to keep
+    keys_to_keep = {
+        "Play time",
+        "Game Rating",
+        "Shots Blocked",
+        "Tackles",
+        "Aerial Clearances",
+        "Aerial Duels",
+        "Ground Duels",
+        "Loose Ball Duels",
+        "Defensive Area Passes",
+        "Defensive Line Support"
+    }
+
+    # Filter defensive_value_mapping
+    filtered_defensive_value_mapping = {k: v for k, v in defensive_value_mapping.items() if k in keys_to_keep}
+
+    return filtered_defensive_value_mapping
 
 
 # for API view

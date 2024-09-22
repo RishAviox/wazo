@@ -441,3 +441,22 @@ class AttackingSkillsAPI(APIView):
         else:
             metrics = get_attacking_skills_metrics(request.user)
             return Response(metrics, status=status.HTTP_200_OK)
+
+
+class VideoCardDefensiveAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_videocard_defensive_metrics(player)
+                    })
+
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_videocard_defensive_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)

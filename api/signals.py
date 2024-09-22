@@ -7,7 +7,7 @@ from .models import (
                     DailyWellnessUserResponse,RPEUserResponse, MatchEventsDataFile,
                     PlayerIDMapping, PerformanceMetrics, DefensivePerformanceMetrics,
                     OffensivePerformanceMetrics, GameStats, SeasonOverviewMetrics,
-                    WajoPerformanceIndex, AttackingSkills, 
+                    WajoPerformanceIndex, AttackingSkills, VideoCardDefensive,
                 )
 from .utils import *
 
@@ -141,6 +141,7 @@ def process_file(sender, instance, created, **kwargs):
                 season_overview = calculate_season_overview_metrics(stats_data)
 
                 attacking_skills = calculate_attacking_skills(stats_data, match_sheet)
+                videocard_defensive = calculate_videocard_defensive(stats_data, match_sheet)
 
                 # Calculate pace and shooting scores
                 pace_score = calculate_pace_score(
@@ -285,6 +286,12 @@ def process_file(sender, instance, created, **kwargs):
                 AttackingSkills.objects.update_or_create(
                     user_id=user_phone,
                     defaults={'metrics': attacking_skills}
+                )
+
+                # # Create or update the VideoCard Defensive Skills for the user
+                VideoCardDefensive.objects.update_or_create(
+                    user_id=user_phone,
+                    defaults={'metrics': videocard_defensive}
                 )
     else:
         print("Either Stats or GPS file is not available.")
