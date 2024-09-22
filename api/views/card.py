@@ -423,3 +423,21 @@ class WajoPerformanceIndexAPI(APIView):
             return Response(metrics, status=status.HTTP_200_OK)
 
 
+# new APIs for new formulas(new freelancer), 22nd Sept 2024
+class AttackingSkillsAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_attacking_skills_metrics(player)
+                    })
+
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_attacking_skills_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)

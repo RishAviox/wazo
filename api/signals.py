@@ -7,7 +7,7 @@ from .models import (
                     DailyWellnessUserResponse,RPEUserResponse, MatchEventsDataFile,
                     PlayerIDMapping, PerformanceMetrics, DefensivePerformanceMetrics,
                     OffensivePerformanceMetrics, GameStats, SeasonOverviewMetrics,
-                    WajoPerformanceIndex,
+                    WajoPerformanceIndex, AttackingSkills, 
                 )
 from .utils import *
 
@@ -80,6 +80,7 @@ def process_file(sender, instance, created, **kwargs):
     if stats_instance and gps_instance:
         stats_sheet = pd.read_excel(stats_instance.file, sheet_name='PlayerStats_137183')
         gps_sheet = pd.read_excel(gps_instance.file, sheet_name='Oliver GPS Metrcis')
+        match_sheet = pd.read_excel(stats_instance.file, sheet_name='MatchDetails')
         
         player_mappings = PlayerIDMapping.objects.select_related('user').all().values(
                     'player_id', 
@@ -138,6 +139,8 @@ def process_file(sender, instance, created, **kwargs):
                 defensive_performance_metrics = calculate_defensive_performance_metrics(stats_data)
                 offensive_performance_metrics = calculate_offensive_performance_metrics(stats_data)
                 season_overview = calculate_season_overview_metrics(stats_data)
+
+                attacking_skills = calculate_attacking_skills(stats_data, match_sheet)
 
                 # Calculate pace and shooting scores
                 pace_score = calculate_pace_score(
@@ -276,6 +279,12 @@ def process_file(sender, instance, created, **kwargs):
                 OffensivePerformanceMetrics.objects.update_or_create(
                     user_id=user_phone,
                     defaults={'metrics': offensive_performance_metrics}
+                )
+
+                # # Create or update the Attacking Skills for the user
+                AttackingSkills.objects.update_or_create(
+                    user_id=user_phone,
+                    defaults={'metrics': attacking_skills}
                 )
     else:
         print("Either Stats or GPS file is not available.")

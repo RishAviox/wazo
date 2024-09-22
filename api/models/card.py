@@ -126,4 +126,48 @@ class WajoPerformanceIndex(models.Model):
 
     def __str__(self):
         return f"Wajo Performance Index for {self.user.phone_no}"
+
+
+class AttackingSkills(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="attacking_skills")
+    metrics = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Attacking Skills"
+        verbose_name_plural = "Attacking Skills"
+
+    def __str__(self):
+        return f"Attacking Skills for {self.user.phone_no}"
     
+
+class VideoCardDefensive(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="videocard_defensive")
+    metrics = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Video Card Defensive"
+        verbose_name_plural = "Video Card Defensive"
+
+    def __str__(self):
+        return f"Video Card Defensive for {self.user.phone_no}"
+    
+
+class VideoCardDistributions(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="videocard_distributions")
+    metrics = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Video Card Distributions"
+        verbose_name_plural = "Video Card Distributions"
+
+    def __str__(self):
+        return f"Video Card Distributions for {self.user.phone_no}"  

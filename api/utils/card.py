@@ -10,6 +10,7 @@ from api.models import (
                         OneTimeEvents, RecurringEvents, PerformanceMetrics, 
                         DefensivePerformanceMetrics, OffensivePerformanceMetrics,
                         StatusCardMetrics, GameStats, SeasonOverviewMetrics, WajoPerformanceIndex,
+                        AttackingSkills,
                     )
 from api.serializer import StatusCardMetricsSerializer, WajoUserSerializer
 from .status_metrics_calculations import *
@@ -45,6 +46,16 @@ def get_season_overview_metrics(user):
 def get_wajo_performance_index_metrics(user):
     try:
         metrics = WajoPerformanceIndex.objects.filter(user=user).latest('updated_on')
+        return metrics.metrics
+    
+    except:
+        return {}
+    
+
+# for attacking skills
+def get_attacking_skills_metrics(user):
+    try:
+        metrics = AttackingSkills.objects.filter(user=user).latest('updated_on')
         return metrics.metrics
     
     except:
@@ -396,6 +407,127 @@ def calculate_offensive_performance_metrics(row):
             "free_kick": {"skill": "Set Pieces", "category": "Offensive Skills", "value": row.get('free_kick', 0)},
             "throw_in": {"skill": "Set Pieces", "category": "Offensive Skills", "value": row.get('throw_in', 0)},
         }
+
+
+
+# new formulas by Freelancer, 22nd Sept 2024
+def calculate_attacking_skills(row, match_sheet):
+    attacking_skills_mapping = [
+        "goals_scored",
+        "assist",
+        "shot_blocked",
+        "shot_in_PA",
+        "shot_outside_of_PA",
+        "key_pass",
+        "pass",
+        "control_under_pressure",
+        "shot_on_target",
+        "pass_succeeded",
+        "final_third_area_pass",
+        "final_third_area_pass_succeeded",
+        "cross",
+        "cross_succeeded",
+        "take_on_succeeded",
+        "take_on",
+        "total_shot",
+        "offside",
+    ]
+
+    # Initialize the dictionary for value mapping
+    attacking_skills_value_mapping = {}
+
+    # Helper function to calculate percentage with error handling
+    def calculate_percentage(numerator_key: str, denominator_key: str):
+        numerator = attacking_skills_value_mapping[numerator_key]
+        denominator = attacking_skills_value_mapping[denominator_key]
+        attacking_skills_value_mapping.pop(numerator_key)
+        attacking_skills_value_mapping.pop(denominator_key)
+        try:
+            return round(((numerator / denominator) * 100), 1)
+        except ZeroDivisionError:
+            return 0.0
+        
+
+    minutes_column = "play_time"
+    attacking_skills_value_mapping[minutes_column] = int(
+        int(row.get(minutes_column, 0)) / 60000
+    )
+
+    # Process other columns
+    for column_name in attacking_skills_mapping:
+        attacking_skills_value_mapping[column_name] = int(row.get(column_name, 0))
+
+
+    # Calculate percentage values
+    attacking_skills_value_mapping["(shot_on_target / total_shot) x 100"] = (
+        calculate_percentage(
+            "shot_on_target",
+            "total_shot",
+        )
+    )
+
+    attacking_skills_value_mapping["(pass_succeeded / pass) x 100"] = calculate_percentage(
+        "pass_succeeded",
+        "pass",
+    )
+
+    attacking_skills_value_mapping[
+        "(final_third_area_pass_succeeded / final_third_area_pass) x 100"
+    ] = calculate_percentage(
+        "final_third_area_pass_succeeded",
+        "final_third_area_pass",
+    )
+
+    attacking_skills_value_mapping["(cross_succeeded / cross) x 100"] = (
+        calculate_percentage(
+            "cross_succeeded",
+            "cross",
+        )
+    )
+
+    attacking_skills_value_mapping["(take_on_succeeded / take_on) x 100"] = (
+        calculate_percentage(
+            "take_on_succeeded",
+            "take_on",
+        )
+    )
+
+    attacking_skills_value_mapping["play_time"] = (
+        f"{attacking_skills_value_mapping['play_time']}/{int(match_sheet.iloc[0]['full_time']) + int(match_sheet.iloc[0]['extra_full_time'])}"
+    )
+
+    attacking_skills_value_mapping["Game Rating"] = float(
+        row["rating"]
+    ).__round__(1)
+
+
+    rename_dict = {
+        "play_time": "Play Time",
+        "goals_scored": "Goals",
+        "assist": "Assists",
+        "shot_blocked": "Shots Blocked",
+        "shot_in_PA": "Shots in PA",
+        "shot_outside_of_PA": "Shots Outside PA",
+        "key_pass": "Key Passes",
+        "control_under_pressure": "Control Under Pressure",
+        "offside": "Offside",
+        "(shot_on_target / total_shot) x 100": "Shots",
+        "(pass_succeeded / pass) x 100": "Passing",
+        "(final_third_area_pass_succeeded / final_third_area_pass) x 100": "Final 1/3 Pass",
+        "(cross_succeeded / cross) x 100": "Crossing",
+        "(take_on_succeeded / take_on) x 100": "Take-ons",
+        "Game Rating": "Game Rating",
+    }
+
+    # Rename the dict keys
+    attacking_skills_value_mapping = {
+        rename_dict.get(k, k): v for k, v in attacking_skills_value_mapping.items()
+    }
+
+    print("attacking_skills_value_mapping: ", attacking_skills_value_mapping)
+
+    return attacking_skills_value_mapping
+
 
 
 # for API view

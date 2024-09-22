@@ -5,6 +5,7 @@ __pycache__
 .env
 media
 *_dev.py
+*_dev
 static
 *_old.py
 management

@@ -11,7 +11,7 @@ from .views.card import (
                     CardSuggestedActionsAPI, ____CardSuggestedActionsAPI, ____StatusCardMetricAPI, StatusCardMetricAPI, DailySnapshortCardAPI, 
                     PerformanceMetricsAPI, DefensivePerformanceMetricsAPI, OffensivePerformanceMetricsAPI,
                     GreetingAPI, InsightAPI, VideoAnalysisCardAPI, GameStatsAPI, SeasonOverviewMetricsAPI,
-                    WajoPerformanceIndexAPI
+                    WajoPerformanceIndexAPI, AttackingSkillsAPI,
                 )
 
 urlpatterns = [
@@ -46,6 +46,9 @@ urlpatterns = [
     path('season-overview-metrics', SeasonOverviewMetricsAPI.as_view(), name='season-overview-metrics'),
     # wajo performance index metrics
     path('wajo-performance-index', WajoPerformanceIndexAPI.as_view(), name='wajo-performance-index-metrics'),
+    # attacking skills
+    path('attacking-skills', AttackingSkillsAPI.as_view(), name='attacking-skills-metrics'),
+    
     path('notifications/<str:fcm_token>', NotificationsAPI.as_view(), name='wajo-notifications'),
 
     # obtain admin(staff) for chatbot to push data to API

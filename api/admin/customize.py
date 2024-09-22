@@ -21,6 +21,7 @@ class CustomAdminSite(AdminSite):
                     'Game Stats',
                     'Season Overview Metrics',
                     'Performance Metrics',
+                    'Attacking Skills',
                     'Defensive Performance Metrics',
                     'Offensive Performance Metrics',
                     'Daily Wellness Questionnaire',
