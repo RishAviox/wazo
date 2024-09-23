@@ -310,118 +310,119 @@ def calculate_game_stats(row):
 
 def calculate_season_overview_metrics(row):
     return {
-            "Overall Score": round(row.get('rating', 0), 2),
-            "Matches Played": round(row.get('play_time', 0) / (90 * 60 * 1000), 2),
-            "Goals": round(row.get('goal', 0), 2),
-            "Assists": round(row.get('assist', 0), 2),
-            "Own Goals": round(row.get('own_goal', 0), 2),
-            "Goals Conceded": round(row.get('goal_conceded', 0), 2),
-            "Clean Sheets": 1 if row.get('goal_conceded') == 0 else 0,
-            "Yellow Cards": round(row.get('yellow_card', 0), 2),
-            "Red Cards": round(row.get('red_card', 0), 2),
-            "Substituted In": 1 if row.get('play_time', 0) / (60 * 1000) < 90 else 0,
-            "Substituted Out": 1 if row.get('play_time', 0) / (60 * 1000) < 90 else 0,
+            "Overall Score": float(round(row.get('rating', 0.0), 2)),
+            "Matches Played": float(round(row.get('play_time', 0.0) / (90 * 60 * 1000), 2)),
+            "Goals": float(round(row.get('goal', 0.0), 2)),
+            "Assists": float(round(row.get('assist', 0.0), 2)),
+            "Own Goals": float(round(row.get('own_goal', 0.0), 2)),
+            "Goals Conceded": float(round(row.get('goal_conceded', 0.0), 2)),
+            "Clean Sheets": 1.0 if row.get('goal_conceded') == 0 else 0.0,
+            "Yellow Cards": float(round(row.get('yellow_card', 0.0), 2)),
+            "Red Cards": float(round(row.get('red_card', 0.0), 2)),
+            "Substituted In": 1.0 if row.get('play_time', 0.0) / (60 * 1000) < 90 else 0.0,
+            "Substituted Out": 1.0 if row.get('play_time', 0.0) / (60 * 1000) < 90 else 0.0,
         }
 
 def calculate_performance_metrics(row):
     return {
-            "rating": {"skill": "Rating", "category": "Performance Metrics", "value": row.get('rating', 0)},
-            "play_time": {"skill": "Play Time", "category": "Performance Metrics", "value": row.get('play_time', 0)},
-            "goal": {"skill": "Goals", "category": "Performance Metrics", "value": row.get('goal', 0)},
-            "assist": {"skill": "Assists", "category": "Performance Metrics", "value": row.get('assist', 0)},
-            "shot_on_target": {"skill": "Shooting", "category": "Performance Metrics", "value": row.get('shot_on_target', 0)},
-            "pass_succeeded": {"skill": "Passing", "category": "Performance Metrics", "value": row.get('pass_succeeded', 0)},
-            "yellow_card": {"skill": "Disciplinary", "category": "Performance Metrics", "value": row.get('yellow_card', 0)},
-            "red_card": {"skill": "Disciplinary", "category": "Performance Metrics", "value": row.get('red_card', 0)},
-            "total_shot": {"skill": "Total Shot", "category": "Performance Metrics", "value": row.get('total_shot', 0)},
-            "pass": {"skill": "Pass", "category": "Performance Metrics", "value": row.get('pass', 0)},
-            "take_on_succeeded": {"skill": "Take On Succeeded", "category": "Performance Metrics", "value": row.get('take_on_succeeded', 0)},
-            "take_on": {"skill": "Take On", "category": "Performance Metrics", "value": row.get('take_on', 0)},
-            "forward_pass_succeeded": {"skill": "Forward Pass Succeeded", "category": "Performance Metrics", "value": row.get('forward_pass_succeeded', 0)},
-            "forward_pass": {"skill": "Forward Pass", "category": "Performance Metrics", "value": row.get('forward_pass', 0)},
-            "final_third_area_pass_succeeded": {"skill": "Final Third Area Pass Succeeded", "category": "Performance Metrics", "value": row.get('final_third_area_pass_succeeded', 0)},
-            "final_third_area_pass": {"skill": "Final Third Area Pass", "category": "Performance Metrics", "value": row.get('final_third_area_pass', 0)},
+            "rating": {"skill": "Rating", "category": "Performance Metrics", "value": float(row.get('rating', 0.0))},
+            "play_time": {"skill": "Play Time", "category": "Performance Metrics", "value": float(row.get('play_time', 0.0))},
+            "goal": {"skill": "Goals", "category": "Performance Metrics", "value": float(row.get('goal', 0.0))},
+            "assist": {"skill": "Assists", "category": "Performance Metrics", "value": float(row.get('assist', 0.0))},
+            "shot_on_target": {"skill": "Shooting", "category": "Performance Metrics", "value": float(row.get('shot_on_target', 0.0))},
+            "pass_succeeded": {"skill": "Passing", "category": "Performance Metrics", "value": float(row.get('pass_succeeded', 0.0))},
+            "yellow_card": {"skill": "Disciplinary", "category": "Performance Metrics", "value": float(row.get('yellow_card', 0.0))},
+            "red_card": {"skill": "Disciplinary", "category": "Performance Metrics", "value": float(row.get('red_card', 0.0))},
+            "total_shot": {"skill": "Total Shot", "category": "Performance Metrics", "value": float(row.get('total_shot', 0.0))},
+            "pass": {"skill": "Pass", "category": "Performance Metrics", "value": float(row.get('pass', 0.0))},
+            "take_on_succeeded": {"skill": "Take On Succeeded", "category": "Performance Metrics", "value": float(row.get('take_on_succeeded', 0.0))},
+            "take_on": {"skill": "Take On", "category": "Performance Metrics", "value": float(row.get('take_on', 0.0))},
+            "forward_pass_succeeded": {"skill": "Forward Pass Succeeded", "category": "Performance Metrics", "value": float(row.get('forward_pass_succeeded', 0.0))},
+            "forward_pass": {"skill": "Forward Pass", "category": "Performance Metrics", "value": float(row.get('forward_pass', 0.0))},
+            "final_third_area_pass_succeeded": {"skill": "Final Third Area Pass Succeeded", "category": "Performance Metrics", "value": float(row.get('final_third_area_pass_succeeded', 0.0))},
+            "final_third_area_pass": {"skill": "Final Third Area Pass", "category": "Performance Metrics", "value": float(row.get('final_third_area_pass', 0.0))},
         }
 
 def calculate_defensive_performance_metrics(row):
     return {
-            "play_time": {"skill": "Play Time", "category": "Performance Metrics", "value": row.get('play_time', 0)},
-            "aerial_clearance": {"skill": "Clearances", "category": "Defensive Skills", "value": row.get('aerial_clearance', 0)},
-            "aerial_clearance_failed": {"skill": "Clearances", "category": "Defensive Skills", "value": row.get('aerial_clearance_failed', 0)},
-            "aerial_clearance_succeeded": {"skill": "Clearances", "category": "Defensive Skills", "value": row.get('aerial_clearance_succeeded', 0)},
-            "clearance": {"skill": "Clearances", "category": "Defensive Skills", "value": row.get('clearance', 0)},
-            "block": {"skill": "Clearances", "category": "Defensive Skills", "value": row.get('block', 0)},
-            "intercept": {"skill": "Interceptions", "category": "Defensive Skills", "value": row.get('intercept', 0)},
-            "intervention": {"skill": "Interceptions", "category": "Defensive Skills", "value": row.get('intervention', 0)},
-            "tackle": {"skill": "Tackling", "category": "Defensive Skills", "value": row.get('tackle', 0)},
-            "tackle_succeeded": {"skill": "Tackling", "category": "Defensive Skills", "value": row.get('tackle_succeeded', 0)},
-            "foul": {"skill": "Tackling", "category": "Defensive Skills", "value": row.get('foul', 0)},
-            "foul_won": {"skill": "Tackling", "category": "Defensive Skills", "value": row.get('foul_won', 0)},
-            "aerial_duel": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('aerial_duel', 0)},
-            "aerial_duel_failed": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('aerial_duel_failed', 0)},
-            "aerial_duel_succeeded": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('aerial_duel_succeeded', 0)},
-            "ground_duel": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('ground_duel', 0)},
-            "ground_duel_failed": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('ground_duel_failed', 0)},
-            "ground_duel_succeeded": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('ground_duel_succeeded', 0)},
-            "loose_ball_duel": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('loose_ball_duel', 0)},
-            "loose_ball_duel_failed": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('loose_ball_duel_failed', 0)},
-            "loose_ball_duel_succeeded": {"skill": "Duels", "category": "Defensive Skills", "value": row.get('loose_ball_duel_succeeded', 0)},
-            "defensive_line_support": {"skill": "Support Play", "category": "Defensive Skills", "value": row.get('defensive_line_support', 0)},
-            "defensive_line_support_failed": {"skill": "Support Play", "category": "Defensive Skills", "value": row.get('defensive_line_support_failed', 0)},
-            "defensive_line_support_succeeded": {"skill": "Support Play", "category": "Defensive Skills", "value": row.get('defensive_line_support_succeeded', 0)},
-            "recovery": {"skill": "Recovery", "category": "Defensive Skills", "value": row.get('recovery', 0)},
-            "goal": {"skill": "Goals", "category": "Performance Metrics", "value": row.get('goal', 0)},
-            "goal_conceded": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": row.get('goal_conceded', 0)},
-            "goal_kick": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": row.get('goal_kick', 0)},
-            "goal_kick_succeeded": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": row.get('goal_kick_succeeded', 0)},
-            "save_by_catching": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": row.get('save_by_catching', 0)},
-            "save_by_punching": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": row.get('save_by_punching', 0)},
-            "control_under_pressure": {"skill": "Ball Control", "category": "Defensive Skills", "value": row.get('control_under_pressure', 0)},
-            "mistake": {"skill": "Negative Performance", "category": "Defensive Skills", "value": row.get('mistake', 0)},
-            "offside": {"skill": "Negative Performance", "category": "Defensive Skills", "value": row.get('offside', 0)},
-            "own_goal": {"skill": "Negative Performance", "category": "Defensive Skills", "value": row.get('own_goal', 0)},
+            "play_time": {"skill": "Play Time", "category": "Performance Metrics", "value": float(row.get('play_time', 0.0))},
+            "aerial_clearance": {"skill": "Clearances", "category": "Defensive Skills", "value": float(row.get('aerial_clearance', 0.0))},
+            "aerial_clearance_failed": {"skill": "Clearances", "category": "Defensive Skills", "value": float(row.get('aerial_clearance_failed', 0.0))},
+            "aerial_clearance_succeeded": {"skill": "Clearances", "category": "Defensive Skills", "value": float(row.get('aerial_clearance_succeeded', 0.0))},
+            "clearance": {"skill": "Clearances", "category": "Defensive Skills", "value": float(row.get('clearance', 0.0))},
+            "block": {"skill": "Clearances", "category": "Defensive Skills", "value": float(row.get('block', 0.0))},
+            "intercept": {"skill": "Interceptions", "category": "Defensive Skills", "value": float(row.get('intercept', 0.0))},
+            "intervention": {"skill": "Interceptions", "category": "Defensive Skills", "value": float(row.get('intervention', 0.0))},
+            "tackle": {"skill": "Tackling", "category": "Defensive Skills", "value": float(row.get('tackle', 0.0))},
+            "tackle_succeeded": {"skill": "Tackling", "category": "Defensive Skills", "value": float(row.get('tackle_succeeded', 0.0))},
+            "foul": {"skill": "Tackling", "category": "Defensive Skills", "value": float(row.get('foul', 0.0))},
+            "foul_won": {"skill": "Tackling", "category": "Defensive Skills", "value": float(row.get('foul_won', 0.0))},
+            "aerial_duel": {"skill": "Duels", "category": "Defensive Skills", "value": float(row.get('aerial_duel', 0.0))},
+            "aerial_duel_failed": {"skill": "Duels", "category": "Defensive Skills", "value": float(row.get('aerial_duel_failed', 0.0))},
+            "aerial_duel_succeeded": {"skill": "Duels", "category": "Defensive Skills", "value": float(row.get('aerial_duel_succeeded', 0.0))},
+            "ground_duel": {"skill": "Duels", "category": "Defensive Skills", "value": float(row.get('ground_duel', 0.0))},
+            "ground_duel_failed": {"skill": "Duels", "category": "Defensive Skills", "value": float(row.get('ground_duel_failed', 0.0))},
+            "ground_duel_succeeded": {"skill": "Duels", "category": "Defensive Skills", "value": float(row.get('ground_duel_succeeded', 0.0))},
+            "loose_ball_duel": {"skill": "Duels", "category": "Defensive Skills", "value": float(row.get('loose_ball_duel', 0.0))},
+            "loose_ball_duel_failed": {"skill": "Duels", "category": "Defensive Skills", "value": float(row.get('loose_ball_duel_failed', 0.0))},
+            "loose_ball_duel_succeeded": {"skill": "Duels", "category": "Defensive Skills", "value": float(row.get('loose_ball_duel_succeeded', 0.0))},
+            "defensive_line_support": {"skill": "Support Play", "category": "Defensive Skills", "value": float(row.get('defensive_line_support', 0.0))},
+            "defensive_line_support_failed": {"skill": "Support Play", "category": "Defensive Skills", "value": float(row.get('defensive_line_support_failed', 0.0))},
+            "defensive_line_support_succeeded": {"skill": "Support Play", "category": "Defensive Skills", "value": float(row.get('defensive_line_support_succeeded', 0.0))},
+            "recovery": {"skill": "Recovery", "category": "Defensive Skills", "value": float(row.get('recovery', 0.0))},
+            "goal": {"skill": "Goals", "category": "Performance Metrics", "value": float(row.get('goal', 0.0))},
+            "goal_conceded": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": float(row.get('goal_conceded', 0.0))},
+            "goal_kick": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": float(row.get('goal_kick', 0.0))},
+            "goal_kick_succeeded": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": float(row.get('goal_kick_succeeded', 0.0))},
+            "save_by_catching": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": float(row.get('save_by_catching', 0.0))},
+            "save_by_punching": {"skill": "Goalkeeping", "category": "Defensive Skills", "value": float(row.get('save_by_punching', 0.0))},
+            "control_under_pressure": {"skill": "Ball Control", "category": "Defensive Skills", "value": float(row.get('control_under_pressure', 0.0))},
+            "mistake": {"skill": "Negative Performance", "category": "Defensive Skills", "value": float(row.get('mistake', 0.0))},
+            "offside": {"skill": "Negative Performance", "category": "Defensive Skills", "value": float(row.get('offside', 0.0))},
+            "own_goal": {"skill": "Negative Performance", "category": "Defensive Skills", "value": float(row.get('own_goal', 0.0))},
         }
 
 def calculate_offensive_performance_metrics(row):
     return {
-            "play_time": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('play_time', 0)},
-            "goal": {"skill": "Goals", "category": "Performance Metrics", "value": row.get('goal', 0)},
-            "assist": {"skill": "Assists", "category": "Performance Metrics", "value": row.get('assist', 0)},
-            "shot_on_target": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('shot_on_target', 0)},
-            "shot_off_target": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('shot_off_target', 0)},
-            "total_shot": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('total_shot', 0)},
-            "shot_blocked": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('shot_blocked', 0)},
-            "shot_in_PA": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('shot_in_PA', 0)},
-            "shot_outside_of_PA": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('shot_outside_of_PA', 0)},
-            "penalty_kick": {"skill": "Shooting", "category": "Offensive Skills", "value": row.get('penalty_kick', 0)},
-            "pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('pass', 0)},
-            "forward_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('forward_pass', 0)},
-            "backward_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('backward_pass', 0)},
-            "defensive_area_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('defensive_area_pass', 0)},
-            "final_third_area_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('final_third_area_pass', 0)},
-            "middle_area_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('middle_area_pass', 0)},
-            "key_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('key_pass', 0)},
-            "long_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('long_pass', 0)},
-            "short_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('short_pass', 0)},
-            "sideways_pass": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('sideways_pass', 0)},
-            "cross": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('cross', 0)},
-            "cross_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('cross_succeeded', 0)},
-            "pass_failed": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('pass_failed', 0)},
-            "pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('pass_succeeded', 0)},
-            "forward_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('forward_pass_succeeded', 0)},
-            "backward_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('backward_pass_succeeded', 0)},
-            "defensive_area_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('defensive_area_pass_succeeded', 0)},
-            "final_third_area_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('final_third_area_pass_succeeded', 0)},
-            "middle_area_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('middle_area_pass_succeeded', 0)},
-            "long_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('long_pass_succeeded', 0)},
-            "short_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('short_pass_succeeded', 0)},
-            "sideways_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": row.get('sideways_pass_succeeded', 0)},
-            "take_on": {"skill": "Dribbling", "category": "Offensive Skills", "value": row.get('take_on', 0)},
-            "take_on_succeeded": {"skill": "Dribbling", "category": "Offensive Skills", "value": row.get('take_on_succeeded', 0)},
-            "corner_kick": {"skill": "Set Pieces", "category": "Offensive Skills", "value": row.get('corner_kick', 0)},
-            "free_kick": {"skill": "Set Pieces", "category": "Offensive Skills", "value": row.get('free_kick', 0)},
-            "throw_in": {"skill": "Set Pieces", "category": "Offensive Skills", "value": row.get('throw_in', 0)},
+            "play_time": {"skill": "Shooting", "category": "Offensive Skills", "value": float(row.get('play_time', 0.0))},
+            "goal": {"skill": "Goals", "category": "Performance Metrics", "value": float(row.get('goal', 0.0))},
+            "assist": {"skill": "Assists", "category": "Performance Metrics", "value": float(row.get('assist', 0.0))},
+            "shot_on_target": {"skill": "Shooting", "category": "Offensive Skills", "value": float(row.get('shot_on_target', 0.0))},
+            "shot_off_target": {"skill": "Shooting", "category": "Offensive Skills", "value": float(row.get('shot_off_target', 0.0))},
+            "total_shot": {"skill": "Shooting", "category": "Offensive Skills", "value": float(row.get('total_shot', 0.0))},
+            "shot_blocked": {"skill": "Shooting", "category": "Offensive Skills", "value": float(row.get('shot_blocked', 0.0))},
+            "shot_in_PA": {"skill": "Shooting", "category": "Offensive Skills", "value": float(row.get('shot_in_PA', 0.0))},
+            "shot_outside_of_PA": {"skill": "Shooting", "category": "Offensive Skills", "value": float(row.get('shot_outside_of_PA', 0.0))},
+            "penalty_kick": {"skill": "Shooting", "category": "Offensive Skills", "value": float(row.get('penalty_kick', 0.0))},
+            "pass": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('pass', 0.0))},
+            "forward_pass": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('forward_pass', 0.0))},
+            "backward_pass": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('backward_pass', 0.0))},
+            "defensive_area_pass": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('defensive_area_pass', 0.0))},
+            "final_third_area_pass": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('final_third_area_pass', 0.0))},
+            "middle_area_pass": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('middle_area_pass', 0.0))},
+            "key_pass": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('key_pass', 0.0))},
+            "long_pass": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('long_pass', 0.0))},
+            "short_pass": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('short_pass', 0.0))},
+            "sideways_pass": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('sideways_pass', 0.0))},
+            "cross": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('cross', 0.0))},
+            "cross_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('cross_succeeded', 0.0))},
+            "pass_failed": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('pass_failed', 0.0))},
+            "pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('pass_succeeded', 0.0))},
+            "forward_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('forward_pass_succeeded', 0.0))},
+            "backward_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('backward_pass_succeeded', 0.0))},
+            "defensive_area_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('defensive_area_pass_succeeded', 0.0))},
+            "final_third_area_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('final_third_area_pass_succeeded', 0.0))},
+            "middle_area_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('middle_area_pass_succeeded', 0.0))},
+            "long_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('long_pass_succeeded', 0.0))},
+            "short_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('short_pass_succeeded', 0.0))},
+            "sideways_pass_succeeded": {"skill": "Passing", "category": "Offensive Skills", "value": float(row.get('sideways_pass_succeeded', 0.0))},
+            "take_on": {"skill": "Dribbling", "category": "Offensive Skills", "value": float(row.get('take_on', 0.0))},
+            "take_on_succeeded": {"skill": "Dribbling", "category": "Offensive Skills", "value": float(row.get('take_on_succeeded', 0.0))},
+            "corner_kick": {"skill": "Set Pieces", "category": "Offensive Skills", "value": float(row.get('corner_kick', 0.0))},
+            "free_kick": {"skill": "Set Pieces", "category": "Offensive Skills", "value": float(row.get('free_kick', 0.0))},
+            "throw_in": {"skill": "Set Pieces", "category": "Offensive Skills", "value": float(row.get('throw_in', 0.0))},
         }
+
 
 
 
@@ -458,19 +459,19 @@ def calculate_attacking_skills(row, match_sheet):
         attacking_skills_value_mapping.pop(numerator_key)
         attacking_skills_value_mapping.pop(denominator_key)
         try:
-            return round(((numerator / denominator) * 100), 1)
+            return float(round(((numerator / denominator) * 100), 1))
         except ZeroDivisionError:
             return 0.0
         
 
     minutes_column = "play_time"
     attacking_skills_value_mapping[minutes_column] = int(
-        int(row.get(minutes_column, 0)) / 60000
+        int(row.get(minutes_column, 0.0)) / 60000
     )
 
     # Process other columns
     for column_name in attacking_skills_mapping:
-        attacking_skills_value_mapping[column_name] = int(row.get(column_name, 0))
+        attacking_skills_value_mapping[column_name] = float(row.get(column_name, 0.0))
 
 
     # Calculate percentage values
@@ -583,7 +584,7 @@ def calculate_videocard_defensive(row, match_sheet):
         defensive_value_mapping.pop(numerator_key)
         defensive_value_mapping.pop(denominator_key)
         try:
-            return round(((numerator / denominator) * 100), 1)
+            return float(round(((numerator / denominator) * 100), 1))
         except ZeroDivisionError:
             return 0.0
 
@@ -595,7 +596,7 @@ def calculate_videocard_defensive(row, match_sheet):
 
     # Process other columns
     for column_name in videocard_defensive_mapping:
-        defensive_value_mapping[column_name] = int(row[column_name])
+        defensive_value_mapping[column_name] = float(row.get(column_name, 0.0))
 
 
     # Calculate percentage values
@@ -722,7 +723,7 @@ def calculate_videocard_distributions(row, match_sheet):
         distribution_value_mapping.pop(numerator_key)
         distribution_value_mapping.pop(denominator_key)
         try:
-            return round(((numerator / denominator) * 100), 1)
+            return float(round(((numerator / denominator) * 100), 1))
         except ZeroDivisionError:
             return 0.0
         
@@ -734,7 +735,7 @@ def calculate_videocard_distributions(row, match_sheet):
 
     # Process other columns
     for column_name in videocard_distribution_mapping:
-        distribution_value_mapping[column_name] = int(row[column_name])
+        distribution_value_mapping[column_name] = float(row.get(column_name, 0.0))
 
 
     # Calculate percentage values
