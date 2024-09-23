@@ -23,6 +23,7 @@ class CustomAdminSite(AdminSite):
                     'Performance Metrics',
                     'Attacking Skills',
                     'Video Card Defensive',
+                    'Video Card Distributions',
                     'Defensive Performance Metrics',
                     'Offensive Performance Metrics',
                     'Daily Wellness Questionnaire',

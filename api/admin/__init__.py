@@ -1,19 +1,7 @@
 from django.contrib import admin
 import os
 
-from ..models import (
-                    WajoUser, APILog, OTPStore, PlayerIDMapping,
-                    OnboardingStep, WajoUserDevice,
-                    DailyWellnessQuestionnaire, DailyWellnessUserResponse,
-                    RPEQuestionnaire, RPEUserResponse,
-                    CardSuggestedAction, StatusCardMetrics, PerformanceMetrics,
-                    DefensivePerformanceMetrics, OffensivePerformanceMetrics,
-                    # ActivitiesQuestionnaire, 
-                    SchedulePlanningQuestionnaire, SchedulePlanningResponse, 
-                    RecurringEvents, OneTimeEvents, MatchEventsDataFile,
-                    GameStats, SeasonOverviewMetrics, WajoPerformanceIndex,
-                    Notification, AttackingSkills, VideoCardDefensive,
-                )   
+from ..models import *
 
 from .customize import admin_site
 
@@ -118,6 +106,9 @@ class AttackingSkillsAdmin(admin.ModelAdmin):
 class VideoCardDefensiveAdmin(admin.ModelAdmin):
     list_display = ['user', 'metrics', 'created_on', 'updated_on']
 
+class VideoCardDistributionsAdmin(admin.ModelAdmin):
+    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+
 
 admin_site.register(WajoUser, WajoUserAdmin)
 admin_site.register(APILog, APILogAdmin)
@@ -146,3 +137,4 @@ admin_site.register(SeasonOverviewMetrics, SeasonOverviewMetricsAdmin)
 admin_site.register(WajoPerformanceIndex, WajoPerformanceIndexAdmin)
 admin_site.register(AttackingSkills, AttackingSkillsAdmin)
 admin_site.register(VideoCardDefensive, VideoCardDefensiveAdmin)
+admin_site.register(VideoCardDistributions, VideoCardDistributionsAdmin)

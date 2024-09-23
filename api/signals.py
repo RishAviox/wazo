@@ -2,13 +2,8 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 import pandas as pd
 
-from .models import WajoUser, OnboardingStep 
-from .models import (
-                    DailyWellnessUserResponse,RPEUserResponse, MatchEventsDataFile,
-                    PlayerIDMapping, PerformanceMetrics, DefensivePerformanceMetrics,
-                    OffensivePerformanceMetrics, GameStats, SeasonOverviewMetrics,
-                    WajoPerformanceIndex, AttackingSkills, VideoCardDefensive,
-                )
+from .models import * 
+
 from .utils import *
 
 from datetime import date
@@ -140,8 +135,10 @@ def process_file(sender, instance, created, **kwargs):
                 offensive_performance_metrics = calculate_offensive_performance_metrics(stats_data)
                 season_overview = calculate_season_overview_metrics(stats_data)
 
+                # new formulas by freelancer
                 attacking_skills = calculate_attacking_skills(stats_data, match_sheet)
                 videocard_defensive = calculate_videocard_defensive(stats_data, match_sheet)
+                videocard_distributions = calculate_videocard_distributions(stats_data, match_sheet)
 
                 # Calculate pace and shooting scores
                 pace_score = calculate_pace_score(
@@ -292,6 +289,12 @@ def process_file(sender, instance, created, **kwargs):
                 VideoCardDefensive.objects.update_or_create(
                     user_id=user_phone,
                     defaults={'metrics': videocard_defensive}
+                )
+
+                # # Create or update the VideoCard Defensive Skills for the user
+                VideoCardDistributions.objects.update_or_create(
+                    user_id=user_phone,
+                    defaults={'metrics': videocard_distributions}
                 )
     else:
         print("Either Stats or GPS file is not available.")

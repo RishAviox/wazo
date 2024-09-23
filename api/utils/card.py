@@ -6,12 +6,7 @@ from django.db.models.fields.json import KeyTextTransform
 from django.utils.timezone import datetime
 
 
-from api.models import (
-                        OneTimeEvents, RecurringEvents, PerformanceMetrics, 
-                        DefensivePerformanceMetrics, OffensivePerformanceMetrics,
-                        StatusCardMetrics, GameStats, SeasonOverviewMetrics, WajoPerformanceIndex,
-                        AttackingSkills, VideoCardDefensive, 
-                    )
+from api.models import *
 from api.serializer import StatusCardMetricsSerializer, WajoUserSerializer
 from .status_metrics_calculations import *
 
@@ -66,6 +61,16 @@ def get_attacking_skills_metrics(user):
 def get_videocard_defensive_metrics(user):
     try:
         metrics = VideoCardDefensive.objects.filter(user=user).latest('updated_on')
+        return metrics.metrics
+    
+    except:
+        return {}
+    
+
+# for video card distributions skills
+def get_videocard_distributions_metrics(user):
+    try:
+        metrics = VideoCardDistributions.objects.filter(user=user).latest('updated_on')
         return metrics.metrics
     
     except:
@@ -679,6 +684,134 @@ def calculate_videocard_defensive(row, match_sheet):
     filtered_defensive_value_mapping = {k: v for k, v in defensive_value_mapping.items() if k in keys_to_keep}
 
     return filtered_defensive_value_mapping
+
+
+def calculate_videocard_distributions(row, match_sheet):
+    videocard_distribution_mapping = [
+        "rating",
+        "key_pass",
+        "pass_succeeded",
+        "pass",
+        "final_third_area_pass_succeeded",
+        "final_third_area_pass",
+        "cross_succeeded",
+        "cross",
+        "long_pass_succeeded",
+        "long_pass",
+        "short_pass_succeeded",
+        "short_pass",
+        "medium_range_pass_succeeded",
+        "medium_range_pass",
+        "forward_pass_succeeded",
+        "forward_pass",
+        "sideways_pass_succeeded",
+        "sideways_pass",
+        "backward_pass_succeeded",
+        "backward_pass",
+        "take_on_succeeded",
+        "take_on",
+    ]
+    # Initialize the dictionary for value mapping
+    distribution_value_mapping = {}
+
+
+    # Helper function to calculate percentage with error handling
+    def calculate_percentage(numerator_key: str, denominator_key: str):
+        numerator = distribution_value_mapping[numerator_key]
+        denominator = distribution_value_mapping[denominator_key]
+        distribution_value_mapping.pop(numerator_key)
+        distribution_value_mapping.pop(denominator_key)
+        try:
+            return round(((numerator / denominator) * 100), 1)
+        except ZeroDivisionError:
+            return 0.0
+        
+    # Process 'minutes' column
+    minutes_column = "play_time"
+    distribution_value_mapping["Play time"] = int(
+        int(row[minutes_column]) / 60000
+    )
+
+    # Process other columns
+    for column_name in videocard_distribution_mapping:
+        distribution_value_mapping[column_name] = int(row[column_name])
+
+
+    # Calculate percentage values
+    distribution_value_mapping["Passing"] = calculate_percentage(
+        "pass_succeeded",
+        "pass",
+    )
+
+    distribution_value_mapping["Final 1/3 Passes"] = calculate_percentage(
+        "final_third_area_pass_succeeded",
+        "final_third_area_pass",
+    )
+
+    distribution_value_mapping["Crosses"] = calculate_percentage(
+        "cross_succeeded",
+        "cross",
+    )
+
+    distribution_value_mapping["Long Passes"] = calculate_percentage(
+        "long_pass_succeeded",
+        "long_pass",
+    )
+
+    distribution_value_mapping["Short Passes"] = calculate_percentage(
+        "short_pass_succeeded",
+        "short_pass",
+    )
+
+    distribution_value_mapping["Med. Passes"] = calculate_percentage(
+        "medium_range_pass_succeeded",
+        "medium_range_pass",
+    )
+
+    distribution_value_mapping["Fwd. Passes"] = calculate_percentage(
+        "forward_pass_succeeded",
+        "forward_pass",
+    )
+
+    distribution_value_mapping["Side Passes"] = calculate_percentage(
+        "sideways_pass_succeeded",
+        "sideways_pass",
+    )
+
+    distribution_value_mapping["Back Passes"] = calculate_percentage(
+        "backward_pass_succeeded",
+        "backward_pass",
+    )
+
+
+    distribution_value_mapping["Take-ons"] = calculate_percentage(
+        "take_on_succeeded",
+        "take_on",
+    )
+
+    distribution_value_mapping["Play time"] = (
+        f"{distribution_value_mapping['Play time']}/{int(match_sheet.iloc[0]['full_time']) + int(match_sheet.iloc[0]['extra_full_time'])}"
+    )
+
+    distribution_value_mapping["Game Rating"] = float(
+        row["rating"]
+    ).__round__(1)
+
+
+    rename_dict = {
+        "key_pass": "Key Passes",
+        "rating": "Game Rating",
+    }
+
+    # Rename the dict keys
+    distribution_value_mapping = {
+        rename_dict.get(k, k): v for k, v in distribution_value_mapping.items()
+    }
+
+    print("distribution_value_mapping: ", distribution_value_mapping)
+
+    return distribution_value_mapping
+
 
 
 # for API view

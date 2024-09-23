@@ -1,9 +1,4 @@
-from .models import (
-                    WajoUser, OnboardingStep, 
-                    CardSuggestedAction, StatusCardMetrics, 
-                    DailyWellnessUserResponse, RPEUserResponse,
-                    OneTimeEvents, RecurringEvents,
-                )
+from .models import *
 from rest_framework import serializers
 import re
 
