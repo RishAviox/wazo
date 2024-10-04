@@ -140,6 +140,9 @@ def process_file(sender, instance, created, **kwargs):
                 videocard_defensive = calculate_videocard_defensive(stats_data, match_sheet)
                 videocard_distributions = calculate_videocard_distributions(stats_data, match_sheet)
 
+                gps_athletic_skills = calculate_gps_athletic_skills(gps_row)
+                gps_football_abilities = calculate_gps_football_abilities(gps_row)
+
                 # Calculate pace and shooting scores
                 pace_score = calculate_pace_score(
                     gps_row=gps_data,
@@ -295,6 +298,18 @@ def process_file(sender, instance, created, **kwargs):
                 VideoCardDistributions.objects.update_or_create(
                     user_id=user_phone,
                     defaults={'metrics': videocard_distributions}
+                )
+
+                # Create or update the GPS Athletic skills for the user
+                GPSAthleticSkills.objects.update_or_create(
+                    user_id=user_phone,
+                    defaults={'metrics': gps_athletic_skills}
+                )
+
+                # Create or update the GPS Football abilities for the user
+                GPSFootballAbilities.objects.update_or_create(
+                    user_id=user_phone,
+                    defaults={'metrics': gps_football_abilities}
                 )
     else:
         print("Either Stats or GPS file is not available.")

@@ -13,6 +13,7 @@ from .views.card import (
                     GreetingAPI, InsightAPI, VideoAnalysisCardAPI, GameStatsAPI, SeasonOverviewMetricsAPI,
                     WajoPerformanceIndexAPI, AttackingSkillsAPI, VideoCardDefensiveAPI, VideoCardDistributionsAPI,
                 )
+from .views.gps import GPSAthleticSkillsAPI, GPSFootballAbilitiesAPI
 
 urlpatterns = [
     path('auth/sendOTP', SendOTPAPI.as_view(), name='send-otp'),
@@ -52,6 +53,10 @@ urlpatterns = [
     path('videocard-defensive', VideoCardDefensiveAPI.as_view(), name='videocard-defensive-metrics'),
     # videocard distributions skills
     path('videocard-distributions', VideoCardDistributionsAPI.as_view(), name='videocard-distributions-metrics'),
+    # GPS Athletic skills
+    path('gps-athletic-skills', GPSAthleticSkillsAPI.as_view(), name='gps-athletic-skills-metrics'),
+    # GPS Football abilities
+    path('gps-football-abilities', GPSFootballAbilitiesAPI.as_view(), name='gps-football-abilities-metrics'),
     
     path('notifications/<str:fcm_token>', NotificationsAPI.as_view(), name='wajo-notifications'),
 

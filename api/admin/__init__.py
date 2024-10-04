@@ -109,6 +109,12 @@ class VideoCardDefensiveAdmin(admin.ModelAdmin):
 class VideoCardDistributionsAdmin(admin.ModelAdmin):
     list_display = ['user', 'metrics', 'created_on', 'updated_on']
 
+class GPSAthleticSkillsAdmin(admin.ModelAdmin):
+    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+
+class GPSFootballAbilitiesAdmin(admin.ModelAdmin):
+    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+
 
 admin_site.register(WajoUser, WajoUserAdmin)
 admin_site.register(APILog, APILogAdmin)
@@ -138,3 +144,5 @@ admin_site.register(WajoPerformanceIndex, WajoPerformanceIndexAdmin)
 admin_site.register(AttackingSkills, AttackingSkillsAdmin)
 admin_site.register(VideoCardDefensive, VideoCardDefensiveAdmin)
 admin_site.register(VideoCardDistributions, VideoCardDistributionsAdmin)
+admin_site.register(GPSAthleticSkills, GPSAthleticSkillsAdmin)
+admin_site.register(GPSFootballAbilities, GPSFootballAbilitiesAdmin)

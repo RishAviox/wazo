@@ -24,6 +24,8 @@ class CustomAdminSite(AdminSite):
                     'Attacking Skills',
                     'Video Card Defensive',
                     'Video Card Distributions',
+                    'GPS Athletic Skills',
+                    'GPS Football Abilities',
                     'Defensive Performance Metrics',
                     'Offensive Performance Metrics',
                     'Daily Wellness Questionnaire',

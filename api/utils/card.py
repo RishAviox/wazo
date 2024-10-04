@@ -459,7 +459,7 @@ def calculate_attacking_skills(row, match_sheet):
         attacking_skills_value_mapping.pop(numerator_key)
         attacking_skills_value_mapping.pop(denominator_key)
         try:
-            return float(round(((numerator / denominator) * 100), 1))
+            return f"{int(numerator)}/{int(denominator)} ({round(((numerator / denominator) * 100), 1)}%)"
         except ZeroDivisionError:
             return 0.0
         
@@ -509,7 +509,7 @@ def calculate_attacking_skills(row, match_sheet):
     )
 
     attacking_skills_value_mapping["play_time"] = (
-        f"{attacking_skills_value_mapping['play_time']}/{int(match_sheet.iloc[0]['full_time']) + int(match_sheet.iloc[0]['extra_full_time'])}"
+        f"{attacking_skills_value_mapping['play_time']}/{int(match_sheet.iloc[0]['full_time']) + int(match_sheet.iloc[0]['extra_full_time'])} min"
     )
 
     attacking_skills_value_mapping["Game Rating"] = float(
@@ -584,7 +584,7 @@ def calculate_videocard_defensive(row, match_sheet):
         defensive_value_mapping.pop(numerator_key)
         defensive_value_mapping.pop(denominator_key)
         try:
-            return float(round(((numerator / denominator) * 100), 1))
+            return f"{int(numerator)}/{int(denominator)} ({round(((numerator / denominator) * 100), 1)}%)"
         except ZeroDivisionError:
             return 0.0
 
@@ -642,7 +642,7 @@ def calculate_videocard_defensive(row, match_sheet):
         defensive_value_mapping["Defensive Line Support"] = 0.0
 
     defensive_value_mapping["Play time"] = (
-        f"{defensive_value_mapping['Play time']}/{int(match_sheet.iloc[0]['full_time']) + int(match_sheet.iloc[0]['extra_full_time'])}"
+        f"{defensive_value_mapping['Play time']}/{int(match_sheet.iloc[0]['full_time']) + int(match_sheet.iloc[0]['extra_full_time'])} min"
     )
 
     defensive_value_mapping["Game Rating"] = float(row["rating"]).__round__(1)
@@ -723,7 +723,7 @@ def calculate_videocard_distributions(row, match_sheet):
         distribution_value_mapping.pop(numerator_key)
         distribution_value_mapping.pop(denominator_key)
         try:
-            return float(round(((numerator / denominator) * 100), 1))
+            return f"{int(numerator)}/{int(denominator)} ({round(((numerator / denominator) * 100), 1)}%)"
         except ZeroDivisionError:
             return 0.0
         
@@ -791,7 +791,7 @@ def calculate_videocard_distributions(row, match_sheet):
     )
 
     distribution_value_mapping["Play time"] = (
-        f"{distribution_value_mapping['Play time']}/{int(match_sheet.iloc[0]['full_time']) + int(match_sheet.iloc[0]['extra_full_time'])}"
+        f"{distribution_value_mapping['Play time']}/{int(match_sheet.iloc[0]['full_time']) + int(match_sheet.iloc[0]['extra_full_time'])} min"
     )
 
     distribution_value_mapping["Game Rating"] = float(
@@ -1196,4 +1196,3 @@ def get_prompt_for_insight(user, card):
             return prompt
     
     return None
-
