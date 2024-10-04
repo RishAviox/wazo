@@ -4,28 +4,28 @@ from api.models import GPSAthleticSkills, GPSFootballAbilities
 
 
 def calculate_gps_athletic_skills(row):
-    metric_mappings = [
-        "Corrected Play Time (min)",
-        "Top Speed (km/h)",
-        "Session Intensity Speed",
-        "Dist. Covered (m)",
-        "Max. Intensity Run (m)",
-        "High Intensity Run (#)",
-        "High Intensity Run (m)",
-        "Max. Int. Acceleration (#)",
-        "Max. Int. Acceleration (m)",
-        "Max. Int. Deceleration (#)",
-        "Max. Int. Deceleration (m)",
-        "Session Intensity Acceleration",
-        "High Int. Acceleration (#)",
-        "High Int. Acceleration (m)",
-        "High Int. Deceleration (#)",
-        "High Int. Deceleration (m)",
-        "Jogging (m)",
-        "Walking (m)",
-        "Session Volume",
-        "Session Intensity",
-    ]
+    metric_mappings = {
+        "Corrected Play Time (min)": "min",
+        "Top Speed (km/h)": "km/h",
+        "Session Intensity Speed": "Km/h",
+        "Dist. Covered (m)": "m",
+        "Max. Intensity Run (m)": "m",
+        "High Intensity Run (#)": "count",
+        "High Intensity Run (m)": "m",
+        "Max. Int. Acceleration (#)": "count",
+        "Max. Int. Acceleration (m)": "m",
+        "Max. Int. Deceleration (#)": "count",
+        "Max. Int. Deceleration (m)": "m",
+        "Session Intensity Acceleration": "count",
+        "High Int. Acceleration (#)": "count",
+        "High Int. Acceleration (m)": "m",
+        "High Int. Deceleration (#)": "count",
+        "High Int. Deceleration (m)": "m",
+        "Jogging (m)": "m",
+        "Walking (m)": "m",
+        "Session Volume": "m",
+        "Session Intensity": "m",
+    }
 
     performance_weights = {
         "Corrected Play Time (min)": 0,
@@ -209,11 +209,8 @@ def calculate_gps_athletic_skills(row):
 
     metric_value_mapping = {}
 
-    for column_name in metric_mappings:
-        if isinstance(row[column_name], numpy.int64):
-            metric_value_mapping[column_name] = int(row[column_name])
-        else:
-            metric_value_mapping[column_name] = float(row[column_name].iloc[0])
+    for column_name, _ in metric_mappings.items():
+        metric_value_mapping[column_name] = int(row[column_name].iloc[0])
 
     metric_value_mapping_copy = metric_value_mapping.copy()
     play_time = metric_value_mapping["Corrected Play Time (min)"]
@@ -232,7 +229,7 @@ def calculate_gps_athletic_skills(row):
                 )
                 * performance_weights[metric_1]
                 / 100
-            )
+            ), f"{metric_value_mapping_copy[metric_1]} {metric_mappings[metric_1]}"
         elif len(data) == 2:
             metric_1 = data[0].strip()
             metric_2 = data[1].strip()
@@ -250,7 +247,9 @@ def calculate_gps_athletic_skills(row):
                 * performance_weights[metric_2]
                 / 100
             )
-            return response_1 + response_2
+            return (
+                    response_1 + response_2
+            ), f"{int(metric_value_mapping_copy[metric_1])}/{int(metric_value_mapping_copy[metric_2])} {metric_mappings[metric_1]}|{metric_mappings[metric_2]}"
 
 
     sum_of_pws = 0
@@ -258,8 +257,8 @@ def calculate_gps_athletic_skills(row):
         if skill == "Play Time":
             response[skill] = f'{metric_value_mapping["Corrected Play Time (min)"]} min'
         else:
-            pws = calculate_pws(skill, metric)
-            response[skill] = pws
+            pws, value = calculate_pws(skill, metric)
+            response[skill] = value
             sum_of_pws += pws
 
     response["Athletic Skills"] = round(sum_of_pws, 1)
@@ -269,19 +268,19 @@ def calculate_gps_athletic_skills(row):
 
 def calculate_gps_football_abilities(row):
 
-    metric_mappings = [
-        "Corrected Play Time (min)",
-        "Dribbling Count (#)",
-        "Dribbling Dist. (m)",
-        "Power Kicks (#)",
-        "Kick Power (km/h)",
-        "Low Int. Kicks (#)",
-        "Med. Int. Kicks (#)",
-        "High Int. Kicks (#)",
-        "Max. Intensity Run (#)",
-        "Session Volume",
-        "Session Intensity",
-    ]
+    metric_mappings = {
+        "Corrected Play Time (min)": "min",
+        "Dribbling Count (#)": "count",
+        "Dribbling Dist. (m)": "m",
+        "Power Kicks (#)": "count",
+        "Kick Power (km/h)": "km/h",
+        "Low Int. Kicks (#)": "count",
+        "Med. Int. Kicks (#)": "count",
+        "High Int. Kicks (#)": "count",
+        "Max. Intensity Run (#)": "count",
+        "Session Volume": "m",
+        "Session Intensity": "m",
+    }
 
     performance_weights = {
         "Dribbling Count (#)": 15,
@@ -408,11 +407,8 @@ def calculate_gps_football_abilities(row):
 
     metric_value_mapping = {}
 
-    for column_name in metric_mappings:
-        if isinstance(row[column_name], numpy.int64):
-            metric_value_mapping[column_name] = int(row[column_name])
-        else:
-            metric_value_mapping[column_name] = float(row[column_name].iloc[0])
+    for column_name in metric_mappings.keys():
+        metric_value_mapping[column_name] = int(row[column_name].iloc[0])
 
     metric_value_mapping_copy = metric_value_mapping.copy()
     play_time = metric_value_mapping["Corrected Play Time (min)"]
@@ -431,7 +427,7 @@ def calculate_gps_football_abilities(row):
                 )
                 * performance_weights[metric_1]
                 / 100
-            )
+            ), f"{metric_value_mapping_copy[metric_1]} {metric_mappings[metric_1]}"
         elif len(data) == 2:
             metric_1 = data[0].strip()
             metric_2 = data[1].strip()
@@ -449,7 +445,7 @@ def calculate_gps_football_abilities(row):
                 * performance_weights[metric_2]
                 / 100
             )
-            return response_1 + response_2
+            return (response_1 + response_2), f"{int(metric_value_mapping_copy[metric_1])}/{int(metric_value_mapping_copy[metric_2])} {metric_mappings[metric_1]}|{metric_mappings[metric_2]}"
 
 
     sum_of_pws = 0
@@ -457,8 +453,8 @@ def calculate_gps_football_abilities(row):
         if skill == "Play Time":
             response[skill] = f'{metric_value_mapping["Corrected Play Time (min)"]} min'
         else:
-            pws = calculate_pws(metric)
-            response[skill] = pws
+            pws, value = calculate_pws(metric)
+            response[skill] = value
             sum_of_pws += pws
 
     response["Football Skills"] = round(sum_of_pws, 1)

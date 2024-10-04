@@ -461,17 +461,17 @@ def calculate_attacking_skills(row, match_sheet):
         try:
             return f"{int(numerator)}/{int(denominator)} ({round(((numerator / denominator) * 100), 1)}%)"
         except ZeroDivisionError:
-            return 0.0
+            return 0
         
 
     minutes_column = "play_time"
     attacking_skills_value_mapping[minutes_column] = int(
-        int(row.get(minutes_column, 0.0)) / 60000
+        int(row.get(minutes_column, 0)) / 60000
     )
 
     # Process other columns
     for column_name in attacking_skills_mapping:
-        attacking_skills_value_mapping[column_name] = float(row.get(column_name, 0.0))
+        attacking_skills_value_mapping[column_name] = int(row.get(column_name, 0))
 
 
     # Calculate percentage values
@@ -586,7 +586,7 @@ def calculate_videocard_defensive(row, match_sheet):
         try:
             return f"{int(numerator)}/{int(denominator)} ({round(((numerator / denominator) * 100), 1)}%)"
         except ZeroDivisionError:
-            return 0.0
+            return 0
 
     # Process 'minutes' column
     minutes_column = "play_time"
@@ -596,7 +596,7 @@ def calculate_videocard_defensive(row, match_sheet):
 
     # Process other columns
     for column_name in videocard_defensive_mapping:
-        defensive_value_mapping[column_name] = float(row.get(column_name, 0.0))
+        defensive_value_mapping[column_name] = int(row.get(column_name, 0))
 
 
     # Calculate percentage values
@@ -639,7 +639,7 @@ def calculate_videocard_defensive(row, match_sheet):
             )
         ) * 100
     except ZeroDivisionError:
-        defensive_value_mapping["Defensive Line Support"] = 0.0
+        defensive_value_mapping["Defensive Line Support"] = 0
 
     defensive_value_mapping["Play time"] = (
         f"{defensive_value_mapping['Play time']}/{int(match_sheet.iloc[0]['full_time']) + int(match_sheet.iloc[0]['extra_full_time'])} min"
@@ -725,7 +725,7 @@ def calculate_videocard_distributions(row, match_sheet):
         try:
             return f"{int(numerator)}/{int(denominator)} ({round(((numerator / denominator) * 100), 1)}%)"
         except ZeroDivisionError:
-            return 0.0
+            return 0
         
     # Process 'minutes' column
     minutes_column = "play_time"
@@ -735,7 +735,7 @@ def calculate_videocard_distributions(row, match_sheet):
 
     # Process other columns
     for column_name in videocard_distribution_mapping:
-        distribution_value_mapping[column_name] = float(row.get(column_name, 0.0))
+        distribution_value_mapping[column_name] = int(row.get(column_name, 0))
 
 
     # Calculate percentage values
