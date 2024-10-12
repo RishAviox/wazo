@@ -537,7 +537,7 @@ def calculate_attacking_skills(row, match_sheet):
 
     # Rename the dict keys
     attacking_skills_value_mapping = {
-        rename_dict.get(k, k): v for k, v in attacking_skills_value_mapping.items()
+        rename_dict.get(k, k): str(v) for k, v in attacking_skills_value_mapping.items()
     }
 
     print("attacking_skills_value_mapping: ", attacking_skills_value_mapping)
@@ -665,8 +665,6 @@ def calculate_videocard_defensive(row, match_sheet):
         rename_dict.get(k, k): v for k, v in defensive_value_mapping.items()
     }
 
-    print("defensive_value_mapping: ", defensive_value_mapping)
-
     # Keys to keep
     keys_to_keep = {
         "Play time",
@@ -682,7 +680,9 @@ def calculate_videocard_defensive(row, match_sheet):
     }
 
     # Filter defensive_value_mapping
-    filtered_defensive_value_mapping = {k: v for k, v in defensive_value_mapping.items() if k in keys_to_keep}
+    filtered_defensive_value_mapping = {k: str(v) for k, v in defensive_value_mapping.items() if k in keys_to_keep}
+    
+    print("filtered_defensive_value_mapping: ", filtered_defensive_value_mapping)
 
     return filtered_defensive_value_mapping
 
@@ -806,7 +806,7 @@ def calculate_videocard_distributions(row, match_sheet):
 
     # Rename the dict keys
     distribution_value_mapping = {
-        rename_dict.get(k, k): v for k, v in distribution_value_mapping.items()
+        rename_dict.get(k, k): str(v) for k, v in distribution_value_mapping.items()
     }
 
     print("distribution_value_mapping: ", distribution_value_mapping)
