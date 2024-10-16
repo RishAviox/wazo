@@ -10,16 +10,16 @@ def calculate_gps_athletic_skills(row):
         "Session Intensity Speed": "Km/h",
         "Dist. Covered (m)": "m",
         "Max. Intensity Run (m)": "m",
-        "High Intensity Run (#)": "count",
+        "High Intensity Run (#)": "",
         "High Intensity Run (m)": "m",
-        "Max. Int. Acceleration (#)": "count",
+        "Max. Int. Acceleration (#)": "",
         "Max. Int. Acceleration (m)": "m",
-        "Max. Int. Deceleration (#)": "count",
+        "Max. Int. Deceleration (#)": "",
         "Max. Int. Deceleration (m)": "m",
-        "Session Intensity Acceleration": "count",
-        "High Int. Acceleration (#)": "count",
+        "Session Intensity Acceleration": "",
+        "High Int. Acceleration (#)": "",
         "High Int. Acceleration (m)": "m",
-        "High Int. Deceleration (#)": "count",
+        "High Int. Deceleration (#)": "",
         "High Int. Deceleration (m)": "m",
         "Jogging (m)": "m",
         "Walking (m)": "m",
@@ -249,7 +249,7 @@ def calculate_gps_athletic_skills(row):
             )
             return (
                     response_1 + response_2
-            ), f"{int(metric_value_mapping_copy[metric_1])}/{int(metric_value_mapping_copy[metric_2])} {metric_mappings[metric_1]}|{metric_mappings[metric_2]}"
+            ), f"{int(metric_value_mapping_copy[metric_1])}/{int(metric_value_mapping_copy[metric_2])} {metric_mappings[metric_1]}{metric_mappings[metric_2]}"
 
 
     sum_of_pws = 0
@@ -270,14 +270,14 @@ def calculate_gps_football_abilities(row):
 
     metric_mappings = {
         "Corrected Play Time (min)": "min",
-        "Dribbling Count (#)": "count",
+        "Dribbling Count (#)": "",
         "Dribbling Dist. (m)": "m",
-        "Power Kicks (#)": "count",
+        "Power Kicks (#)": "",
         "Kick Power (km/h)": "km/h",
-        "Low Int. Kicks (#)": "count",
-        "Med. Int. Kicks (#)": "count",
-        "High Int. Kicks (#)": "count",
-        "Max. Intensity Run (#)": "count",
+        "Low Int. Kicks (#)": "",
+        "Med. Int. Kicks (#)": "",
+        "High Int. Kicks (#)": "",
+        "Max. Intensity Run (#)": "",
         "Session Volume": "m",
         "Session Intensity": "m",
     }
@@ -445,7 +445,7 @@ def calculate_gps_football_abilities(row):
                 * performance_weights[metric_2]
                 / 100
             )
-            return (response_1 + response_2), f"{int(metric_value_mapping_copy[metric_1])}/{int(metric_value_mapping_copy[metric_2])} {metric_mappings[metric_1]}|{metric_mappings[metric_2]}"
+            return (response_1 + response_2), f"{int(metric_value_mapping_copy[metric_1])}/{int(metric_value_mapping_copy[metric_2])} {metric_mappings[metric_1]}{metric_mappings[metric_2]}"
 
 
     sum_of_pws = 0

@@ -459,7 +459,7 @@ def calculate_attacking_skills(row, match_sheet):
         attacking_skills_value_mapping.pop(numerator_key)
         attacking_skills_value_mapping.pop(denominator_key)
         try:
-            return f"{int(numerator)}/{int(denominator)} ({round(((numerator / denominator) * 100), 1)}%)"
+            return f"{int(numerator)}/{int(denominator)} ({int(((numerator / denominator) * 100))}%)"
         except ZeroDivisionError:
             return 0
         
@@ -584,7 +584,7 @@ def calculate_videocard_defensive(row, match_sheet):
         defensive_value_mapping.pop(numerator_key)
         defensive_value_mapping.pop(denominator_key)
         try:
-            return f"{int(numerator)}/{int(denominator)} ({round(((numerator / denominator) * 100), 1)}%)"
+            return f"{int(numerator)}/{int(denominator)} ({int(((numerator / denominator) * 100))}%)"
         except ZeroDivisionError:
             return 0
 
@@ -723,7 +723,7 @@ def calculate_videocard_distributions(row, match_sheet):
         distribution_value_mapping.pop(numerator_key)
         distribution_value_mapping.pop(denominator_key)
         try:
-            return f"{int(numerator)}/{int(denominator)} ({round(((numerator / denominator) * 100), 1)}%)"
+            return f"{int(numerator)}/{int(denominator)} ({int(((numerator / denominator) * 100))}%)"
         except ZeroDivisionError:
             return 0
         
