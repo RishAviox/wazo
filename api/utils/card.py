@@ -9,6 +9,7 @@ from django.utils.timezone import datetime
 from api.models import *
 from api.serializer import StatusCardMetricsSerializer, WajoUserSerializer
 from .status_metrics_calculations import *
+from .gps import get_gps_athletic_skills_metrics, get_gps_football_abilities_metrics
 
 
 # for status card
@@ -1193,6 +1194,106 @@ def get_prompt_for_insight(user, card):
                 'offensive-performance-metrics': get_offensive_performance_metrics(user)
             }
             prompt = f"Generate a concise expert analysis for athletes based only in {language} language on the provided offensive performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Data provided:{user_data}. Example: 'This athlete has strong shooting and passing skills but may benefit from targeted drills to improve pass accuracy. Suggest incorporating dribbling and set piece work to further enhance offensive performance.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+    
+    elif card == 'AttackingSkills':
+        if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                player_data.append(get_attacking_skills_metrics(player))
+
+            user_data = {
+                'team-attacking-skills-metrics': player_data
+            }
+            print("team-attacking-skills-metrics for coach: ", user_data)
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided performance metrics for the team's attacking skills, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}. Example: 'The team displays effective attacking movement and positioning but lacks finishing consistency. Focus on improving shot accuracy and decision-making in the final third. Suggested drills: Finishing Under Pressure, Quick Counter Attacks, and Off-the-Ball Runs.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+        
+        else:
+            user_data = {
+                'attacking-skills-metrics': get_attacking_skills_metrics(user)
+            }
+            prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided performance metrics, focusing on their attacking skills, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the player. Data provided:{user_data}. Example: 'Your attacking skills show strong movement and positioning, with solid goal contributions. Keep improving finishing accuracy and decision-making in the final third. Focus on drills for quick finishing and off-the-ball runs.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+
+    elif card == 'VideocardDefensive':
+        if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                player_data.append(get_videocard_defensive_metrics(player))
+
+            user_data = {
+                'team-defensive-skills-metrics': player_data
+            }
+            print("team-defensive-skills-metrics for coach: ", user_data)
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided performance metrics for the team's defensive skills, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}. Example: 'The team demonstrates strong tackling and interception numbers but needs better defensive organization and discipline. Focus on improving defensive transitions and positioning. Suggested drills: Defensive Shape, 1v1 Defending, and Transition Defense.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+        
+        else:
+            user_data = {
+                'defensive-skills-metrics': get_videocard_defensive_metrics(user)
+            }
+            prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided performance metrics, focusing on their defensive skills, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the player. Data provided:{user_data}. Example: 'Your tackling and interception skills are strong, but work on improving positioning and defensive discipline. Focus on drills for 1v1 defending, marking, and maintaining shape during transitions.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+
+    elif card == 'VideocardDistribution':
+        if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                player_data.append(get_videocard_distributions_metrics(player))
+
+            user_data = {
+                'team-distribution-skills-metrics': player_data
+            }
+            print("team-distribution-skills-metrics for coach: ", user_data)
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided performance metrics for the team's distribution skills, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}. Example: 'The team shows strong passing accuracy but struggles with long-range distribution and decision-making under pressure. Focus on drills for long passes, switching play, and building from the back.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+        
+        else:
+            user_data = {
+                'distribution-skills-metrics': get_videocard_distributions_metrics(user)
+            }
+            prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided performance metrics, focusing on their distribution skills, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the player. Data provided:{user_data}. Example: 'Your short passing is accurate, but improve decision-making for long passes and switches under pressure. Focus on drills for long-range passing and building from the back.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+
+    elif card == 'AthleticSkills':
+        if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                player_data.append(get_gps_athletic_skills_metrics(player))
+
+            user_data = {
+                'team-gps-athletic-skills-metrics': player_data
+            }
+            print("team-gps-athletic-skills-metrics for coach: ", user_data)
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided GPS athletic performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}. Example: 'The team shows strong sprint speeds and distance covered but needs to improve acceleration and deceleration in high-pressure situations. Focus on drills for agility, quick burst sprints, and endurance training.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+        
+        else:
+            user_data = {
+                'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(user)
+            }
+            prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided GPS athletic performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the player. Data provided:{user_data}. Example: 'Your top speed and distance covered are impressive, but work on improving acceleration and recovery during transitions. Focus on agility drills, quick sprints, and endurance.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+
+    elif card == 'FootballAbilities':
+        if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                player_data.append(get_gps_football_abilities_metrics(player))
+
+            user_data = {
+                'team-gps-football-abilities-metrics': player_data
+            }
+            print("team-gps-football-abilities-metrics for coach: ", user_data)
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided GPS football performance metrics for the team, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the coach. Data provided:{user_data}. Example: 'The team excels in high-speed running and covering distance, but needs improvement in recovery and positioning during transitions. Focus on drills for endurance, positioning, and quick directional changes.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+        
+        else:
+            user_data = {
+                'gps-football-abilities-metrics': get_gps_football_abilities_metrics(user)
+            }
+            prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided GPS football performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the player. Data provided:{user_data}. Example: 'You have strong high-speed runs and cover good distance, but work on improving your recovery speed and positioning in transitions. Focus on drills for endurance, agility, and quick direction changes.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
     
     return None
