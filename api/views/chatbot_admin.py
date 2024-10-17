@@ -176,7 +176,6 @@ class RecurringEventsCreateView(APIView):
 
     def post(self, request, *args, **kwargs):
         data = request.data.copy() # mutable copy
-        print(data)
         phone_no = data.get('phone_no', None)
         if not phone_no:
             return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -186,7 +185,8 @@ class RecurringEventsCreateView(APIView):
         except WajoUser.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        data['user'] = user
+        data['user'] = phone_no
+        print("event data: ", data)
         serializer = RecurringEventsSerializer(data=data)
         if serializer.is_valid():
             serializer.save()
@@ -201,7 +201,6 @@ class OneTimeEventsCreateView(APIView):
 
     def post(self, request, *args, **kwargs):
         data = request.data.copy() # mutable copy
-        print(data)
         phone_no = data.get('phone_no', None)
         if not phone_no:
             return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -211,7 +210,8 @@ class OneTimeEventsCreateView(APIView):
         except WajoUser.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        data['user'] = user
+        data['user'] = phone_no
+        print("event data: ", data)
         serializer = OneTimeEventsSerializer(data=data)
         if serializer.is_valid():
             serializer.save()
