@@ -581,8 +581,7 @@ def calculate_videocard_defensive(row, match_sheet):
     def calculate_percentage(numerator_key: str, denominator_key: str):
         numerator = defensive_value_mapping[numerator_key]
         denominator = defensive_value_mapping[denominator_key]
-        defensive_value_mapping.pop(numerator_key)
-        defensive_value_mapping.pop(denominator_key)
+
         try:
             return f"{int(numerator)}/{int(denominator)} ({int(((numerator / denominator) * 100))}%)"
         except ZeroDivisionError:
@@ -630,6 +629,11 @@ def calculate_videocard_defensive(row, match_sheet):
         "defensive_area_pass",
     )
 
+    defensive_value_mapping["Clearances"] = calculate_percentage(
+        "aerial_clearance_succeeded",
+        "aerial_clearance",
+    )
+
     try:
         defensive_value_mapping["Defensive Line Support"] = (
             defensive_value_mapping["defensive_line_support_succeeded"]
@@ -658,6 +662,12 @@ def calculate_videocard_defensive(row, match_sheet):
         "key_pass": "Key Passes",
         "control_under_pressure": "Control Under Pressure",
         "offside": "Offside",
+        "intercept": "Interceptions",
+        "intervention": "Interventions",
+        "block": "Blocks",
+        "recovery": "Recoveries",
+        "mistake": "Mistakes",
+        "own_goal": "Own Goals"
     }
 
     # Rename the dict keys
@@ -666,21 +676,28 @@ def calculate_videocard_defensive(row, match_sheet):
     }
 
     # Keys to keep
-    keys_to_keep = {
+    keys_to_keep = (
         "Play time",
         "Game Rating",
-        "Shots Blocked",
         "Tackles",
         "Aerial Clearances",
         "Aerial Duels",
         "Ground Duels",
         "Loose Ball Duels",
+        "Interceptions",
+        "Interventions",
+        "Clearances",
+        "Blocks",
+        "Shots Blocked",
         "Defensive Area Passes",
-        "Defensive Line Support"
-    }
+        "Defensive Line Support",
+        "Recoveries",
+        "Mistakes",
+        "Own Goals"
+    )
 
     # Filter defensive_value_mapping
-    filtered_defensive_value_mapping = {k: str(v) for k, v in defensive_value_mapping.items() if k in keys_to_keep}
+    filtered_defensive_value_mapping = {k: defensive_value_mapping[k] for k in keys_to_keep}
     
     print("filtered_defensive_value_mapping: ", filtered_defensive_value_mapping)
 
