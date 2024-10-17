@@ -697,7 +697,7 @@ def calculate_videocard_defensive(row, match_sheet):
     )
 
     # Filter defensive_value_mapping
-    filtered_defensive_value_mapping = {k: defensive_value_mapping[k] for k in keys_to_keep}
+    filtered_defensive_value_mapping = {k: str(defensive_value_mapping[k]) for k in keys_to_keep}
     
     print("filtered_defensive_value_mapping: ", filtered_defensive_value_mapping)
 
