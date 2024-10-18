@@ -1,6 +1,11 @@
-import numpy
-
 from api.models import GPSAthleticSkills, GPSFootballAbilities
+
+
+def __convert_m_to_km(value, metric_unit_mapping="m"):
+        if value >= 1000:
+            value = round(value/1000, 2)
+            metric_unit_mapping = "km"
+        return value, metric_unit_mapping
 
 
 def calculate_gps_athletic_skills(row):
@@ -218,21 +223,28 @@ def calculate_gps_athletic_skills(row):
         pnm = calculate_pnm(key, value, play_time)
         metric_value_mapping[key] = pnm
 
-
     def calculate_pws(skill, metric):
         data = metric.split(",")
         if len(data) == 1:
             metric_1 = data[0].strip()
+            metric_unit_mapping = metric_mappings[metric_1]
+            value = metric_value_mapping_copy[metric_1]
+            if metric_unit_mapping == "m":
+                value, metric_unit_mapping = __convert_m_to_km(value, metric_unit_mapping)
             return (
                 calculate_performance_base_scores(
                     metric_1, metric_value_mapping_copy[metric_1]
                 )
                 * performance_weights[metric_1]
                 / 100
-            ), f"{metric_value_mapping_copy[metric_1]} {metric_mappings[metric_1]}"
+            ), f"{value} {metric_unit_mapping}"
         elif len(data) == 2:
             metric_1 = data[0].strip()
             metric_2 = data[1].strip()
+            metric_unit_mapping = metric_mappings[metric_2]
+            value = metric_value_mapping_copy[metric_2]
+            if metric_unit_mapping == "m":
+                value, metric_unit_mapping = __convert_m_to_km(value, metric_unit_mapping)
             response_1 = (
                 calculate_performance_base_scores(
                     metric_1, metric_value_mapping_copy[metric_1]
@@ -249,7 +261,7 @@ def calculate_gps_athletic_skills(row):
             )
             return (
                     response_1 + response_2
-            ), f"{int(metric_value_mapping_copy[metric_1])}/{int(metric_value_mapping_copy[metric_2])} {metric_mappings[metric_1]}{metric_mappings[metric_2]}"
+            ), f"{int(metric_value_mapping_copy[metric_1])}|{value} {metric_mappings[metric_1]}{metric_unit_mapping}"
 
 
     sum_of_pws = 0
@@ -278,8 +290,8 @@ def calculate_gps_football_abilities(row):
         "Med. Int. Kicks (#)": "",
         "High Int. Kicks (#)": "",
         "Max. Intensity Run (#)": "",
-        "Session Volume": "m",
-        "Session Intensity": "m",
+        "Session Volume": "",
+        "Session Intensity": "",
     }
 
     performance_weights = {
@@ -421,6 +433,10 @@ def calculate_gps_football_abilities(row):
         data = metric.split("|")
         if len(data) == 1:
             metric_1: str = data[0].strip()
+            metric_unit_mapping = metric_mappings[metric_1]
+            value = metric_value_mapping_copy[metric_1]
+            if metric_unit_mapping == "m":
+                value, metric_unit_mapping = __convert_m_to_km(value, metric_unit_mapping)
             return (
                 calculate_performance_base_scores(
                     metric_1, metric_value_mapping_copy[metric_1]
@@ -431,6 +447,10 @@ def calculate_gps_football_abilities(row):
         elif len(data) == 2:
             metric_1 = data[0].strip()
             metric_2 = data[1].strip()
+            metric_unit_mapping = metric_mappings[metric_2]
+            value = metric_value_mapping_copy[metric_2]
+            if metric_unit_mapping == "m":
+                value, metric_unit_mapping = __convert_m_to_km(value, metric_unit_mapping)
             response_1 = (
                 calculate_performance_base_scores(
                     metric_1, metric_value_mapping_copy[metric_1]
@@ -445,7 +465,7 @@ def calculate_gps_football_abilities(row):
                 * performance_weights[metric_2]
                 / 100
             )
-            return (response_1 + response_2), f"{int(metric_value_mapping_copy[metric_1])}/{int(metric_value_mapping_copy[metric_2])} {metric_mappings[metric_1]}{metric_mappings[metric_2]}"
+            return (response_1 + response_2), f"{int(metric_value_mapping_copy[metric_1])}|{value} {metric_mappings[metric_1]}{metric_unit_mapping}"
 
 
     sum_of_pws = 0
