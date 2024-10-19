@@ -7,12 +7,12 @@ STATUS_METRIC_WEIGHTS = {
         "Recovery": 0.15
     },
     "Overall Wellness": {
-        "Mood": 0.15,
+        "Mood": 0.2,
         "Sleep Quality": 0.2,
         "Energy Level": 0.15,
-        "Muscle Soreness": 0.1,
+        "Muscle Soreness": 0.15,
         "Diet": 0.1,
-        "Stress Level": 0.15,
+        "Stress Level": 0.1,
         "Pain Level": 0.1,
         "Hydration Status": 0.05
     },
@@ -20,22 +20,24 @@ STATUS_METRIC_WEIGHTS = {
         "RPE": 1.0
     },
     "Readiness": {
-        "Muscle Soreness": 0.15,
+        "Energy Level": 0.25,
+        "Muscle Soreness": 0.2,
         "Stress Level": 0.15,
         "Pain Level": 0.1,
-        "Fatigue": 0.15,
+        "Fatigue": 0.25,
         "Recovery": 0.15,
         "Mood": 0.1,
-        "Sleep Quality": 0.1,
+        "Sleep Quality": 0.2,
         "Performance": 0.5,
         "Satisfaction": 0.3,
-        "Intensity": 0.2
+        "Intensity": 0.1,
     },
     "Recovery": {
         "Sleep Quality": 0.3,
-        "Muscle Soreness": 0.25,
+        "Muscle Soreness": 0.3,
         "Fatigue": 0.25,
-        "Recovery": 0.2
+        "Recovery": 0.35,
+        "Pain Level": 0.05,
     },
     "Subjective Performance Index": {
         "Performance": 0.5,
@@ -44,6 +46,14 @@ STATUS_METRIC_WEIGHTS = {
     },
     "sRPE": {
         "SRPE": 1.0
+    },
+    "Morale": {
+        "Mood": 0.6,
+        "Stress Level": 0.4
+    },
+    "Self Evaluation": {
+        "Performance": 0.5,
+        "Satisfaction": 0.5
     }
 }
 
