@@ -273,7 +273,7 @@ def calculate_gps_athletic_skills(row):
             response[skill] = value
             sum_of_pws += pws
 
-    response["Athletic Skills"] = round(sum_of_pws, 1)
+    response["Athletic Skills"] = str(round(sum_of_pws, 1))
 
     return response
 
