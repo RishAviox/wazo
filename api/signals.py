@@ -37,8 +37,18 @@ def process_daily_wellness_responses(sender, instance, created, **kwargs):
         # here just skip it
         print("but responses count is: ", responses_count)
     else:
-        # create/save metrics table
-        calculate_and_store_status_card_metrics(instance.user)
+        # Retrieve the StatusCardMetrics instance for the user
+        status_card_metrics, created = StatusCardMetrics.objects.get_or_create(user=instance.user)
+        current_metrics = status_card_metrics.metrics  # Get the current metrics
+        new_metrics = calculate_wellness_metrics(instance)  # Get the new metrics
+
+        # Update only the keys you want
+        current_metrics.update(new_metrics)
+        print("New status card metrics: ", current_metrics)
+
+        status_card_metrics.metrics = current_metrics
+        status_card_metrics.save()
+        
 
 # 14 questions
 @receiver(post_save, sender=RPEUserResponse, weak=False)
@@ -46,7 +56,9 @@ def process_rpe_responses(sender, instance, created, **kwargs):
     print("Signal triggered: RPE User Response")
     responses_count = len(instance.response) if instance.response else 0
     # number of questions(14) can be made dynamic
-    if responses_count > 0 and responses_count < 14:
+    if responses_count < 4:
+        # changed to 4, since TT & MS have 5 and PT has 4
+        # now individual set of questions will be asked based on Game/Training completed.
         # schedule notification in `Notification server`
         # get the latest, if less than for 30 minutes
         # schedule notification to inform user
@@ -54,7 +66,24 @@ def process_rpe_responses(sender, instance, created, **kwargs):
         print("but responses count is: ", responses_count)
     else:
         # create/save metrics table
-        calculate_and_store_status_card_metrics(instance.user)
+        # calculate_and_store_status_card_metrics(instance.user)
+        status_card_metrics, created = StatusCardMetrics.objects.get_or_create(user=instance.user)
+        if created:
+            overall_wellness = 0
+        else:
+            overall_wellness = float(status_card_metrics.metrics['Wellness'])
+        
+        current_metrics = status_card_metrics.metrics  # Get the current metrics
+        new_metrics = calculate_physical_readiness_metrics(instance, overall_wellness) # Get the new metrics
+
+        # Update only the keys you want
+        current_metrics.update(new_metrics)
+        print("New status card metrics: ", current_metrics)
+
+        status_card_metrics.metrics = current_metrics
+        status_card_metrics.save()
+        
+        
 
 
 

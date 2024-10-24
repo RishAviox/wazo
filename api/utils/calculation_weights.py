@@ -24,13 +24,14 @@ STATUS_METRIC_WEIGHTS = {
         "Muscle Soreness": 0.2,
         "Stress Level": 0.15,
         "Pain Level": 0.1,
-        "Fatigue": 0.25,
-        "Recovery": 0.15,
+        "Fatigue": 0.30,
+        "Recovery": 0.20,
         "Mood": 0.1,
         "Sleep Quality": 0.2,
         "Performance": 0.5,
         "Satisfaction": 0.3,
-        "Intensity": 0.1,
+        "Intensity": 0.2,
+        "Wellness": 0.3
     },
     "Recovery": {
         "Sleep Quality": 0.3,

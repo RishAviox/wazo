@@ -24,15 +24,15 @@ question_mapping = {
 
 # some scores have reversed scale(5 is bad, 1 is good), 
 # like Stress, Soreness, Fatigue, General Pain Level
-NORMALIZED_SCORES_ID = ['WQ-4', 'WQ-6', 'WQ-7', 'RPE-TT-2', 'RPE-PT-2', 'RPE-MS-2'] # add fatigue from RPE
+NORMALIZED_SCORES_ID = ['WQ-4', 'WQ-6', 'WQ-7', 'RPE-TT-1', 'RPE-TT-2', 'RPE-PT-1', 'RPE-PT-2', 'RPE-MS-1', 'RPE-MS-2'] # added fatigue & intensity from RPE
 
 def normalize_score(question_id, score):
     """Normalize scores to ensure higher scores are consistently better across all questions."""
     denominator = 5
     if question_id in NORMALIZED_SCORES_ID:
         return ((6 - int(score)) / denominator) * 100  # Reverse the score: 5 becomes 1, 4 becomes 2, etc.
-    if question_id == 'WQ-2':
-        denominator = 10
+    if question_id == 'WQ-2': # Sleep Quality = (Hours Slept / 9) * 100
+        denominator = 9
     return (int(score) / denominator) * 100
 
 
@@ -128,11 +128,11 @@ def calculate_normalized_rpe_score(normalized_rpe_response, age_adjustment_facto
     print("rpe: ", rpe)
     return (((rpe - 1) * (20 - 6) / (5 - 1)) + 6 - 6) * (100 / (20 - 6)) * age_adjustment_factor
     """
-    category = "RPE"
-    rpe = normalized_rpe_response["RPE-PT-1"] * weights[category]["RPE"] if normalized_rpe_response["RPE-PT-1"] else 0
-    print("rpe: ", rpe)
-    return (((rpe - 1) * (20 - 6) / (5 - 1)) + 6 - 6) * (100 / (20 - 6)) * age_adjustment_factor
-
+    # category = "RPE"
+    # rpe = normalized_rpe_response["RPE-PT-1"] * weights[category]["RPE"] if normalized_rpe_response["RPE-PT-1"] else 0
+    # print("rpe: ", rpe)
+    # return (((rpe - 1) * (20 - 6) / (5 - 1)) + 6 - 6) * (100 / (20 - 6)) * age_adjustment_factor
+    return 0
 
 def calculate_normalized_srpe_score(rpe_score):
     """
