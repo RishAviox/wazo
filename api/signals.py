@@ -71,7 +71,7 @@ def process_rpe_responses(sender, instance, created, **kwargs):
         if created:
             overall_wellness = 0
         else:
-            overall_wellness = float(status_card_metrics.metrics['Wellness'])
+            overall_wellness = float(status_card_metrics.metrics['Overall Wellness'])
         
         current_metrics = status_card_metrics.metrics  # Get the current metrics
         new_metrics = calculate_physical_readiness_metrics(instance, overall_wellness) # Get the new metrics

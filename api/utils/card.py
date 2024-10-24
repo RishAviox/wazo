@@ -269,7 +269,7 @@ def calculate_wellness_metrics(instance):
         'Diet Quality': get_score_('Diet')
     }
 
-    return { **data, 'Wellness': str(get_overall_wellness_score(data)) }
+    return { **data, 'Overall Wellness': str(get_overall_wellness_score(data)) }
 
 
 def calculate_physical_readiness_metrics(instance, overall_wellness):
@@ -304,9 +304,7 @@ def calculate_physical_readiness_metrics(instance, overall_wellness):
         'Recovery': get_score_(f'RPE-{group}-3')
     }
 
-    readiness = get_overall_readiness_score(data)
-
-    return { **data, 'Readiness': readiness, 'Status': str((float(readiness) + overall_wellness) / 2)}
+    return { **data, 'Readiness': str(get_overall_readiness_score(data)) }
 
 
 def calculate_and_store_status_card_metrics(user):
