@@ -112,7 +112,7 @@ class DailyWellnessUserResponseCreateView(APIView):
             serializer = DailyWellnessUserResponseSerializer(user_response)
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
-            data['user'] = user
+            data['user'] = phone_no
             serializer = DailyWellnessUserResponseSerializer(data=data)
             if serializer.is_valid():
                 serializer.save()
@@ -161,7 +161,7 @@ class RPEUserResponseCreateView(APIView):
             serializer = RPEUserResponseSerializer(user_response)
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
-            data['user'] = user
+            data['user'] = phone_no
             serializer = RPEUserResponseSerializer(data=data)
             if serializer.is_valid():
                 serializer.save()
