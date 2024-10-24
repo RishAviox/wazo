@@ -39,6 +39,7 @@ class CustomAdminSite(AdminSite):
                     'Recurring Events',
                     'Match Events Data Files',
                     'Player ID Mappings',
+                    'Coach Team Mappings',
                     'Notifications',
                     'OTP Store',
                     'API Logs',

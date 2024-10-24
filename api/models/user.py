@@ -51,9 +51,17 @@ class WajoUser(models.Model):
 
     def clean(self):
         # Ensure that only players can have a coach
-        print(self.coach.exists())
         if self.role == 'Coach' and self.coach.exists():
             raise ValidationError("A coach cannot have another coach assigned.")
+         
+        # Track if the role is changing from 'Coach' to 'Player'
+        # if self.pk:  # If this is not a new object
+        #     previous = WajoUser.objects.get(pk=self.pk)
+        #     if previous.role == 'Coach' and self.role != 'Coach':
+        #         # Remove this user as a coach for any players
+        #         self.players.clear()  # Clears all players related to this coach
+        #         # If you want to also remove them from any CoachTeamMapping
+        #         CoachTeamMapping.objects.filter(coach=self).delete()
 
     def save(self, *args, **kwargs):
         self.clean()  # Call the clean method to enforce the validation
