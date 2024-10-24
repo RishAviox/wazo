@@ -1398,7 +1398,8 @@ def get_prompt_for_insight(user, card):
                         "calendar": get_daily_snapshot(player, today),
                         "defensive-skills-metrics":get_videocard_defensive_metrics(player),
                         "gps-football-abilities-metrics": get_gps_football_abilities_metrics(player),
-                        'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(player)
+                        'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(player),
+                        'gps-football-abilities-metrics': get_gps_football_abilities_metrics(player)
                     }
                 player_data.append(user_data)
 
@@ -1406,7 +1407,7 @@ def get_prompt_for_insight(user, card):
                 'team-VideoCard': player_data
             }
             print("team-gps-football-abilities-metrics for coach: ", user_data)
-            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided calendar data, team wellness data, and offensive and defensive performance metrics. This is mandatory. Analyze the team’s last game and provide one key focus area for reviewing game footage. Also, consider wellness and other stats to set the priority for the team. Avoid mentioning the data passed to you or athletes and coaches. Data provided: {user_data}. Please make sure to address the coach directly. Maximum 40 words.' {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided calendar data, team wellness data, and offensive and defensive performance metrics. This is mandatory. Analyze the team’s last game and provide one key focus area for reviewing game footage. Also, consider wellness and other stats to set the priority for the team. Avoid mentioning the data passed to you or athletes and coaches. Data provided: {user_data}. Please make sure to address the coach directly. Maximum 40 words. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
         
         else:
@@ -1415,15 +1416,49 @@ def get_prompt_for_insight(user, card):
                         "calendar": get_daily_snapshot(user, today),
                         "defensive-skills-metrics":get_videocard_defensive_metrics(user),
                         "gps-football-abilities-metrics": get_gps_football_abilities_metrics(user),
-                        'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(user)
+                        'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(user),
+                        'gps-football-abilities-metrics': get_gps_football_abilities_metrics(user)
                     }
             user_data = {
                 'player-VideoCard': user_data
             }
-            prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided calendar data, their wellness data, and offensive and defensive performance metrics. This is mandatory. Analyze their last game and provide one key focus area while watching their game footage. Also, consider wellness and other stats to set the priority for the user. Avoid mentioning the data passed to you or athletes and coaches. Data provided: {user_data}. Please make sure to address the athlete in second person and not in third person. Maximum 40 words {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided calendar data, their wellness data, and offensive and defensive performance metrics. This is mandatory. Analyze their last game and provide one key focus area while watching their game footage. Also, consider wellness and other stats to set the priority for the user. Avoid mentioning the data passed to you or athletes and coaches. Data provided: {user_data}. Please make sure to address the athlete in second person and not in third person. Maximum 40 words. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
 
-    # elif card == 'TrainingCard':
-    #     pass
+    elif card == 'TrainingCard':
+        today = datetime.today()
+        if user.role == 'Coach':
+            player_data = []
+            for player in user.players.all():
+                user_data = {
+                        "wellness": get_status_card_metrics(player),
+                        "calendar": get_daily_snapshot(player, today),
+                        "defensive-skills-metrics":get_videocard_defensive_metrics(player),
+                        "gps-football-abilities-metrics": get_gps_football_abilities_metrics(player),
+                        'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(player),
+                        'gps-football-abilities-metrics': get_gps_football_abilities_metrics(player)
+                    }
+                player_data.append(user_data)
+
+            user_data = {
+                'team-VideoCard': player_data
+            }
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided calendar data, team wellness data, and offensive and defensive performance metrics. This is mandatory. Analyze the team’s last game and recommend one specific training area for the team. Consider wellness and other stats to set the training priorities. Avoid mentioning the data passed to you or athletes and coaches. Data provided: {json_data}. Address the coach directly. Maximum 40 words. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
+        
+        else:
+            user_data = {
+                        "wellness": get_status_card_metrics(user),
+                        "calendar": get_daily_snapshot(user, today),
+                        "defensive-skills-metrics":get_videocard_defensive_metrics(user),
+                        "gps-football-abilities-metrics": get_gps_football_abilities_metrics(user),
+                        'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(user),
+                        'gps-football-abilities-metrics': get_gps_football_abilities_metrics(user)
+                    }
+            user_data = {
+                'player-VideoCard': user_data
+            }
+            prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided calendar data, their wellness data, and offensive and defensive performance metrics. This is mandatory. Analyze their last game and provide one key focus area while watching their game footage. Also, consider wellness and other stats to set the priority for the user. Avoid mentioning the data passed to you or athletes and coaches. Data provided: {user_data}. Please make sure to address the athlete in second person and not in third person. Maximum 40 words. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            return prompt
 
     return None
