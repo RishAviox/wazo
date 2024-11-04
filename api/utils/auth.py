@@ -5,6 +5,7 @@ from django.utils import timezone
 import secrets
 import requests
 import jwt
+from django.conf import settings
 
 
 from api.models import OTPStore
@@ -13,7 +14,7 @@ from api.models import OTPStore
 def generate_access_token(user):
     payload = {
         'id': user.phone_no,
-        'exp': timezone.now() + timezone.timedelta(hours=24),  # Short-lived
+        'exp': timezone.now() + settings.JWT_ACCESS_TOKEN_EXPIRATION,  # Short-lived
         'iat': timezone.now(),
         'token_type': 'access',
     }
@@ -22,7 +23,7 @@ def generate_access_token(user):
 def generate_refresh_token(user):
     payload = {
         'id': user.phone_no,
-        'exp': timezone.now() + timezone.timedelta(days=7),  # Long-lived
+        'exp': timezone.now() + settings.JWT_REFRESH_TOKEN_EXPIRATION,  # Long-lived
         'iat': timezone.now(),
         'token_type': 'refresh',
     }

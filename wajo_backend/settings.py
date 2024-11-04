@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 from dotenv import dotenv_values
 import os
+from django.utils.timezone import timedelta
 
 env_config = dotenv_values(".env")
 
@@ -160,6 +161,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 WAJO_OTP_SERVICE_URL = env_config['WAJO_OTP_SERVICE_URL']
 WAJO_GOOGLE_GEMINI_API_KEY = env_config['WAJO_GOOGLE_GEMINI_API_KEY']
+
+JWT_ACCESS_TOKEN_EXPIRATION = timedelta(minutes=10)
+JWT_REFRESH_TOKEN_EXPIRATION = timedelta(days=7)
 
 """
 ?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting. 
