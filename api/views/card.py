@@ -21,7 +21,7 @@ genai.configure(api_key=settings.WAJO_GOOGLE_GEMINI_API_KEY)
 gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
 # getStatusCardMetric, dummy data for the previous app builds
-class ____StatusCardMetricAPI(APIView):
+class StatusCardMetricAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -40,7 +40,7 @@ class ____StatusCardMetricAPI(APIView):
             return Response(metrics, status=status.HTTP_200_OK)
 
 # latest, /api/v1/
-class StatusCardMetricAPI(APIView):
+class StatusCardMetricAPI_v1(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -147,7 +147,7 @@ class OffensivePerformanceMetricsAPI(APIView):
 
 
 # getCardSuggestedActions, for old builds
-class ____CardSuggestedActionsAPI(APIView):
+class CardSuggestedActionsAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, card):
@@ -160,7 +160,7 @@ class ____CardSuggestedActionsAPI(APIView):
         
 
 # getCardSuggestedActions, /api/v1/
-class CardSuggestedActionsAPI(APIView):
+class CardSuggestedActionsAPI_v1(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -424,6 +424,37 @@ class WajoPerformanceIndexAPI(APIView):
 
 
 # new APIs for new formulas(new freelancer), 22nd Sept 2024
+class AttackingSkillsAPI_v1(APIView): # latest
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role == 'Coach':
+            # get team stats
+            team_assigned = request.user.coach_team_mappings.first()
+            if team_assigned:
+                team_stats = team_assigned.team_stats.metrics
+            else:
+                team_stats = {}
+
+            # get players data
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_attacking_skills_metrics(player)
+                    })
+                
+            data = {
+                'team': team_stats['attacking_skills'] if 'attacking_skills' in team_stats.keys() else {},
+                'players': player_data
+            }
+
+            return Response(data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_attacking_skills_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)
+
 class AttackingSkillsAPI(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -441,7 +472,39 @@ class AttackingSkillsAPI(APIView):
         else:
             metrics = get_attacking_skills_metrics(request.user)
             return Response(metrics, status=status.HTTP_200_OK)
+        
+# v1
+class VideoCardDefensiveAPI_v1(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        if request.user.role == 'Coach':
+            # get team stats
+            team_assigned = request.user.coach_team_mappings.first()
+            if team_assigned:
+                team_stats = team_assigned.team_stats.metrics
+            else:
+                team_stats = {}
+
+            # get players data
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_videocard_defensive_metrics(player)
+                    })
+
+            data = {
+                'team': team_stats['videocard_defensive'] if 'videocard_defensive' in team_stats.keys() else {},
+                'players': player_data
+            }
+
+            return Response(data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_videocard_defensive_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)
+        
 
 class VideoCardDefensiveAPI(APIView):
     permission_classes = [IsAuthenticated]
@@ -461,6 +524,38 @@ class VideoCardDefensiveAPI(APIView):
             metrics = get_videocard_defensive_metrics(request.user)
             return Response(metrics, status=status.HTTP_200_OK)
         
+# v1
+class VideoCardDistributionsAPI_v1(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role == 'Coach':
+            # get team stats
+            team_assigned = request.user.coach_team_mappings.first()
+            if team_assigned:
+                team_stats = team_assigned.team_stats.metrics
+            else:
+                team_stats = {}
+
+            # get players data
+            player_data = []
+            for player in request.user.players.all():
+                player_data.append({
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': get_videocard_distributions_metrics(player)
+                    })
+
+            data = {
+                'team': team_stats['videocard_distributions'] if 'videocard_distributions' in team_stats.keys() else {},
+                'players': player_data
+            }
+
+            return Response(data, status=status.HTTP_200_OK)
+        
+        else:
+            metrics = get_videocard_distributions_metrics(request.user)
+            return Response(metrics, status=status.HTTP_200_OK)
+
 
 class VideoCardDistributionsAPI(APIView):
     permission_classes = [IsAuthenticated]

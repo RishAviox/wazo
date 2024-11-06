@@ -85,6 +85,9 @@ class PlayerIDMappingAdmin(admin.ModelAdmin):
 class CoachTeamMappingAdmin(admin.ModelAdmin):
     list_display = ['id', 'team_id', 'created_on', 'updated_on']
 
+class TeamStatsAdmin(admin.ModelAdmin):
+    list_display = ['team_mapping', 'metrics', 'created_on', 'updated_on']
+
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ['user', 'device', 'title', 'body', 'postback', 'created_on']
 
@@ -138,6 +141,7 @@ admin_site.register(OneTimeEvents, OneTimeEventsAdmin)
 admin_site.register(MatchEventsDataFile, MatchEventsDataFileAdmin)
 admin_site.register(PlayerIDMapping, PlayerIDMappingAdmin)
 admin_site.register(CoachTeamMapping, CoachTeamMappingAdmin)
+admin_site.register(TeamStats, TeamStatsAdmin)
 admin_site.register(Notification, NotificationAdmin)
 admin_site.register(PerformanceMetrics, PerformanceMetricsAdmin)
 admin_site.register(DefensivePerformanceMetrics, DefensivePerformanceMetricsAdmin)

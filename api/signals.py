@@ -343,3 +343,61 @@ def process_file(sender, instance, created, **kwargs):
     else:
         print("Either Stats or GPS file is not available.")
 
+
+# Team stats calculations signal
+@receiver(post_save, sender=MatchEventsDataFile, weak=False)
+def process_team_stats(sender, instance, created, **kwargs):
+    print("Team stats processing signal is called.")
+
+    if instance._type == 'BEPRO':
+        stats_instance = instance
+        gps_instance = MatchEventsDataFile.objects.filter(_type='GPS').order_by('-updated_on').first()
+    elif instance._type == 'GPS':
+        stats_instance = MatchEventsDataFile.objects.filter(_type='BEPRO').order_by('-updated_on').first()
+        gps_instance = instance
+
+    if stats_instance and gps_instance:
+        stats_sheet = pd.read_excel(stats_instance.file, sheet_name='PlayerStats_137183')
+        gps_sheet = pd.read_excel(gps_instance.file, sheet_name='Oliver GPS Metrcis')
+        match_sheet = pd.read_excel(stats_instance.file, sheet_name='MatchDetails')
+        
+        team_stats_sheet = get_team_stats_sheet(stats_sheet)
+        team_gps_sheet = get_team_gps_sheet(gps_sheet)
+
+        coach_team_mappings = CoachTeamMapping.objects.all()
+        print("coach_team_mappings: ", coach_team_mappings)
+
+        team_stats_sheet['team_id'] = team_stats_sheet['team_id'].astype(str)
+        team_gps_sheet['Team ID'] = team_gps_sheet['Team ID'].astype(str)
+
+        for mapping in coach_team_mappings:
+            print(mapping.team_id)
+            stats_row = team_stats_sheet[team_stats_sheet['team_id'] == mapping.team_id]
+            gps_row = team_gps_sheet[team_gps_sheet['Team ID'] == mapping.team_id]
+
+            if stats_row.empty or gps_row.empty:
+                print("Either stats data or gps data is not available.")
+            else:
+                
+                # Extract data from rows
+                stats_data = stats_row.iloc[0].to_dict()
+                gps_data = gps_row.iloc[0].to_dict()
+
+                # Calculate  metrics
+                metrics = {
+                    'attacking_skills' : calculate_attacking_skills(stats_data, match_sheet),
+                    'videocard_defensive' : calculate_videocard_defensive(stats_data, match_sheet),
+                    'videocard_distributions' : calculate_videocard_distributions(stats_data, match_sheet),
+                    'gps_athletic_skills' : calculate_gps_athletic_skills(gps_row),
+                    'gps_football_abilities' : calculate_gps_football_abilities(gps_row),
+                }
+                
+
+                print("%"*100)
+                print("team metrics: ", metrics)
+                TeamStats.objects.update_or_create(
+                    team_mapping=mapping,
+                    defaults={'metrics': metrics}
+                )
+
+            
