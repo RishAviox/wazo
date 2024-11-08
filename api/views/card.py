@@ -428,32 +428,35 @@ class AttackingSkillsAPI_v1(APIView): # latest
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # Check user role
         if request.user.role == 'Coach':
-            # get team stats
-            team_assigned = request.user.coach_team_mappings.first()
-            if team_assigned:
-                team_stats = team_assigned.team_stats.metrics
+            # Get team stats
+            if hasattr(request.user, 'coach_team_mappings'):
+                # Access team stats if the mapping exists
+                team_stats = request.user.coach_team_mappings.team_stats.metrics.get('attacking_skills', {})
             else:
+                # Default to empty if no team mapping
                 team_stats = {}
 
-            # get players data
-            player_data = []
-            for player in request.user.players.all():
-                player_data.append({
-                        'profile': WajoUserSerializer(player).data,
-                        'metrics': get_attacking_skills_metrics(player)
-                    })
-                
+            # Get players' data
+            player_data = [
+                {
+                    'profile': WajoUserSerializer(player).data,
+                    'metrics': get_attacking_skills_metrics(player)
+                }
+                for player in request.user.players.all()
+            ]
+
+            # Prepare response data
             data = {
-                'team': team_stats['attacking_skills'] if 'attacking_skills' in team_stats.keys() else {},
+                'team': team_stats,
                 'players': player_data
             }
-
             return Response(data, status=status.HTTP_200_OK)
-        
-        else:
-            metrics = get_attacking_skills_metrics(request.user)
-            return Response(metrics, status=status.HTTP_200_OK)
+
+        # If user is not a coach, return individual attacking skills metrics
+        metrics = get_attacking_skills_metrics(request.user)
+        return Response(metrics, status=status.HTTP_200_OK)
 
 class AttackingSkillsAPI(APIView):
     permission_classes = [IsAuthenticated]
@@ -479,23 +482,26 @@ class VideoCardDefensiveAPI_v1(APIView):
 
     def get(self, request):
         if request.user.role == 'Coach':
-            # get team stats
-            team_assigned = request.user.coach_team_mappings.first()
-            if team_assigned:
-                team_stats = team_assigned.team_stats.metrics
+            # Get team stats
+            if hasattr(request.user, 'coach_team_mappings'):
+                # Access team stats if the mapping exists
+                team_stats = request.user.coach_team_mappings.team_stats.metrics.get('videocard_defensive', {})
             else:
+                # Default to empty if no team mapping
                 team_stats = {}
+                
+            # Get players' data
+            player_data = [
+                {
+                    'profile': WajoUserSerializer(player).data,
+                    'metrics': get_videocard_defensive_metrics(player)
+                }
+                for player in request.user.players.all()
+            ]
 
-            # get players data
-            player_data = []
-            for player in request.user.players.all():
-                player_data.append({
-                        'profile': WajoUserSerializer(player).data,
-                        'metrics': get_videocard_defensive_metrics(player)
-                    })
-
+            # Prepare response data
             data = {
-                'team': team_stats['videocard_defensive'] if 'videocard_defensive' in team_stats.keys() else {},
+                'team': team_stats,
                 'players': player_data
             }
 
@@ -530,23 +536,26 @@ class VideoCardDistributionsAPI_v1(APIView):
 
     def get(self, request):
         if request.user.role == 'Coach':
-            # get team stats
-            team_assigned = request.user.coach_team_mappings.first()
-            if team_assigned:
-                team_stats = team_assigned.team_stats.metrics
+            # Get team stats
+            if hasattr(request.user, 'coach_team_mappings'):
+                # Access team stats if the mapping exists
+                team_stats = request.user.coach_team_mappings.team_stats.metrics.get('videocard_distributions', {})
             else:
+                # Default to empty if no team mapping
                 team_stats = {}
+                
+            # Get players' data
+            player_data = [
+                {
+                    'profile': WajoUserSerializer(player).data,
+                    'metrics': get_videocard_distributions_metrics(player)
+                }
+                for player in request.user.players.all()
+            ]
 
-            # get players data
-            player_data = []
-            for player in request.user.players.all():
-                player_data.append({
-                        'profile': WajoUserSerializer(player).data,
-                        'metrics': get_videocard_distributions_metrics(player)
-                    })
-
+            # Prepare response data
             data = {
-                'team': team_stats['videocard_distributions'] if 'videocard_distributions' in team_stats.keys() else {},
+                'team': team_stats,
                 'players': player_data
             }
 

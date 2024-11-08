@@ -83,10 +83,10 @@ class PlayerIDMappingAdmin(admin.ModelAdmin):
     list_display = ['user', 'player_id', 'player_position', 'created_on', 'updated_on']
 
 class CoachTeamMappingAdmin(admin.ModelAdmin):
-    list_display = ['id', 'team_id', 'created_on', 'updated_on']
+    list_display = ['id', 'coach', 'team_stats', 'created_on', 'updated_on']
 
 class TeamStatsAdmin(admin.ModelAdmin):
-    list_display = ['team_mapping', 'metrics', 'created_on', 'updated_on']
+    list_display = ['team_id', 'metrics', 'created_on', 'updated_on']
 
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ['user', 'device', 'title', 'body', 'postback', 'created_on']

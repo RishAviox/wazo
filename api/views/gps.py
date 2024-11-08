@@ -11,23 +11,26 @@ class GPSAthleticSkillsAPI_v1(APIView):
 
     def get(self, request):
         if request.user.role == 'Coach':
-            # get team stats
-            team_assigned = request.user.coach_team_mappings.first()
-            if team_assigned:
-                team_stats = team_assigned.team_stats.metrics
+            # Get team stats
+            if hasattr(request.user, 'coach_team_mappings'):
+                # Access team stats if the mapping exists
+                team_stats = request.user.coach_team_mappings.team_stats.metrics.get('gps_athletic_skills', {})
             else:
+                # Default to empty if no team mapping
                 team_stats = {}
+                
+            # Get players' data
+            player_data = [
+                {
+                    'profile': WajoUserSerializer(player).data,
+                    'metrics': get_gps_athletic_skills_metrics(player)
+                }
+                for player in request.user.players.all()
+            ]
 
-            # get players data
-            player_data = []
-            for player in request.user.players.all():
-                player_data.append({
-                        'profile': WajoUserSerializer(player).data,
-                        'metrics': get_gps_athletic_skills_metrics(player)
-                    })
-
+            # Prepare response data
             data = {
-                'team': team_stats['gps_athletic_skills'] if 'gps_athletic_skills' in team_stats.keys() else {},
+                'team': team_stats,
                 'players': player_data
             }
 
@@ -63,23 +66,26 @@ class GPSFootballAbilitiesAPI_v1(APIView):
 
     def get(self, request):
         if request.user.role == 'Coach':
-            # get team stats
-            team_assigned = request.user.coach_team_mappings.first()
-            if team_assigned:
-                team_stats = team_assigned.team_stats.metrics
+            # Get team stats
+            if hasattr(request.user, 'coach_team_mappings'):
+                # Access team stats if the mapping exists
+                team_stats = request.user.coach_team_mappings.team_stats.metrics.get('gps_football_abilities', {})
             else:
+                # Default to empty if no team mapping
                 team_stats = {}
+                
+            # Get players' data
+            player_data = [
+                {
+                    'profile': WajoUserSerializer(player).data,
+                    'metrics': get_gps_football_abilities_metrics(player)
+                }
+                for player in request.user.players.all()
+            ]
 
-            # get players data
-            player_data = []
-            for player in request.user.players.all():
-                player_data.append({
-                        'profile': WajoUserSerializer(player).data,
-                        'metrics': get_gps_football_abilities_metrics(player)
-                    })
-
+            # Prepare response data
             data = {
-                'team': team_stats['gps_football_abilities'] if 'gps_football_abilities' in team_stats.keys() else {},
+                'team': team_stats,
                 'players': player_data
             }
 

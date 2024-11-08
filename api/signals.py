@@ -364,19 +364,22 @@ def process_team_stats(sender, instance, created, **kwargs):
         team_stats_sheet = get_team_stats_sheet(stats_sheet)
         team_gps_sheet = get_team_gps_sheet(gps_sheet)
 
-        coach_team_mappings = CoachTeamMapping.objects.all()
-        print("coach_team_mappings: ", coach_team_mappings)
 
         team_stats_sheet['team_id'] = team_stats_sheet['team_id'].astype(str)
         team_gps_sheet['Team ID'] = team_gps_sheet['Team ID'].astype(str)
 
-        for mapping in coach_team_mappings:
-            print(mapping.team_id)
-            stats_row = team_stats_sheet[team_stats_sheet['team_id'] == mapping.team_id]
-            gps_row = team_gps_sheet[team_gps_sheet['Team ID'] == mapping.team_id]
+        # Get unique team IDs from team_stats_sheet
+        unique_team_ids = team_stats_sheet['team_id'].unique()
+        print("unique_team_ids: ", unique_team_ids)
+        
+        for team_id in unique_team_ids:
+            print(f"Processing team ID: {team_id}")
+            
+            stats_row = team_stats_sheet[team_stats_sheet['team_id'] == team_id]
+            gps_row = team_gps_sheet[team_gps_sheet['Team ID'] == team_id]
 
             if stats_row.empty or gps_row.empty:
-                print("Either stats data or gps data is not available.")
+                print(f"Data not available for team ID: {team_id}")
             else:
                 
                 # Extract data from rows
@@ -394,9 +397,9 @@ def process_team_stats(sender, instance, created, **kwargs):
                 
 
                 print("%"*100)
-                print("team metrics: ", metrics)
+                print(f"team metrics for team {team_id}: ", metrics)
                 TeamStats.objects.update_or_create(
-                    team_mapping=mapping,
+                    team_id=team_id,
                     defaults={'metrics': metrics}
                 )
 
