@@ -167,57 +167,130 @@ class CardSuggestedActionsAPI_v1(APIView):
         data = {
             "Calendar": {
                 "actions": [
-                {
-                    "name": "Add Schedule",
-                    "postback": "add_schedule"
-                },
-                {
-                    "name": "Update tomorrow's schedule",
-                    "postback": "add_eventsfortomorrow"
-                }
+                    {
+                        "name": "Add Schedule",
+                        "postback": "add_schedule"
+                    },
+                    {
+                        "name": "Update tomorrow's schedule",
+                        "postback": "add_eventsfortomorrow"
+                    }
                 ]
             },
             "Wellness": {
                 "actions": [
-                {
-                    "name": "Update Wellness",
-                    "postback": "update_wellness"
-                },
-                {
-                    "name": "Update RPE",
-                    "postback": "log_rpe"
-                },
-                {
-                    "name": "How am I doing?",
-                    "postback": "get_insights"
-                }
+                    {
+                        "name": "Update Wellness",
+                        "postback": "update_wellness"
+                    },
+                    {
+                        "name": "Update RPE",
+                        "postback": "log_rpe"
+                    },
+                    {
+                        "name": "How am I doing?",
+                        "postback": "get_insights"
+                    },
+                    {
+                        "name": "RPE Insights",
+                        "postback": "get_rpe_insights"
+                    }
                 ]
             },
-            "Performance Metrics": {
+            "Squad Hub": {
                 "actions": [
-                {
-                    "name": "How am I doing?",
-                    "postback": "get_insights"
-                }
+                    {
+                        "name": "Status",
+                        "postback": "status"
+                    },
+                    {
+                        "name": "Stats",
+                        "postback": "stats"
+                    },
+                    {
+                        "name": "Development",
+                        "postback": "development"
+                    }
                 ]
             },
-            "Defensive Metrics": {
+            "Daily Snapshot": {
                 "actions": [
-                {
-                    "name": "How am I doing?",
-                    "postback": "get_insights"
-                }
+                    {
+                        "name": "Daily Snapshot",
+                        "postback": "daily-snapshot"
+                    }
                 ]
             },
-            "Offensive Metrics": {
+            "Match Center": {
                 "actions": [
-                {
-                    "name": "How am I doing?",
-                    "postback": "get_insights"
-                }
+                    {
+                        "name": "Pre-Match",
+                        "postback": "pre-match"
+                    },
+                    {
+                        "name": "Post-Match",
+                        "postback": "post-match"
+                    },
+                    {
+                        "name": "In-Match",
+                        "postback": "in-match"
+                    }
+                ]
+            },
+            "Development Center": {
+                "actions": [
+                    {
+                        "name": "Team Journey",
+                        "postback": "team-journey"
+                    },
+                    {
+                        "name": "Career Journey",
+                        "postback": "career-journey"
+                    }
+                ]
+            },
+            "Reporting and Analysis": {
+                "actions": [
+                    {
+                        "name": "Player Performance Reporting",
+                        "postback": "player-performance-reporting"
+                    },
+                    {
+                        "name": "Team Performance Reporting",
+                        "postback": "team-performance-reporting"
+                    },
+                    {
+                        "name": "Post-Match & Tactical Reporting",
+                        "postback": "post-match-tactical-reporting"
+                    },
+                    {
+                        "name": "Health & Wellness Reporting",
+                        "postback": "health-wellness-reporting"
+                    }
+                ]
+            },
+            "Performance & Data Insights": {
+                "actions": [
+                    {
+                        "name": "Advanced Performance Metrics",
+                        "postback": "advaced-performance-metrics"
+                    },
+                    {
+                        "name": "Player Data Insights",
+                        "postback": "player-data-insights"
+                    },
+                    {
+                        "name": "Team Performance Trends",
+                        "postback": "team-performance-trends"
+                    },
+                    {
+                        "name": "Opponent Data Analysis",
+                        "postback": "opponent-data-analysis"
+                    }
                 ]
             }
         }
+
         return Response(data, status=status.HTTP_200_OK)
         
         
