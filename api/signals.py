@@ -9,9 +9,11 @@ from .utils import *
 from datetime import date
 
 def calculate_age(dob):
-    today = date.today()
-    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-
+    try:
+        today = date.today()
+        return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    except Exception:
+        return 25
 
 # auto create entrypoint
 @receiver(post_save, sender=WajoUser)
@@ -152,6 +154,7 @@ def process_file(sender, instance, created, **kwargs):
             else:
                 # Calculate age based on DOB
                 player_age = calculate_age(player_dob)
+                print("player_age: ", player_age)
                 
                 # Extract data from rows
                 stats_data = stats_row.iloc[0].to_dict()
