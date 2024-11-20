@@ -7,6 +7,8 @@ from django.conf import settings
 import jwt
 import re
 
+from jwt.exceptions import ExpiredSignatureError, DecodeError, InvalidTokenError
+
 from ..models import WajoUser, OnboardingStep, WajoUserDevice
 from ..utils import generate_and_send_otp, validate_otp, generate_access_token, generate_refresh_token
 
@@ -107,17 +109,31 @@ class LogoutAPI(APIView):
 # token refresh
 class RefreshTokenAPI(APIView):
     def post(self, request):
+        # Extract refresh token
         refresh_token = request.data.get('refresh')
         if not refresh_token:
             return Response({'error': 'Refresh token is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=['HS256'])
-        if not payload or payload['token_type'] != 'refresh':
-            return Response({'error': 'Invalid refresh token.'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
-            user = WajoUser.objects.get(phone_no=payload['id'])
+            # Decode the refresh token
+            payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=['HS256'])
+            
+            # Validate token type
+            if payload.get('token_type') != 'refresh':
+                return Response({'error': 'Invalid token type.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Fetch user from payload
+            user = WajoUser.objects.filter(phone_no=payload['id']).first()
+            if not user:
+                return Response({'error': 'User not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Generate a new access token
             access_token = generate_access_token(user)
             return Response({'token': access_token}, status=status.HTTP_200_OK)
-        except WajoUser.DoesNotExist:
-            return Response({'error': 'User not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        except ExpiredSignatureError:
+            return Response({'error': 'Refresh token has expired.'}, status=status.HTTP_401_UNAUTHORIZED)
+        except DecodeError:
+            return Response({'error': 'Invalid refresh token.'}, status=status.HTTP_400_BAD_REQUEST)
+        except InvalidTokenError:
+            return Response({'error': 'Malformed token.'}, status=status.HTTP_400_BAD_REQUEST)
