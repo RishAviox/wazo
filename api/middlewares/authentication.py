@@ -13,13 +13,22 @@ class JWTAuthentication(authentication.BaseAuthentication):
         auth_data = authentication.get_authorization_header(request)
         if not auth_data:
             return None
-        
-        prefix, token = auth_data.decode('utf-8').split()
-        if prefix.lower() != 'bearer':
-            return None
-        
-        return self.authenticate_credentials(token)
-    
+
+        try:
+            # Decode and split the authorization header
+            auth_parts = auth_data.decode('utf-8').split()
+            if len(auth_parts) != 2:
+                raise exceptions.AuthenticationFailed('Invalid authorization header format')
+
+            prefix, token = auth_parts
+            if prefix.lower() != 'bearer':
+                return None
+
+            return self.authenticate_credentials(token)
+
+        except UnicodeDecodeError:
+            raise exceptions.AuthenticationFailed('Authorization header must be valid UTF-8')
+
     def authenticate_credentials(self, token):
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
@@ -29,7 +38,7 @@ class JWTAuthentication(authentication.BaseAuthentication):
 
             user = WajoUser.objects.get(phone_no=payload['id'])
             return (user, None)
-        
+
         except jwt.ExpiredSignatureError:
             raise exceptions.AuthenticationFailed('Token has expired')
         except jwt.DecodeError:
@@ -38,9 +47,10 @@ class JWTAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed('Immature token')
         except WajoUser.DoesNotExist:
             raise exceptions.AuthenticationFailed('No such user')
-    
+
     def authenticate_header(self, request):
         return 'Bearer'
+
     
 
 class AdminJWTAuthentication(authentication.BaseAuthentication):
