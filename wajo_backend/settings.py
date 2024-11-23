@@ -45,7 +45,6 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
-    "api",
 ]
 
 MIDDLEWARE = [
@@ -57,14 +56,14 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "api.middlewares.logging.DatabaseLogMiddleware",
+    "core.middlewares.DatabaseLogMiddleware",
 ]
 
 # REST Framework configuration for OAuth2
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'api.middlewares.authentication.JWTAuthentication',
-        'api.middlewares.authentication.AdminJWTAuthentication',
+        'core.middlewares.JWTAuthentication',
+        'chatbot_admin.middlewares.ChatbotAdminJWTAuthentication',
     )
 }
 
@@ -99,11 +98,11 @@ WSGI_APPLICATION = "wajo_backend.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "mssql",
-        "NAME": env_config["DB_NAME"],
-        "HOST": env_config["DB_HOST"],
-        "PORT": env_config["DB_PORT"],
-        "USER": env_config["DB_USER"],
-        "PASSWORD": env_config["DB_PASSWORD"],
+        "NAME": env_config["WAJO_DB_NAME"],
+        "HOST": env_config["WAJO_DB_HOST"],
+        "PORT": env_config["WAJO_DB_PORT"],
+        "USER": env_config["WAJO_DB_USER"],
+        "PASSWORD": env_config["WAJO_DB_PASSWORD"],
         'OPTIONS': {
             'driver': 'ODBC Driver 17 for SQL Server', 
             'MARS_Connection': 'True',

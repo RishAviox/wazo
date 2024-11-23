@@ -1,5 +1,4 @@
-from django.utils import timezone
-from api.models import DailyWellnessUserResponse, RPEUserResponse, DailyWellnessQuestionnaire, RPEQuestionnaire
+from questionnaire.models import DailyWellnessQuestionnaire, RPEQuestionnaire
 
 from .calculation_weights import STATUS_METRIC_WEIGHTS
 

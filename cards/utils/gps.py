@@ -1,4 +1,4 @@
-from api.models import GPSAthleticSkills, GPSFootballAbilities
+from ..models import GPSAthleticSkills, GPSFootballAbilities
 
 
 def __convert_m_to_km(value, metric_unit_mapping="m"):

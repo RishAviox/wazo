@@ -8,7 +8,7 @@ import jwt
 from django.conf import settings
 
 
-from api.models import OTPStore
+from .models import OTPStore
 
 
 def generate_access_token(user):

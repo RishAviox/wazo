@@ -18,54 +18,6 @@ class StatusCardMetrics(models.Model):
         return self.user.phone_no
 
 
-# Defensive Performance Metrics
-class DefensivePerformanceMetrics(models.Model):
-    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="difensive_performance_metrics")
-    metrics = models.JSONField()
-
-    created_on = models.DateTimeField(auto_now_add=True)
-    updated_on = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Defensive Performance Metrics"
-        verbose_name_plural = "Defensive Performance Metrics"
-
-    def __str__(self):
-        return f"Defensive Performance Metrics for {self.user.phone_no}"
-
-
-# Offensive Performance Metrics
-class OffensivePerformanceMetrics(models.Model):
-    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="offensive_performance_metrics")
-    metrics = models.JSONField()
-
-    created_on = models.DateTimeField(auto_now_add=True)
-    updated_on = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Offensive Performance Metrics"
-        verbose_name_plural = "Offensive Performance Metrics"
-
-    def __str__(self):
-        return f"Offensive Performance Metrics for {self.user.phone_no}"
-
-
-# Game Stats
-class GameStats(models.Model):
-    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="game_stats")
-    metrics = models.JSONField()
-
-    created_on = models.DateTimeField(auto_now_add=True)
-    updated_on = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Game Stats"
-        verbose_name_plural = "Game Stats"
-
-    def __str__(self):
-        return f"Game Stats for {self.user.phone_no}"
-
-    
 # Attacking Skills
 class AttackingSkills(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="attacking_skills")
@@ -111,4 +63,34 @@ class VideoCardDistributions(models.Model):
         verbose_name_plural = "Video Card Distributions"
 
     def __str__(self):
-        return f"Video Card Distributions for {self.user.phone_no}"  
+        return f"Video Card Distributions for {self.user.phone_no}"
+
+
+class GPSAthleticSkills(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="athletic_skills")
+    metrics = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "GPS-Athletic Skills"
+        verbose_name_plural = "GPS-Athletic Skills"
+
+    def __str__(self):
+        return f"Athletic Skills for {self.user.phone_no}"
+
+
+class GPSFootballAbilities(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="gps_football_abilities")
+    metrics = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "GPS-Football Abilities"
+        verbose_name_plural = "GPS-Football Abilities"
+
+    def __str__(self):
+        return f"Football Abilities for {self.user.phone_no}" 
