@@ -1,28 +1,27 @@
 version: '3.8'
 
 services:
-  wajo_backend:
+  pilot_wajo_backend:
     build: .
     command: >
       bash -c "
-              python manage.py makemigrations api && 
-              python manage.py migrate api && 
               python manage.py makemigrations && 
               python manage.py migrate && 
               gunicorn wajo_backend.wsgi:application --workers 3 --bind 0.0.0.0:8000 --access-logfile /var/log/gunicorn.access.log --error-logfile /var/log/gunicorn.error.log
             "
     ports:
-      - "8000:8000"
+      - "8001:8000"
+    container_name: pilot_wajo_backend
     volumes:
       - .:/app
       - media_volume:/app/media
     restart: 'always'
 
-  media_server:
+  pilot_wajo_media_server:
     image: nginx:latest
-    container_name: media_server
+    container_name: pilot_wajo_media_server
     ports:
-      - "8080:80"
+      - "8081:80"
     volumes:
       - ./nginx/media_server.conf:/etc/nginx/conf.d/media.conf
       - media_volume:/usr/share/nginx/html/media
