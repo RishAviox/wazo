@@ -6,7 +6,7 @@ from django.db.models.fields.json import KeyTextTransform
 from django.utils.timezone import datetime
 
 
-from models import *
+from ..models import *
 from events.models import OneTimeEvents, RecurringEvents
 from .status_metrics_calculations import *
 from .gps import get_gps_athletic_skills_metrics, get_gps_football_abilities_metrics
