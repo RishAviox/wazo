@@ -5,22 +5,22 @@ from core.admin import admin_site
 
 
 class StatusCardMetricsAdmin(admin.ModelAdmin):
-    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+    list_display = ['user', 'game', 'metrics', 'created_on', 'updated_on']
 
 class AttackingSkillsAdmin(admin.ModelAdmin):
-    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+    list_display = ['user', 'game', 'metrics', 'created_on', 'updated_on']
 
 class VideoCardDefensiveAdmin(admin.ModelAdmin):
-    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+    list_display = ['user', 'game', 'metrics', 'created_on', 'updated_on']
 
 class VideoCardDistributionsAdmin(admin.ModelAdmin):
-    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+    list_display = ['user', 'game', 'metrics', 'created_on', 'updated_on']
 
 class GPSAthleticSkillsAdmin(admin.ModelAdmin):
-    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+    list_display = ['user', 'game', 'metrics', 'created_on', 'updated_on']
 
 class GPSFootballAbilitiesAdmin(admin.ModelAdmin):
-    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+    list_display = ['user', 'game', 'metrics', 'created_on', 'updated_on']
 
 
 admin_site.register(StatusCardMetrics, StatusCardMetricsAdmin)
