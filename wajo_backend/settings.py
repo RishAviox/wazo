@@ -45,6 +45,14 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
+    "core",
+    "accounts",
+    "onboarding",
+    "cards",
+    "chatbot_admin",
+    "events",
+    "questionnaire",
+    "notifications",
 ]
 
 MIDDLEWARE = [

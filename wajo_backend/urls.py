@@ -21,15 +21,13 @@ from django.conf import settings
 from django.conf.urls.static import static
 from core.admin import admin_site
 
-# from api.admin.customize import admin_site
-
 urlpatterns = [
     path("admin/", admin_site.urls),
-    path("api/auth", include("accounts.urls")),
-    path("api/onboarding", include("onboarding.urls")),
-    path("api/notifications", include("notifications.urls")),
-    path("api/chatbot-admin", include("chatbot_admin.urls")),
-    path("api/cards", include("cards.urls")),
+    path("api/auth/", include("accounts.urls")),
+    path("api/onboarding/", include("onboarding.urls")),
+    path("api/notifications/", include("notifications.urls")),
+    path("api/chatbot-admin/", include("chatbot_admin.urls")),
+    path("api/cards/", include("cards.urls")),
 ]
 
 

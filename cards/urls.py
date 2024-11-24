@@ -7,7 +7,7 @@ urlpatterns = [
     path('insight/<str:card>', InsightAPI.as_view(), name='insight'),
 
     # suggested actions for cards
-    path('suggested-actions/<str:card>', CardSuggestedActionsAPI.as_view(), name='card-suggested-actions'),
+    path('suggested-actions', CardSuggestedActionsAPI.as_view(), name='card-suggested-actions'),
     
     # card stats
     path('daily-snapshot', DailySnapshortCardAPI.as_view(), name='daily-snapshot'),    

@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from core.llm_provider import generate_llm_response
 from .utils import *
+from events.models import MatchEventsDataFile
 
 # greetings api, universal for all cards
 class GreetingAPI(APIView):
@@ -26,9 +27,9 @@ class GreetingAPI(APIView):
             "name": request.user.name,
             "wellness": get_status_card_metrics(user),
             "calendar": get_daily_snapshot(user, today),
-            "performance-metrics": get_performance_metrics(user),
-            "defensive-performance-metrics": get_defensive_performance_metrics(user),
-            "offensive-performance-metrics": get_offensive_performance_metrics(user),
+            # "performance-metrics": get_performance_metrics(user),
+            # "defensive-performance-metrics": get_defensive_performance_metrics(user),
+            # "offensive-performance-metrics": get_offensive_performance_metrics(user),
             "current_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         print("*" * 100)
