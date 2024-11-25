@@ -215,7 +215,10 @@ def calculate_gps_athletic_skills(row):
     metric_value_mapping = {}
 
     for column_name, _ in metric_mappings.items():
-        metric_value_mapping[column_name] = int(row[column_name].iloc[0])
+        try:
+            metric_value_mapping[column_name] = int(row[column_name].iloc[0])
+        except:
+            metric_value_mapping[column_name] = 0
 
     metric_value_mapping_copy = metric_value_mapping.copy()
     play_time = metric_value_mapping["Corrected Play Time (min)"]
@@ -420,7 +423,10 @@ def calculate_gps_football_abilities(row):
     metric_value_mapping = {}
 
     for column_name in metric_mappings.keys():
-        metric_value_mapping[column_name] = int(row[column_name].iloc[0])
+        try:
+            metric_value_mapping[column_name] = int(row[column_name].iloc[0])
+        except:
+            metric_value_mapping[column_name] = 0
 
     metric_value_mapping_copy = metric_value_mapping.copy()
     play_time = metric_value_mapping["Corrected Play Time (min)"]
