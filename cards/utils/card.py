@@ -291,63 +291,6 @@ def calculate_physical_readiness_metrics(instance, overall_wellness):
     return { **data, 'Readiness': str(get_overall_readiness_score(data)) }
 
 
-def calculate_and_store_status_card_metrics(user):
-    # Fetch the latest wellness response within the specified date range
-    latest_wellness_response = DailyWellnessUserResponse.objects.filter(
-        user=user
-    ).order_by('-updated_on').first().response
-
-    # Fetch the latest RPE response within the specified date range
-    latest_rpe_response = RPEUserResponse.objects.filter(
-        user=user
-    ).order_by('-updated_on').first().response
-
-    age_adjustment_factor = get_age_adjustment_factor(user.dob)
-    print("age_adjustment_factor: ", age_adjustment_factor)
-
-    if len(latest_wellness_response) >= 7 and len(latest_rpe_response) >= 14:
-        normalized_wellness_response = normalize_wellness_response(latest_wellness_response)
-        normalized_rpe_response = normalize_rpe_response(latest_rpe_response)
-        print("latest_wellness_response: ", latest_wellness_response)
-        print("latest_rpe_response: ", latest_rpe_response)
-        print("normalized_wellness_response: ", normalized_wellness_response)
-        print("normalized_rpe_response: ", normalized_rpe_response)
-
-        Wellness =  calculate_wellness_score(normalized_wellness_response)
-        Readiness =  calculate_readiness_score(normalized_rpe_response, normalized_wellness_response)
-        # Fitness =  calculate_fitness_score(
-        #                             normalized_rpe_response,
-        #                             normalized_wellness_response, 
-        #                             distance_covered = 1, 
-        #                             high_intensity_runs = 1,
-        #                             age_adjustment_factor=age_adjustment_factor)
-        Morale =  calculate_morale_score(normalized_wellness_response)
-        RPE =  calculate_normalized_rpe_score(normalized_rpe_response)
-        sRPE =  calculate_normalized_srpe_score(rpe_score=RPE)
-        # SPI =  calculate_spi_score(normalized_rpe_response, age_adjustment_factor)
-        Recover =  calculate_recovery_score(normalized_rpe_response, normalized_wellness_response)
-        SelfEvaluation = calculate_self_evaluation(normalized_rpe_response)
-
-        metrics = {
-            'Status': round((Wellness + Readiness + Morale + RPE + sRPE + SelfEvaluation + Recover) / 7, 2),
-            'Wellness': round(Wellness, 2),
-            'Physical Readiness': round(Readiness, 2),
-            'Morale': round(Morale, 2),
-            'RPE': round(RPE, 2),
-            'sRPE': round(sRPE, 2),
-            'Self Evaluation': SelfEvaluation,
-            'Recovery': round(Recover, 2)
-        }
-        print(metrics)
-        
-        StatusCardMetrics.objects.create(
-            user=user,
-            metrics=metrics
-        )
-    else:
-        print("WARNING: Skipping status card calculations, either latest wellness or rpe is not complete")
-
-
 
 # new formulas by Freelancer, 22nd Sept 2024
 def calculate_attacking_skills(row, match_sheet):

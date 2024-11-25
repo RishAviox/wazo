@@ -6,7 +6,7 @@ import pandas as pd
 from teams.models import Team
 from games.models import GameGPSData, GameVideoData, Game
 from accounts.models import PlayerIDMapping
-from questionnaire.models import DailyWellnessUserResponse
+from questionnaire.models import DailyWellnessUserResponse, RPEUserResponse
 
 from .utils import *
 from .models import *
@@ -326,3 +326,56 @@ def process_daily_wellness_user_responses(sender, instance, created, **kwargs):
     
     except Exception as e:
             print(f"Error processing daily wellness user responses: {e}")
+            
+            
+# process rpe questionnaire
+@receiver(post_save, sender=RPEUserResponse, weak=False)
+def process_daily_wellness_user_responses(sender, instance, created, **kwargs):
+    print("Signal triggered: RPE User Response")
+    
+    try:
+        responses_count = len(instance.response) if instance.response else 0
+        # number of questions(7) can be made dynamic
+        if responses_count < 4:
+            # changed to 4, since TT & MS have 5 and PT has 4
+            # now individual set of questions will be asked based on Game/Training completed.
+            # schedule notification in `Notification server`
+            # get the latest, if less than for 30 minutes
+            # schedule notification to inform user
+            # here just skip it
+            print("but responses count is: ", responses_count)
+        else:
+            # Get the latest status card metrics for the user
+            status_card_metrics = (
+                StatusCardMetrics.objects.filter(user=instance.user)
+                .order_by('-created_on')  # Order by the most recent creation date
+                .first()  # Get the latest entry
+            )
+            if status_card_metrics is None:
+                # No status card exists, initialize the overall wellness value
+                overall_wellness = 0
+            else:
+                overall_wellness = float(status_card_metrics.metrics.get('Overall Wellness', 0))
+
+            # calculate RPE metrics
+            new_metrics = calculate_physical_readiness_metrics(instance, overall_wellness)  # Get the new metrics
+            
+            # Get today's date in the configured timezone
+            today = timezone.localdate()
+
+            # Update or create a single entry per user per day
+            rpe_metrics, created = RPEMetrics.objects.update_or_create(
+                user=instance.user,
+                created_on__date=today,  # Ensure it matches today's date
+                defaults={'metrics': new_metrics}
+            )
+            print(f"Calculated RPE Metrics for the user (phone: {instance.user}): {new_metrics}.")
+
+            if created:
+                print(f"Created RPE Metrics for the user (phone: {instance.user}).")
+            else:
+                print(f"Updated RPE Metrics for the user (phone: {instance.user}).")
+
+    
+    except Exception as e:
+            print(f"Error processing RPE user responses: {e}")

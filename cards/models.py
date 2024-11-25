@@ -16,6 +16,21 @@ class StatusCardMetrics(models.Model):
 
     def __str__(self):
         return self.user.phone_no
+    
+# RPE Metrics
+class RPEMetrics(models.Model):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='rpe_metrics')
+    metrics = models.JSONField(default=dict)
+     
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "RPE Metrics"
+        verbose_name_plural = "RPE Metrics"
+
+    def __str__(self):
+        return self.user.phone_no
 
 
 # Attacking Skills

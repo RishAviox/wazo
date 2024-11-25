@@ -7,6 +7,9 @@ from core.admin import admin_site
 class StatusCardMetricsAdmin(admin.ModelAdmin):
     list_display = ['user', 'metrics', 'created_on', 'updated_on']
 
+class RPEMetricsAdmin(admin.ModelAdmin):
+    list_display = ['user', 'metrics', 'created_on', 'updated_on']
+
 class AttackingSkillsAdmin(admin.ModelAdmin):
     list_display = ['user', 'game', 'metrics', 'created_on', 'updated_on']
 
@@ -24,6 +27,7 @@ class GPSFootballAbilitiesAdmin(admin.ModelAdmin):
 
 
 admin_site.register(StatusCardMetrics, StatusCardMetricsAdmin)
+admin_site.register(RPEMetrics, RPEMetricsAdmin)
 admin_site.register(AttackingSkills, AttackingSkillsAdmin)
 admin_site.register(VideoCardDefensive, VideoCardDefensiveAdmin)
 admin_site.register(VideoCardDistributions, VideoCardDistributionsAdmin)
