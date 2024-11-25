@@ -12,6 +12,16 @@ from .status_metrics_calculations import *
 from .gps import get_gps_athletic_skills_metrics, get_gps_football_abilities_metrics
 
 
+from datetime import date
+
+def calculate_age(dob):
+    try:
+        today = date.today()
+        return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    except Exception:
+        return 25
+    
+
 # for status card
 def get_status_card_metrics(user):
     try:

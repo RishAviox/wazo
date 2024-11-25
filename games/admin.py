@@ -2,7 +2,7 @@ from django.contrib import admin
 from core.admin import admin_site
 
 from .models import Game, GameGPSData, GameVideoData
-from .forms import GameAdminForm
+from .forms import GameAdminForm, GameGPSDataForm, GameVideoDataForm
 
     
 
@@ -18,8 +18,9 @@ class GameAdmin(admin.ModelAdmin):
 
 
 class GameGPSDataAdmin(admin.ModelAdmin):
+    form = GameGPSDataForm
     list_display = ('id', 'data_file', 'game_type', 'game_display', 'is_processed', 'created_on', 'updated_on')
-    readonly_fields = ('game', 'is_processed') 
+    readonly_fields = ('game',) 
 
     def game_display(self, obj):
         return obj.game.name if obj.game else "Unlinked"
@@ -27,8 +28,9 @@ class GameGPSDataAdmin(admin.ModelAdmin):
 
 
 class GameVideoDataAdmin(admin.ModelAdmin):
+    form = GameVideoDataForm
     list_display = ('id', 'data_file', 'game_type', 'provider', 'game_display', 'is_processed', 'created_on', 'updated_on')
-    readonly_fields = ('game', 'is_processed')  
+    readonly_fields = ('game',)  
 
     def game_display(self, obj):
         return obj.game.name if obj.game else "Unlinked"
