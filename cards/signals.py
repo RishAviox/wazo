@@ -1,9 +1,12 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
 import pandas as pd
+
 from teams.models import Team
 from games.models import GameGPSData, GameVideoData, Game
 from accounts.models import PlayerIDMapping
+from questionnaire.models import DailyWellnessUserResponse
 
 from .utils import *
 from .models import *
@@ -285,3 +288,41 @@ def process_video_data_file(sender, instance, created, **kwargs):
     
     else:
         print("Game Video Data file is already processed.")
+        
+        
+# process daily wellness questionnaire
+@receiver(post_save, sender=DailyWellnessUserResponse, weak=False)
+def process_daily_wellness_user_responses(sender, instance, created, **kwargs):
+    print("Signal triggered: DailyWellness User Response")
+    
+    try:
+        responses_count = len(instance.response) if instance.response else 0
+        # number of questions(7) can be made dynamic
+        if responses_count > 0 and responses_count < 7:
+            # schedule notification in `Notification server`
+            # get the latest, if less than for 30 minutes
+            # schedule notification to inform user
+            # here just skip it
+            print("but responses count is: ", responses_count)
+        else:
+            # Retrieve the StatusCardMetrics instance for the user
+            new_metrics = calculate_wellness_metrics(instance)  # Get the new metrics
+            # Get today's date in the configured timezone
+            today = timezone.localdate()
+
+            # Update or create a single entry per user per day
+            status_card_metrics, created = StatusCardMetrics.objects.update_or_create(
+                user=instance.user,
+                created_on__date=today,  # Ensure it matches today's date
+                defaults={'metrics': new_metrics}
+            )
+            print(f"Calculated Status Card Metrics for the user (phone: {instance.user}): {new_metrics}.")
+
+            if created:
+                print(f"Created Status Card Metrics for the user (phone: {instance.user}).")
+            else:
+                print(f"Updated Status Card Metrics for the user (phone: {instance.user}).")
+
+    
+    except Exception as e:
+            print(f"Error processing daily wellness user responses: {e}")

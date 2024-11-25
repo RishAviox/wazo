@@ -5,7 +5,6 @@ from games.models import Game
 # Status Card Metrics
 class StatusCardMetrics(models.Model):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='status_card_metrics')
-    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='game_status_card_metrics')
     metrics = models.JSONField(default=dict)
      
     created_on = models.DateTimeField(auto_now_add=True)
