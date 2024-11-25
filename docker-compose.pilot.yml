@@ -29,7 +29,7 @@ services:
       - VIRTUAL_HOST=api.hiwajo.com
     restart: 'always'
     depends_on:
-      - wajo_backend
+      - pilot_wajo_backend
 
 
 volumes:
