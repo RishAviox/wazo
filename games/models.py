@@ -39,6 +39,11 @@ def game_gps_data_file_path(instnace, filename):
     return 'uploads/game_gps_data_files/{0}'.format(filename)
 
 class GameGPSData(models.Model):
+    GAME_TYPE_CHOICES = [
+        ('match', 'Match'),
+        ('training', 'Training'),
+    ]
+    game_type = models.CharField(max_length=10, choices=GAME_TYPE_CHOICES)
     data_file = models.FileField(
                 upload_to=game_gps_data_file_path, 
                 validators=[validate_file_extension]
@@ -58,17 +63,6 @@ class GameGPSData(models.Model):
 
     # process file with signal
 
-    def process_file(self):
-        """Process the uploaded file and link game and teams."""
-        print("Processed uploaded file.")
-        self.processed = True
-
-    def save(self, *args, **kwargs):
-        # If the file is newly uploaded and not yet processed, process it
-        if not self.processed and self.file:
-            self.process_file()
-        super().save(*args, **kwargs)
-
     class Meta:
         verbose_name = "Game GPS Data"
         verbose_name_plural = "Game GPS Data"
@@ -84,9 +78,14 @@ def game_video_data_file_path(instnace, filename):
 
 class GameVideoData(models.Model):
     GAME_TYPE_CHOICES = [
+        ('match', 'Match'),
+        ('training', 'Training'),
+    ]
+    PROVIDER_CHOICES = [
         ('BEPRO', 'BEPRO'),
     ]
-    provider = models.CharField(max_length=16, choices=GAME_TYPE_CHOICES)
+    provider = models.CharField(max_length=16, choices=PROVIDER_CHOICES)
+    game_type = models.CharField(max_length=10, choices=GAME_TYPE_CHOICES)
     data_file = models.FileField(
                 upload_to=game_video_data_file_path, 
                 validators=[validate_file_extension]
@@ -105,17 +104,6 @@ class GameVideoData(models.Model):
     updated_on = models.DateTimeField(auto_now=True)
 
     # process file with signal
-
-    def process_file(self):
-        """Process the uploaded file and link game and teams."""
-        print("Processed uploaded file.")
-        self.processed = True
-
-    def save(self, *args, **kwargs):
-        # If the file is newly uploaded and not yet processed, process it
-        if not self.processed and self.file:
-            self.process_file()
-        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "Game Video Data"

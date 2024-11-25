@@ -18,7 +18,7 @@ class GameAdmin(admin.ModelAdmin):
 
 
 class GameGPSDataAdmin(admin.ModelAdmin):
-    list_display = ('data_file', 'game_display', 'is_processed', 'created_on', 'updated_on')
+    list_display = ('id', 'data_file', 'game_type', 'game_display', 'is_processed', 'created_on', 'updated_on')
     readonly_fields = ('game', 'is_processed') 
 
     def game_display(self, obj):
@@ -27,7 +27,7 @@ class GameGPSDataAdmin(admin.ModelAdmin):
 
 
 class GameVideoDataAdmin(admin.ModelAdmin):
-    list_display = ('data_file', 'provider', 'game_display', 'is_processed', 'created_on', 'updated_on')
+    list_display = ('id', 'data_file', 'game_type', 'provider', 'game_display', 'is_processed', 'created_on', 'updated_on')
     readonly_fields = ('game', 'is_processed')  
 
     def game_display(self, obj):
