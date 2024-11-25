@@ -53,6 +53,8 @@ INSTALLED_APPS = [
     "events",
     "questionnaire",
     "notifications",
+    "games",
+    "teams",
 ]
 
 MIDDLEWARE = [
