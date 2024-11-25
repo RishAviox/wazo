@@ -10,7 +10,7 @@ services:
               gunicorn wajo_backend.wsgi:application --workers 3 --bind 0.0.0.0:8000 --access-logfile /var/log/gunicorn.access.log --error-logfile /var/log/gunicorn.error.log
             "
     ports:
-      - "8001:8000"
+      - "8002:8000"
     container_name: pilot_wajo_backend
     volumes:
       - .:/app
@@ -21,7 +21,7 @@ services:
     image: nginx:latest
     container_name: pilot_wajo_media_server
     ports:
-      - "8081:80"
+      - "8082:80"
     volumes:
       - ./nginx/media_server.conf:/etc/nginx/conf.d/media.conf
       - media_volume:/usr/share/nginx/html/media
