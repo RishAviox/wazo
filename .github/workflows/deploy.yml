@@ -5,39 +5,33 @@ on:
       - main
       - pilot
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE
       - uses: actions/checkout@v3
         with:
           clean: false
 
       - name: Set Branch-Specific Docker Compose File
+        id: set-docker-file
         run: |
           if [[ "${{ github.ref_name }}" == "main" ]]; then
-            export DOCKER_COMPOSE_FILE="docker-compose.yml"
-            export APP_ENV="main"
+            echo "DOCKER_COMPOSE_FILE=docker-compose.yml" >> $GITHUB_ENV
+            echo "APP_ENV=main" >> $GITHUB_ENV
           elif [[ "${{ github.ref_name }}" == "pilot" ]]; then
-            export DOCKER_COMPOSE_FILE="docker-compose.pilot.yml"
-            export APP_ENV="pilot"
+            echo "DOCKER_COMPOSE_FILE=docker-compose.pilot.yml" >> $GITHUB_ENV
+            echo "APP_ENV=pilot" >> $GITHUB_ENV
           else
             echo "Unsupported branch for deployment: ${{ github.ref_name }}"
             exit 1
           fi
         shell: bash
 
-      - name: Stop Running Docker Containers
-        run: docker-compose -f $DOCKER_COMPOSE_FILE down
-        env:
-          DOCKER_COMPOSE_FILE: ${{ env.DOCKER_COMPOSE_FILE }}
+      - name: Stop Running Containers
+        run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down
 
-      - name: Deploy Docker Containers
-        run: docker-compose -f $DOCKER_COMPOSE_FILE up -d --build
-        env:
-          DOCKER_COMPOSE_FILE: ${{ env.DOCKER_COMPOSE_FILE }}
-          APP_ENV: ${{ env.APP_ENV }}
+      - name: Deploy Containers
+        run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d --build
