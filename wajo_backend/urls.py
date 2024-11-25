@@ -22,12 +22,12 @@ from django.conf.urls.static import static
 from core.admin import admin_site
 
 urlpatterns = [
-    path("admin/", admin_site.urls),
-    path("api/auth/", include("accounts.urls")),
-    path("api/onboarding/", include("onboarding.urls")),
-    path("api/notifications/", include("notifications.urls")),
-    path("api/chatbot-admin/", include("chatbot_admin.urls")),
-    path("api/cards/", include("cards.urls")),
+    path("v1/admin/", admin_site.urls),
+    path("v1/api/auth/", include("accounts.urls")),
+    path("v1/api/onboarding/", include("onboarding.urls")),
+    path("v1/api/notifications/", include("notifications.urls")),
+    path("v1/api/chatbot-admin/", include("chatbot_admin.urls")),
+    path("v1/api/cards/", include("cards.urls")),
 ]
 
 
