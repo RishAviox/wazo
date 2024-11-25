@@ -5,10 +5,13 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.utils.timezone import datetime
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from core.llm_provider import generate_llm_response
 from .utils import *
+from .models import *
 from events.models import MatchEventsDataFile
+from accounts.serializer import WajoUserSerializer
 
 # greetings api, universal for all cards
 class GreetingAPI(APIView):
@@ -228,19 +231,74 @@ class StatusCardMetricAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # Parse the date parameter (if provided)
+        date_str = request.query_params.get('date')
+        target_date = parse_date(date_str) if date_str else None
+        
         if request.user.role == 'Coach':
             player_data = []
             for player in request.user.players.all():
+                # Get metrics for the specified date or the latest metrics
+                if target_date:
+                    metrics_entry = (
+                        StatusCardMetrics.objects.filter(user=player, created_on__date=target_date)
+                        .first()
+                    )
+                else:
+                    metrics_entry = (
+                        StatusCardMetrics.objects.filter(user=player)
+                        .order_by('-created_on')
+                        .first()
+                    )
+                
+                # Get all available dates for the player's metrics
+                available_dates = (
+                    StatusCardMetrics.objects.filter(user=player)
+                    .values_list('created_on__date', flat=True)
+                    .distinct()
+                    .order_by('-created_on__date')
+                )
+                
+                # Append player data
                 player_data.append({
-                        'profile': WajoUserSerializer(player).data,
-                        'metrics': get_status_card_metrics(player)
-                    })
+                    'profile': WajoUserSerializer(player).data,
+                    'metrics': metrics_entry.metrics if metrics_entry else {},
+                    'available_dates': list(available_dates)
+                })
 
             return Response(player_data, status=status.HTTP_200_OK)
         
         else:
-            metrics = get_status_card_metrics(request.user)
-            return Response(metrics, status=status.HTTP_200_OK)
+            # For non-coach users
+            user = request.user
+
+            # Get metrics for the specified date or the latest metrics
+            if target_date:
+                metrics_entry = (
+                    StatusCardMetrics.objects.filter(user=user, created_on__date=target_date)
+                    .first()
+                )
+            else:
+                metrics_entry = (
+                    StatusCardMetrics.objects.filter(user=user)
+                    .order_by('-created_on')
+                    .first()
+                )
+
+            # Get all available dates for the user's metrics
+            available_dates = (
+                StatusCardMetrics.objects.filter(user=user)
+                .values_list('created_on__date', flat=True)
+                .distinct()
+                .order_by('-created_on__date')
+            )
+
+            # Prepare the response
+            response_data = {
+                'metrics': metrics_entry.metrics if metrics_entry else {},
+                'available_dates': list(available_dates)
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
         
 
 # card: 3 --> Attacking Skills
@@ -248,6 +306,10 @@ class AttackingSkillsAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # Parse the date parameter (if provided)
+        date_str = request.query_params.get('date')
+        target_date = parse_date(date_str) if date_str else None
+        
         # Check user role
         if request.user.role == 'Coach':
             # Get team stats
@@ -258,14 +320,38 @@ class AttackingSkillsAPI(APIView):
                 # Default to empty if no team mapping
                 team_stats = {}
 
-            # Get players' data
-            player_data = [
-                {
-                    'profile': WajoUserSerializer(player).data,
-                    'metrics': get_attacking_skills_metrics(player)
-                }
-                for player in request.user.players.all()
-            ]
+            # Get players' data           
+            player_data = []
+            for player in request.user.players.all():
+                if target_date:
+                    # Fetch metrics for the specified date
+                    metrics_entry = (
+                        AttackingSkills.objects.filter(user=player, game__date=target_date)
+                        .first()
+                    )
+                else:
+                    # Fetch the latest metrics
+                    metrics_entry = (
+                        AttackingSkills.objects.filter(user=player)
+                        .order_by('-game__date')
+                        .first()
+                    )
+                
+                # Get all available game dates
+                available_dates = (
+                    AttackingSkills.objects.filter(user=player)
+                    .values_list('game__date', flat=True)
+                    .distinct()
+                    .order_by('-game__date')  # Sort dates in descending order
+                )
+                
+                player_data.append(
+                    {
+                        'profile': WajoUserSerializer(player).data,
+                        'metrics': metrics_entry.metrics if metrics_entry else {},
+                        "available_dates": list(available_dates)
+                    }
+                )
 
             # Prepare response data
             data = {
@@ -274,9 +360,40 @@ class AttackingSkillsAPI(APIView):
             }
             return Response(data, status=status.HTTP_200_OK)
 
-        # If user is not a coach, return individual attacking skills metrics
-        metrics = get_attacking_skills_metrics(request.user)
-        return Response(metrics, status=status.HTTP_200_OK)
+        else:
+            user = request.user
+            # For non-coach users
+            if target_date:
+                # Fetch metrics for the specified date
+                metrics_entry = (
+                    AttackingSkills.objects.filter(user=user, game__date=target_date)
+                    .first()
+                )
+            else:
+                # Fetch the latest metrics
+                metrics_entry = (
+                    AttackingSkills.objects.filter(user=user)
+                    .order_by('-game__date')
+                    .first()
+                )
+            # Get all available game dates for the user
+            available_dates = (
+                AttackingSkills.objects.filter(user=user)
+                .values_list('game__date', flat=True)
+                .distinct()
+                .order_by('-game__date')
+            )
+            
+            # Prepare the user's metrics data
+            response_data = {
+                "metrics": metrics_entry.metrics if metrics_entry else {},
+                "available_dates": list(available_dates)
+            }
+            
+            print(response_data)
+            
+            # metrics = get_attacking_skills_metrics(request.user)
+            return Response(response_data, status=status.HTTP_200_OK)
     
 
 # card: 4 --> VideoCard Defensive (Defensive)
@@ -284,6 +401,12 @@ class VideoCardDefensiveAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        user = request.user
+
+        # Parse the date parameter (if provided)
+        date_str = request.query_params.get('date')
+        target_date = parse_date(date_str) if date_str else None
+        
         if request.user.role == 'Coach':
             # Get team stats
             if hasattr(request.user, 'coach_team_mappings'):
@@ -293,26 +416,76 @@ class VideoCardDefensiveAPI(APIView):
                 # Default to empty if no team mapping
                 team_stats = {}
                 
-            # Get players' data
-            player_data = [
-                {
-                    'profile': WajoUserSerializer(player).data,
-                    'metrics': get_videocard_defensive_metrics(player)
-                }
-                for player in request.user.players.all()
-            ]
+            # Gather players' data
+            player_data = []
+            for player in user.players.all():
+                if target_date:
+                    # Fetch metrics for the specified date
+                    metrics_entry = (
+                        VideoCardDefensive.objects.filter(user=player, game__date=target_date)
+                        .first()
+                    )
+                else:
+                    # Fetch the latest metrics
+                    metrics_entry = (
+                        VideoCardDefensive.objects.filter(user=player)
+                        .order_by('-game__date')
+                        .first()
+                    )
 
-            # Prepare response data
+                # Get all available game dates for the player
+                available_dates = (
+                    VideoCardDefensive.objects.filter(user=player)
+                    .values_list('game__date', flat=True)
+                    .distinct()
+                    .order_by('-game__date')
+                )
+
+                # Structure player's metrics data
+                player_data.append({
+                    'profile': WajoUserSerializer(player).data,
+                    "metrics": metrics_entry.metrics if metrics_entry else {},
+                    "available_dates": list(available_dates)
+                })
+
+            # Prepare the coach's response data
             data = {
                 'team': team_stats,
                 'players': player_data
             }
-
             return Response(data, status=status.HTTP_200_OK)
         
         else:
-            metrics = get_videocard_defensive_metrics(request.user)
-            return Response(metrics, status=status.HTTP_200_OK)
+            # For non-coach users
+            if target_date:
+                # Fetch metrics for the specified date
+                metrics_entry = (
+                    VideoCardDefensive.objects.filter(user=user, game__date=target_date)
+                    .first()
+                )
+            else:
+                # Fetch the latest metrics
+                metrics_entry = (
+                    VideoCardDefensive.objects.filter(user=user)
+                    .order_by('-game__date')
+                    .first()
+                )
+
+            # Get all available game dates for the user
+            available_dates = (
+                VideoCardDefensive.objects.filter(user=user)
+                .values_list('game__date', flat=True)
+                .distinct()
+                .order_by('-game__date')
+            )
+
+            # Prepare the user's metrics data
+            response_data = {
+                "metrics": metrics_entry.metrics if metrics_entry else {},
+                "available_dates": list(available_dates)
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
         
 
 # card: 5 --> VideoCard Distribution (Distribution)
@@ -320,6 +493,12 @@ class VideoCardDistributionsAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        user = request.user
+
+        # Parse the date parameter (if provided)
+        date_str = request.query_params.get('date')
+        target_date = parse_date(date_str) if date_str else None
+        
         if request.user.role == 'Coach':
             # Get team stats
             if hasattr(request.user, 'coach_team_mappings'):
@@ -329,26 +508,76 @@ class VideoCardDistributionsAPI(APIView):
                 # Default to empty if no team mapping
                 team_stats = {}
                 
-            # Get players' data
-            player_data = [
-                {
-                    'profile': WajoUserSerializer(player).data,
-                    'metrics': get_videocard_distributions_metrics(player)
-                }
-                for player in request.user.players.all()
-            ]
+            # Gather players' data
+            player_data = []
+            for player in user.players.all():
+                if target_date:
+                    # Fetch metrics for the specified date
+                    metrics_entry = (
+                        VideoCardDistributions.objects.filter(user=player, game__date=target_date)
+                        .first()
+                    )
+                else:
+                    # Fetch the latest metrics
+                    metrics_entry = (
+                        VideoCardDistributions.objects.filter(user=player)
+                        .order_by('-game__date')
+                        .first()
+                    )
 
-            # Prepare response data
+                # Get all available game dates for the player
+                available_dates = (
+                    VideoCardDistributions.objects.filter(user=player)
+                    .values_list('game__date', flat=True)
+                    .distinct()
+                    .order_by('-game__date')
+                )
+
+                # Structure player's metrics data
+                player_data.append({
+                    'profile': WajoUserSerializer(player).data,
+                    "metrics": metrics_entry.metrics if metrics_entry else {},
+                    "available_dates": list(available_dates)
+                })
+
+            # Prepare the coach's response data
             data = {
                 'team': team_stats,
                 'players': player_data
             }
-
             return Response(data, status=status.HTTP_200_OK)
         
         else:
-            metrics = get_videocard_distributions_metrics(request.user)
-            return Response(metrics, status=status.HTTP_200_OK)
+            # For non-coach users
+            if target_date:
+                # Fetch metrics for the specified date
+                metrics_entry = (
+                    VideoCardDistributions.objects.filter(user=user, game__date=target_date)
+                    .first()
+                )
+            else:
+                # Fetch the latest metrics
+                metrics_entry = (
+                    VideoCardDistributions.objects.filter(user=user)
+                    .order_by('-game__date')
+                    .first()
+                )
+
+            # Get all available game dates for the user
+            available_dates = (
+                VideoCardDistributions.objects.filter(user=user)
+                .values_list('game__date', flat=True)
+                .distinct()
+                .order_by('-game__date')
+            )
+
+            # Prepare the user's metrics data
+            response_data = {
+                "metrics": metrics_entry.metrics if metrics_entry else {},
+                "available_dates": list(available_dates)
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
 
 # card: 6 --> GPS Athletic Skills (Athletic Skills)
@@ -356,6 +585,12 @@ class GPSAthleticSkillsAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        user = request.user
+
+        # Parse the date parameter (if provided)
+        date_str = request.query_params.get('date')
+        target_date = parse_date(date_str) if date_str else None
+        
         if request.user.role == 'Coach':
             # Get team stats
             if hasattr(request.user, 'coach_team_mappings'):
@@ -365,26 +600,76 @@ class GPSAthleticSkillsAPI(APIView):
                 # Default to empty if no team mapping
                 team_stats = {}
                 
-            # Get players' data
-            player_data = [
-                {
-                    'profile': WajoUserSerializer(player).data,
-                    'metrics': get_gps_athletic_skills_metrics(player)
-                }
-                for player in request.user.players.all()
-            ]
+            # Gather players' data
+            player_data = []
+            for player in user.players.all():
+                if target_date:
+                    # Fetch metrics for the specified date
+                    metrics_entry = (
+                        GPSAthleticSkills.objects.filter(user=player, game__date=target_date)
+                        .first()
+                    )
+                else:
+                    # Fetch the latest metrics
+                    metrics_entry = (
+                        GPSAthleticSkills.objects.filter(user=player)
+                        .order_by('-game__date')
+                        .first()
+                    )
 
-            # Prepare response data
+                # Get all available game dates for the player
+                available_dates = (
+                    GPSAthleticSkills.objects.filter(user=player)
+                    .values_list('game__date', flat=True)
+                    .distinct()
+                    .order_by('-game__date')
+                )
+
+                # Structure player's metrics data
+                player_data.append({
+                    'profile': WajoUserSerializer(player).data,
+                    "metrics": metrics_entry.metrics if metrics_entry else {},
+                    "available_dates": list(available_dates)
+                })
+
+            # Prepare the coach's response data
             data = {
                 'team': team_stats,
                 'players': player_data
             }
-
             return Response(data, status=status.HTTP_200_OK)
         
         else:
-            metrics = get_gps_athletic_skills_metrics(request.user)
-            return Response(metrics, status=status.HTTP_200_OK)
+            # For non-coach users
+            if target_date:
+                # Fetch metrics for the specified date
+                metrics_entry = (
+                    GPSAthleticSkills.objects.filter(user=user, game__date=target_date)
+                    .first()
+                )
+            else:
+                # Fetch the latest metrics
+                metrics_entry = (
+                    GPSAthleticSkills.objects.filter(user=user)
+                    .order_by('-game__date')
+                    .first()
+                )
+
+            # Get all available game dates for the user
+            available_dates = (
+                GPSAthleticSkills.objects.filter(user=user)
+                .values_list('game__date', flat=True)
+                .distinct()
+                .order_by('-game__date')
+            )
+
+            # Prepare the user's metrics data
+            response_data = {
+                "metrics": metrics_entry.metrics if metrics_entry else {},
+                "available_dates": list(available_dates)
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
 
 # card: 7 --> GPS Football Abilities (Football Skills)
@@ -392,6 +677,12 @@ class GPSFootballAbilitiesAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        user = request.user
+
+        # Parse the date parameter (if provided)
+        date_str = request.query_params.get('date')
+        target_date = parse_date(date_str) if date_str else None
+        
         if request.user.role == 'Coach':
             # Get team stats
             if hasattr(request.user, 'coach_team_mappings'):
@@ -401,26 +692,75 @@ class GPSFootballAbilitiesAPI(APIView):
                 # Default to empty if no team mapping
                 team_stats = {}
                 
-            # Get players' data
-            player_data = [
-                {
-                    'profile': WajoUserSerializer(player).data,
-                    'metrics': get_gps_football_abilities_metrics(player)
-                }
-                for player in request.user.players.all()
-            ]
+            player_data = []
+            for player in user.players.all():
+                if target_date:
+                    # Fetch metrics for the specified date
+                    metrics_entry = (
+                        GPSFootballAbilities.objects.filter(user=player, game__date=target_date)
+                        .first()
+                    )
+                else:
+                    # Fetch the latest metrics
+                    metrics_entry = (
+                        GPSFootballAbilities.objects.filter(user=player)
+                        .order_by('-game__date')
+                        .first()
+                    )
 
-            # Prepare response data
+                # Get all available game dates for the player
+                available_dates = (
+                    GPSFootballAbilities.objects.filter(user=player)
+                    .values_list('game__date', flat=True)
+                    .distinct()
+                    .order_by('-game__date')
+                )
+
+                # Structure player's metrics data
+                player_data.append({
+                    'profile': WajoUserSerializer(player).data,
+                    "metrics": metrics_entry.metrics if metrics_entry else {},
+                    "available_dates": list(available_dates)
+                })
+
+            # Prepare the coach's response data
             data = {
                 'team': team_stats,
                 'players': player_data
             }
-
             return Response(data, status=status.HTTP_200_OK)
         
         else:
-            metrics = get_gps_football_abilities_metrics(request.user)
-            return Response(metrics, status=status.HTTP_200_OK)
+            # For non-coach users
+            if target_date:
+                # Fetch metrics for the specified date
+                metrics_entry = (
+                    GPSFootballAbilities.objects.filter(user=user, game__date=target_date)
+                    .first()
+                )
+            else:
+                # Fetch the latest metrics
+                metrics_entry = (
+                    GPSFootballAbilities.objects.filter(user=user)
+                    .order_by('-game__date')
+                    .first()
+                )
+
+            # Get all available game dates for the user
+            available_dates = (
+                GPSFootballAbilities.objects.filter(user=user)
+                .values_list('game__date', flat=True)
+                .distinct()
+                .order_by('-game__date')
+            )
+
+            # Prepare the user's metrics data
+            response_data = {
+                "metrics": metrics_entry.metrics if metrics_entry else {},
+                "available_dates": list(available_dates)
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
 # Video Card API
 class VideoAnalysisCardAPI(APIView):
