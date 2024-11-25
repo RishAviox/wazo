@@ -11,27 +11,36 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v3
-        with:
-          clean: false
-
-      - name: Set Branch-Specific Docker Compose File
-        id: set-docker-file
+      - name: Set Branch-Specific Directory
+        id: set-dir
         run: |
           if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "DEPLOY_DIR=/var/www/wajo_main" >> $GITHUB_ENV
             echo "DOCKER_COMPOSE_FILE=docker-compose.yml" >> $GITHUB_ENV
-            echo "APP_ENV=main" >> $GITHUB_ENV
+            echo "PROJECT_NAME=wajo_main" >> $GITHUB_ENV
           elif [[ "${{ github.ref_name }}" == "pilot" ]]; then
+            echo "DEPLOY_DIR=/var/www/wajo_pilot" >> $GITHUB_ENV
             echo "DOCKER_COMPOSE_FILE=docker-compose.pilot.yml" >> $GITHUB_ENV
-            echo "APP_ENV=pilot" >> $GITHUB_ENV
+            echo "PROJECT_NAME=wajo_pilot" >> $GITHUB_ENV
           else
             echo "Unsupported branch for deployment: ${{ github.ref_name }}"
             exit 1
           fi
         shell: bash
 
-      - name: Stop Running Containers
-        run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down
+      - name: Create Deployment Directory
+        run: mkdir -p ${{ env.DEPLOY_DIR }}
 
-      - name: Deploy Containers
-        run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d --build
+      - name: Sync Project Files to Deployment Directory
+        uses: actions/checkout@v3
+        with:
+          clean: false
+          path: ${{ env.DEPLOY_DIR }}
+
+      - name: Stop Running Containers for Current Project
+        run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} -p ${{ env.PROJECT_NAME }} down
+        working-directory: ${{ env.DEPLOY_DIR }}
+
+      - name: Deploy Containers for Current Project
+        run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} -p ${{ env.PROJECT_NAME }} up -d --build
+        working-directory: ${{ env.DEPLOY_DIR }}
