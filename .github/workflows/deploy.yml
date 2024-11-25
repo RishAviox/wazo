@@ -15,11 +15,11 @@ jobs:
         id: set-dir
         run: |
           if [[ "${{ github.ref_name }}" == "main" ]]; then
-            echo "DEPLOY_DIR=/var/www/wajo_main" >> $GITHUB_ENV
+            echo "DEPLOY_DIR=./deployments/wajo_main" >> $GITHUB_ENV
             echo "DOCKER_COMPOSE_FILE=docker-compose.yml" >> $GITHUB_ENV
             echo "PROJECT_NAME=wajo_main" >> $GITHUB_ENV
           elif [[ "${{ github.ref_name }}" == "pilot" ]]; then
-            echo "DEPLOY_DIR=/var/www/wajo_pilot" >> $GITHUB_ENV
+            echo "DEPLOY_DIR=./deployments/wajo_pilot" >> $GITHUB_ENV
             echo "DOCKER_COMPOSE_FILE=docker-compose.pilot.yml" >> $GITHUB_ENV
             echo "PROJECT_NAME=wajo_pilot" >> $GITHUB_ENV
           else
@@ -44,3 +44,4 @@ jobs:
       - name: Deploy Containers for Current Project
         run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} -p ${{ env.PROJECT_NAME }} up -d --build
         working-directory: ${{ env.DEPLOY_DIR }}
+
