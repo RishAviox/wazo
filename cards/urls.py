@@ -12,6 +12,7 @@ urlpatterns = [
     # card stats
     path('daily-snapshot', DailySnapshortCardAPI.as_view(), name='daily-snapshot'),    
     path('status-card-metrics', StatusCardMetricAPI.as_view(), name='status-card-metrics'),
+    path('rpe-metrics', RPEMetricAPI.as_view(), name='rpe-metrics'),
     path('attacking-skills', AttackingSkillsAPI.as_view(), name='attacking-skills-metrics'),
     path('videocard-defensive', VideoCardDefensiveAPI.as_view(), name='videocard-defensive-metrics'),
     path('videocard-distributions', VideoCardDistributionsAPI.as_view(), name='videocard-distributions-metrics'),

@@ -299,8 +299,83 @@ class StatusCardMetricAPI(APIView):
                 'available_dates': list(available_dates)
             }
             return Response(response_data, status=status.HTTP_200_OK)
+   
         
+# card: 2.1 --> RPE Metrics (Player Overview)
+class RPEMetricAPI(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        # Parse the date parameter (if provided)
+        date_str = request.query_params.get('date')
+        target_date = parse_date(date_str) if date_str else None
+        
+        if request.user.role == 'Coach':
+            player_data = []
+            for player in request.user.players.all():
+                # Get metrics for the specified date or the latest metrics
+                if target_date:
+                    metrics_entry = (
+                        RPEMetrics.objects.filter(user=player, created_on__date=target_date)
+                        .first()
+                    )
+                else:
+                    metrics_entry = (
+                        RPEMetrics.objects.filter(user=player)
+                        .order_by('-created_on')
+                        .first()
+                    )
+                
+                # Get all available dates for the player's metrics
+                available_dates = (
+                    RPEMetrics.objects.filter(user=player)
+                    .values_list('created_on__date', flat=True)
+                    .distinct()
+                    .order_by('-created_on__date')
+                )
+                
+                # Append player data
+                player_data.append({
+                    'profile': WajoUserSerializer(player).data,
+                    'metrics': metrics_entry.metrics if metrics_entry else {},
+                    'available_dates': list(available_dates)
+                })
+
+            return Response(player_data, status=status.HTTP_200_OK)
+        
+        else:
+            # For non-coach users
+            user = request.user
+
+            # Get metrics for the specified date or the latest metrics
+            if target_date:
+                metrics_entry = (
+                    RPEMetrics.objects.filter(user=user, created_on__date=target_date)
+                    .first()
+                )
+            else:
+                metrics_entry = (
+                    RPEMetrics.objects.filter(user=user)
+                    .order_by('-created_on')
+                    .first()
+                )
+
+            # Get all available dates for the user's metrics
+            available_dates = (
+                RPEMetrics.objects.filter(user=user)
+                .values_list('created_on__date', flat=True)
+                .distinct()
+                .order_by('-created_on__date')
+            )
+
+            # Prepare the response
+            response_data = {
+                'metrics': metrics_entry.metrics if metrics_entry else {},
+                'available_dates': list(available_dates)
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+        
+        
 # card: 3 --> Attacking Skills
 class AttackingSkillsAPI(APIView):
     permission_classes = [IsAuthenticated]
