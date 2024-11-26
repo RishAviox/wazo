@@ -1,25 +1,47 @@
-# This is a basic workflow to help you get started with Actions
-
 name: CI/CD
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+      - pilot
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  build:
+  deploy:
     runs-on: self-hosted
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
+      - name: Set Branch-Specific Directory
+        id: set-dir
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "DEPLOY_DIR=./deployments/wajo_main" >> $GITHUB_ENV
+            echo "DOCKER_COMPOSE_FILE=docker-compose.yml" >> $GITHUB_ENV
+            echo "PROJECT_NAME=wajo_main" >> $GITHUB_ENV
+          elif [[ "${{ github.ref_name }}" == "pilot" ]]; then
+            echo "DEPLOY_DIR=./deployments/wajo_pilot" >> $GITHUB_ENV
+            echo "DOCKER_COMPOSE_FILE=docker-compose.pilot.yml" >> $GITHUB_ENV
+            echo "PROJECT_NAME=wajo_pilot" >> $GITHUB_ENV
+          else
+            echo "Unsupported branch for deployment: ${{ github.ref_name }}"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Create Deployment Directory
+        run: mkdir -p ${{ env.DEPLOY_DIR }}
+
+      - name: Sync Project Files to Deployment Directory
+        uses: actions/checkout@v3
         with:
           clean: false
+          path: ${{ env.DEPLOY_DIR }}
 
-      - name: Remove running docker
-        run: docker-compose down
+      - name: Stop Running Containers for Current Project
+        run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} -p ${{ env.PROJECT_NAME }} down
+        working-directory: ${{ env.DEPLOY_DIR }}
 
-      - name: Run Docker
-        run: docker-compose up -d --build
+      - name: Deploy Containers for Current Project
+        run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} -p ${{ env.PROJECT_NAME }} up -d --build
+        working-directory: ${{ env.DEPLOY_DIR }}
+
