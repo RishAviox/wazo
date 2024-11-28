@@ -13,6 +13,8 @@ class WajoAdminSite(AdminSite):
     APP_ORDER = [
         "Accounts",
         "Onboarding",
+        "Games",
+        "Teams",
         "Cards",
         "Questionnaire",
         "Events",
@@ -31,18 +33,22 @@ class WajoAdminSite(AdminSite):
         "Onboarding": [
             'Onboarding Flow',
         ],
+        "Games": [
+            "Games",
+            "Game GPS Data",
+            "Game Video Data",
+        ],
+        "Teams": [
+            "Teams",
+        ],
         "Cards": [
             "Status Card Metrics",
+            "RPE Metrics",
             "Attacking Skills",
             "Video Card Defensive",
             "Video Card Distributions",
             "GPS-Athletic Skills",
             "GPS-Football Abilities",
-        ],
-        "Events": [
-            'One Time Events',
-            'Recurring Events',
-            'Match Events Data Files',
         ],
         "Questionnaire": [
             'Daily Wellness Questionnaire',
@@ -52,6 +58,11 @@ class WajoAdminSite(AdminSite):
             'Card Suggested Actions',
             'Schedule Planning Questionnaire',
             'Schedule Planning User Responses',
+        ],
+        "Events": [
+            'One Time Events',
+            'Recurring Events',
+            'Match Events Data Files',
         ],
         "Notifications": [
             'Notifications',
@@ -63,8 +74,6 @@ class WajoAdminSite(AdminSite):
 
     def get_app_list(self, request, app_label=None):
         app_list = super().get_app_list(request)
-
-        
 
         # Helper function to sort models within an app
         def sort_models(app):
