@@ -6,11 +6,14 @@ def get_team_stats_sheet(stats_sheet):
     })
 
     team_stats = stats_sheet.groupby('team_id').agg(aggregation_dict).reset_index()
+    unique_players_per_team = stats_sheet.groupby('team_id')['player_id'].nunique().reset_index(name='num_players')
+
+    team_stats = team_stats.merge(unique_players_per_team, on='team_id')
 
     # Average Play Time per Player in minutes (/60,000)
-    team_stats['play_time'] = team_stats['play_time'] / (stats_sheet['player_id'].nunique())
+    team_stats['play_time'] = team_stats['play_time'] / team_stats['num_players'] #(stats_sheet['player_id'].nunique())
 
-    # print("team_stats: ", team_stats)
+    # print("team_stats: ", team_stats['play_time'], team_stats['num_players'])
     # team_stats.to_csv("test.csv")
 
     return team_stats
