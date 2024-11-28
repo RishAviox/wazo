@@ -11,6 +11,9 @@ from questionnaire.models import DailyWellnessUserResponse, RPEUserResponse
 from .utils import *
 from .models import *
 
+# run team stats here
+from teams.signals import calculate_team_gps_stats, calculate_team_video_stats
+
 # process game gps data file
 @receiver(post_save, sender=GameGPSData, weak=False)
 def process_gps_data_file(sender, instance, created, **kwargs):
@@ -122,7 +125,8 @@ def process_gps_data_file(sender, instance, created, **kwargs):
                     else:
                         print(f"Updated GPS Football Abilities for player {player_id} (phone: {user_phone}).")
 
-
+            # team gps stats
+            calculate_team_gps_stats(instance)
         except Exception as e:
             print(f"Error processing GPS data file: {e}")
             
@@ -281,8 +285,8 @@ def process_video_data_file(sender, instance, created, **kwargs):
                     else:
                         print(f"Updated Video Card Distributions for player {player_id} (phone: {user_phone}).")
 
-
-        
+            # team video stats
+            calculate_team_video_stats(instance)
         except Exception as e:
             print(f"Error processing video data file: {e}")
     

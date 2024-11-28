@@ -18,3 +18,18 @@ class Team(models.Model):
     def __str__(self):
         return self.name if self.name else f"Team {self.id}"
 
+class TeamStats(models.Model):
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="team_stats")
+    game = models.ForeignKey("games.Game", on_delete=models.CASCADE, related_name='game_team_stats')
+    metrics = models.JSONField(default=dict)
+     
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Team Stats"
+        verbose_name_plural = "Team Stats"
+        unique_together = ('team', 'game')
+
+    def __str__(self):
+        return f"Stats for Team: {self.team.name if self.team.name else self.team.id}"
