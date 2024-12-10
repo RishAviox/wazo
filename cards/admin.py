@@ -28,6 +28,9 @@ class GPSFootballAbilitiesAdmin(admin.ModelAdmin):
 class TrainingCardDataAdmin(admin.ModelAdmin):
     list_display = ['id', 'first_dropdown', 'second_dropdown', 'topic', '_type', 'created_on', 'updated_on']
 
+class NewsCardDataAdmin(admin.ModelAdmin):
+    list_display = ['id', 'title', 'data', 'created_on', 'updated_on']
+
 admin_site.register(StatusCardMetrics, StatusCardMetricsAdmin)
 admin_site.register(RPEMetrics, RPEMetricsAdmin)
 admin_site.register(AttackingSkills, AttackingSkillsAdmin)
@@ -36,3 +39,4 @@ admin_site.register(VideoCardDistributions, VideoCardDistributionsAdmin)
 admin_site.register(GPSAthleticSkills, GPSAthleticSkillsAdmin)
 admin_site.register(GPSFootballAbilities, GPSFootballAbilitiesAdmin)
 admin_site.register(TrainingCardData, TrainingCardDataAdmin)
+admin_site.register(NewsCardData, NewsCardDataAdmin)

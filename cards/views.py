@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_date
 from core.llm_provider import generate_llm_response
 from .utils import *
 from .models import *
-from .serializers import TrainingCardDataSerializer
+from .serializers import TrainingCardDataSerializer, NewsCardDataSerializer
 from events.models import MatchEventsDataFile
 from accounts.serializer import WajoUserSerializer
 
@@ -478,3 +478,10 @@ class TrainingCardJSONAPI(ListAPIView):
     permission_classes = [IsAuthenticated]
     queryset = TrainingCardData.objects.all()
     serializer_class = TrainingCardDataSerializer
+    
+    
+# News Card JSON data API
+class NewsCardJSONAPI(ListAPIView):
+    permission_classes = [IsAuthenticated]
+    queryset = NewsCardData.objects.all()
+    serializer_class = NewsCardDataSerializer

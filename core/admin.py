@@ -50,6 +50,7 @@ class WajoAdminSite(AdminSite):
             "GPS-Athletic Skills",
             "GPS-Football Abilities",
             "Training Card Data (JSON)",
+            "News Card Data (JSON)",
         ],
         "Questionnaire": [
             'Daily Wellness Questionnaire',

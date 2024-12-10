@@ -24,5 +24,6 @@ urlpatterns = [
     
     # training card json
     path('training-card-json', TrainingCardJSONAPI.as_view(), name='training-card-json'),
-   
+    # news card json
+    path('news-card-json', NewsCardJSONAPI.as_view(), name='news-card-json'),
 ]

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import TrainingCardData
+from .models import TrainingCardData, NewsCardData
 
 class TrainingCardDataSerializer(serializers.ModelSerializer):
     # Explicitly declare fields to customize JSON keys
@@ -13,3 +13,9 @@ class TrainingCardDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = TrainingCardData
         fields = ['FirstDropdown', 'SecondDropdown', 'Topic', 'VideoLink', 'Type']
+        
+
+class NewsCardDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NewsCardData
+        fields = ['title', 'data']
