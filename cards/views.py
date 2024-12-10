@@ -1,5 +1,6 @@
 # views related to cards
 from rest_framework.views import APIView
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -10,6 +11,7 @@ from django.utils.dateparse import parse_date
 from core.llm_provider import generate_llm_response
 from .utils import *
 from .models import *
+from .serializers import TrainingCardDataSerializer
 from events.models import MatchEventsDataFile
 from accounts.serializer import WajoUserSerializer
 
@@ -470,3 +472,9 @@ class VideoAnalysisCardAPI(APIView):
         print("Events: ", { 'category': category, 'sub_category': sub_category, 'records': len(event_times)})
         return Response({'event_time': event_times}, status.HTTP_200_OK)
 
+
+# Training Card JSON data API
+class TrainingCardJSONAPI(ListAPIView):
+    permission_classes = [IsAuthenticated]
+    queryset = TrainingCardData.objects.all()
+    serializer_class = TrainingCardDataSerializer

@@ -49,6 +49,7 @@ class WajoAdminSite(AdminSite):
             "Video Card Distributions",
             "GPS-Athletic Skills",
             "GPS-Football Abilities",
+            "Training Card Data (JSON)",
         ],
         "Questionnaire": [
             'Daily Wellness Questionnaire',

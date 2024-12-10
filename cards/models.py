@@ -114,3 +114,18 @@ class GPSFootballAbilities(models.Model):
 
     def __str__(self):
         return f"Football Abilities for {self.user.phone_no}" 
+    
+# training card json data, send as json of all entries via api
+class TrainingCardData(models.Model):
+    first_dropdown = models.CharField(max_length=64)
+    second_dropdown = models.CharField(max_length=64)
+    topic = models.CharField(max_length=64, null=True, blank=True)
+    video_link = models.TextField(null=True, blank=True)
+    _type = models.CharField(max_length=64, null=True, blank=True)
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Training Card Data (JSON)"
+        verbose_name_plural = "Training Card Data (JSON)"
