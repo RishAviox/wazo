@@ -241,15 +241,61 @@ class BaseCardAPI(APIView):
                     )
         return list(available_dates)
     
+    def get_extra_profile_metrics(self, user, target_date, date_field):
+        # Get latest wellness and RPE scores, with proper fallbacks
+        wellness_score = ""
+        rpe_score = ""
+        try:
+            wellness_score_qs = StatusCardMetrics.objects.filter(user=user).latest("created_on")
+            wellness_score = wellness_score_qs.metrics.get("Overall Wellness", "")
+        except StatusCardMetrics.DoesNotExist:
+            wellness_score = ""
+
+        try:
+            rpe_score_qs = RPEMetrics.objects.filter(user=user).latest("created_on")
+            rpe_score = rpe_score_qs.metrics.get("Readiness", "")  # Readiness for now
+        except RPEMetrics.DoesNotExist:
+            rpe_score = ""
+
+        # Athletic skills and distribution with optional date filtering
+        athletic_skills_qs = GPSAthleticSkills.objects.filter(user=user)
+        distribution_qs = VideoCardDistributions.objects.filter(user=user)
+
+        if target_date:
+            filter_kwargs = {f"{date_field}": target_date}
+            athletic_skills_qs = athletic_skills_qs.filter(**filter_kwargs).order_by(date_field)
+            distribution_qs = distribution_qs.filter(**filter_kwargs).order_by(date_field)
+
+        # Safely get the first result and its metrics, with fallbacks
+        athletic_skills = (
+            athletic_skills_qs.first().metrics.get("Athletic Skills", "")
+            if athletic_skills_qs.exists() and athletic_skills_qs.first() else ""
+        )
+
+        distribution = (
+            distribution_qs.first().metrics.get("Game Rating", "")
+            if distribution_qs.exists() and distribution_qs.first() else ""
+        )
+
+        # Return the results as a dictionary
+        return {
+            "wellness_score": wellness_score,
+            "rpe_score": rpe_score,
+            "athletics_score": athletic_skills,
+            "distribution_score": distribution
+        }
+            
+    
     def get_players_data_for_coach(self, players, target_date, date_field):
         players_data = []
         for player in players:
             metrics_entry = self.get_metrics_for_user(player, target_date, date_field)
             available_dates = self.get_available_dates_for_user(player, date_field)
+            extra_metrics = self.get_extra_profile_metrics(player, target_date, date_field)
             
             players_data.append(
                 {
-                    'profile': WajoUserSerializer(player).data,
+                    'profile': { **WajoUserSerializer(player).data, **extra_metrics },
                     'metrics': metrics_entry.metrics if metrics_entry else {},
                     "available_dates": available_dates
                 }
