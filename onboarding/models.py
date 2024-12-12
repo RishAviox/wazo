@@ -1,8 +1,10 @@
 from django.db import models
 from accounts.models import WajoUser
 
+from core.soft_delete import WajoModel
+
 # Track EntryPoint
-class OnboardingStep(models.Model):
+class OnboardingStep(WajoModel):
     user = models.OneToOneField(WajoUser, primary_key=True, on_delete=models.CASCADE, related_name='onboarding_step')
     step = models.CharField(max_length=10, default='PQ1')
     created_on = models.DateTimeField(auto_now_add=True)

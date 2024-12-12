@@ -1,9 +1,11 @@
 from django.db import models
 from accounts.models import WajoUser
 
+from core.soft_delete import WajoModel
+
 
 # Daily Wellness Questionnaire
-class DailyWellnessQuestionnaire(models.Model):
+class DailyWellnessQuestionnaire(WajoModel):
     q_id = models.CharField(max_length=10)
     name = models.CharField(max_length=50)
     language = models.CharField(max_length=10)
@@ -25,7 +27,7 @@ class DailyWellnessQuestionnaire(models.Model):
         verbose_name_plural = "Daily Wellness Questionnaire"
 
 
-class DailyWellnessUserResponse(models.Model):
+class DailyWellnessUserResponse(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='daily_wellness_user_response')
     response = models.JSONField()
 
@@ -41,7 +43,7 @@ class DailyWellnessUserResponse(models.Model):
     
 
 # RPE Questionnaire
-class RPEQuestionnaire(models.Model):
+class RPEQuestionnaire(WajoModel):
     q_id = models.CharField(max_length=20)
     after_session_type = models.CharField(max_length=100)
     name = models.CharField(max_length=50)
@@ -64,7 +66,7 @@ class RPEQuestionnaire(models.Model):
         verbose_name_plural = "RPE Questionnaire"
 
 
-class RPEUserResponse(models.Model):
+class RPEUserResponse(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='rpe_user_response')
     response = models.JSONField()
 
@@ -80,7 +82,7 @@ class RPEUserResponse(models.Model):
     
 
 # Activities Questionnaire
-# class ActivitiesQuestionnaire(models.Model):
+# class ActivitiesQuestionnaire(WajoModel):
 #     activity_id = models.BigIntegerField()
 #     language = models.CharField(max_length=10)
 
@@ -106,7 +108,7 @@ class RPEUserResponse(models.Model):
     
 
 # Q&A Table for Schedule Planning
-class SchedulePlanningQuestionnaire(models.Model):
+class SchedulePlanningQuestionnaire(WajoModel):
     question_id = models.CharField(max_length=20)
     step = models.IntegerField()
     language = models.CharField(max_length=10)
@@ -129,7 +131,7 @@ class SchedulePlanningQuestionnaire(models.Model):
         verbose_name_plural = "Schedule Planning Questionnaire"
     
 
-class SchedulePlanningResponse(models.Model):
+class SchedulePlanningResponse(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='shchedule_planning_response')
     response = models.JSONField()
 

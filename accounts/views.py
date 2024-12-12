@@ -85,7 +85,8 @@ class LoginAPI(APIView):
                 }, status=status.HTTP_200_OK)
             else:
                 return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
-        except:
+        except Exception as e:
+            print(e)
             return Response({"error": "Failed to validate OTP, try again."}, status=status.HTTP_400_BAD_REQUEST)
         
 

@@ -1,8 +1,10 @@
 from django.db import models
 from accounts.models import WajoUserDevice, WajoUser
 
+from core.soft_delete import WajoModel
+
 # Save notifications to DB in Notifications Service, serve via API
-class Notification(models.Model):
+class Notification(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="notifications")
     device = models.ForeignKey(WajoUserDevice, on_delete=models.CASCADE, related_name='notifications')
     title = models.CharField(max_length=100)

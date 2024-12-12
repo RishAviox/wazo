@@ -2,6 +2,8 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+from core.soft_delete import WajoModel
+
 
 # On creating WajoUser, new OnboardingStep instance will be created using signals
 # refer signals.py
@@ -110,7 +112,7 @@ POSITION_CHOICES = [
         ('ST', 'Striker'),
         ('CF', 'Center Forward'),
     ]
-class PlayerIDMapping(models.Model):
+class PlayerIDMapping(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="player_ids")
     player_id = models.CharField(max_length=10, unique=True)
     player_position = models.CharField(max_length=10, choices=POSITION_CHOICES, default='ST')

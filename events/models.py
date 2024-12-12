@@ -4,6 +4,8 @@ from django.core.exceptions import ValidationError
 import pandas as pd
 
 from accounts.models import WajoUser
+from core.soft_delete import WajoModel
+
 
 # Recurring Events Table
 FREQUENCY_CHOICES = [
@@ -12,7 +14,7 @@ FREQUENCY_CHOICES = [
     ('Monthly', 'Monthly'),
     ('Yearly', 'Yearly'),
 ]
-class RecurringEvents(models.Model):
+class RecurringEvents(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='recurring_events')
     event_type = models.CharField(max_length=50, null=True, blank=True)
     event = models.TextField(null=True, blank=True)
@@ -36,7 +38,7 @@ class RecurringEvents(models.Model):
     
 
 # One-Off Events Table
-class OneTimeEvents(models.Model):
+class OneTimeEvents(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='one_time_events')
     event_type = models.CharField(max_length=50, null=True, blank=True)
     event = models.TextField(null=True, blank=True)
@@ -76,7 +78,7 @@ DATA_FILE_TYPES = [
     ('BEPRO', 'BEPRO'),
     ('GPS', 'GPS'),
 ]
-class MatchEventsDataFile(models.Model):
+class MatchEventsDataFile(WajoModel):
     name = models.CharField(max_length=50, null=True, blank=True)
     _type = models.CharField(choices=DATA_FILE_TYPES, max_length=10, default='BEPRO')
     file = models.FileField(upload_to=match_events_data_file_path, validators=[validate_file_extension])

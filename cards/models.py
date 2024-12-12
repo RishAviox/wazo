@@ -2,8 +2,10 @@ from django.db import models
 from accounts.models import WajoUser
 from games.models import Game
 
+from core.soft_delete import WajoModel
+
 # Status Card Metrics
-class StatusCardMetrics(models.Model):
+class StatusCardMetrics(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='status_card_metrics')
     metrics = models.JSONField(default=dict)
      
@@ -18,7 +20,7 @@ class StatusCardMetrics(models.Model):
         return self.user.phone_no
     
 # RPE Metrics
-class RPEMetrics(models.Model):
+class RPEMetrics(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='rpe_metrics')
     metrics = models.JSONField(default=dict)
      
@@ -34,7 +36,7 @@ class RPEMetrics(models.Model):
 
 
 # Attacking Skills
-class AttackingSkills(models.Model):
+class AttackingSkills(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="attacking_skills")
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='game_attacking_skills')
     metrics = models.JSONField()
@@ -51,7 +53,7 @@ class AttackingSkills(models.Model):
     
 
 # Video Card Defensive
-class VideoCardDefensive(models.Model):
+class VideoCardDefensive(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="videocard_defensive")
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='game_videocard_defensive')
     metrics = models.JSONField()
@@ -68,7 +70,7 @@ class VideoCardDefensive(models.Model):
     
     
 # Video Card Distributions
-class VideoCardDistributions(models.Model):
+class VideoCardDistributions(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="videocard_distributions")
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='game_videocard_distributions')
     metrics = models.JSONField()
@@ -84,7 +86,7 @@ class VideoCardDistributions(models.Model):
         return f"Video Card Distributions for {self.user.phone_no}"
 
 
-class GPSAthleticSkills(models.Model):
+class GPSAthleticSkills(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="athletic_skills")
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='game_athletic_skills')
     metrics = models.JSONField()
@@ -100,7 +102,7 @@ class GPSAthleticSkills(models.Model):
         return f"Athletic Skills for {self.user.phone_no}"
 
 
-class GPSFootballAbilities(models.Model):
+class GPSFootballAbilities(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name="gps_football_abilities")
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='game_gps_football_abilities')
     metrics = models.JSONField()
@@ -116,7 +118,7 @@ class GPSFootballAbilities(models.Model):
         return f"Football Abilities for {self.user.phone_no}" 
     
 # training card json data, send as json of all entries via api
-class TrainingCardData(models.Model):
+class TrainingCardData(WajoModel):
     first_dropdown = models.CharField(max_length=128)
     second_dropdown = models.CharField(max_length=128)
     topic = models.CharField(max_length=128, null=True, blank=True)
@@ -131,7 +133,7 @@ class TrainingCardData(models.Model):
         verbose_name_plural = "Training Card Data (JSON)"
 
 # news card json data
-class NewsCardData(models.Model):
+class NewsCardData(WajoModel):
     title = models.CharField(max_length=128)
     data = models.JSONField()
 

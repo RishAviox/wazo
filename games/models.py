@@ -4,8 +4,10 @@ from django.core.exceptions import ValidationError
 import pandas as pd
 
 from teams.models import Team
+from core.soft_delete import WajoModel
 
-class Game(models.Model):
+
+class Game(WajoModel):
     GAME_TYPE_CHOICES = [
         ('match', 'Match'),
         ('training', 'Training'),
@@ -38,7 +40,7 @@ def game_gps_data_file_path(instnace, filename):
     # MEDIA_ROOT / uploads/game_gps_data_files/<filename>
     return 'uploads/game_gps_data_files/{0}'.format(filename)
 
-class GameGPSData(models.Model):
+class GameGPSData(WajoModel):
     GAME_TYPE_CHOICES = [
         ('match', 'Match'),
         ('training', 'Training'),
@@ -76,7 +78,7 @@ def game_video_data_file_path(instnace, filename):
     # MEDIA_ROOT / uploads/game_video_data_files/<filename>
     return 'uploads/game_video_data_files/{0}'.format(filename)
 
-class GameVideoData(models.Model):
+class GameVideoData(WajoModel):
     GAME_TYPE_CHOICES = [
         ('match', 'Match'),
         ('training', 'Training'),
