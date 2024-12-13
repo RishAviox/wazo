@@ -13,7 +13,7 @@ services:
       - "8002:8000"
     volumes:
       - .:/app
-      - media_volume:/app/media
+      - pilot_media_volume:/app/media
     restart: 'always'
 
   pilot_wajo_media_server:
@@ -23,7 +23,7 @@ services:
       - "8082:80"
     volumes:
       - ./nginx/media_server.conf:/etc/nginx/conf.d/media.conf
-      - media_volume:/usr/share/nginx/html/media
+      - pilot_media_volume:/usr/share/nginx/html/media
     environment:
       - VIRTUAL_HOST=api.hiwajo.com
     restart: 'always'
@@ -32,4 +32,4 @@ services:
 
 
 volumes:
-  media_volume:
+  pilot_media_volume:
