@@ -101,6 +101,13 @@ class GameVideoData(WajoModel):
         blank=True,
         related_name="video_data"
     )
+    first_half_url = models.TextField()
+    first_half_padding = models.IntegerField(default=0)
+    
+    second_half_url = models.TextField()
+    second_half_padding = models.IntegerField(default=0)
+    
+    highlight_url = models.TextField()
 
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
@@ -113,3 +120,24 @@ class GameVideoData(WajoModel):
 
     def __str__(self):
         return self.data_file.name
+    
+# game video data json, process with signal on GameVideoData save
+class GameMetaData(WajoModel):
+    game = models.ForeignKey(
+        Game,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="game_meta_data"
+    )
+    data = models.JSONField()
+
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Game Meta Data JSON"
+        verbose_name_plural = "Game Meta Data JSON"
+
+    def __str__(self):
+        return self.game.name

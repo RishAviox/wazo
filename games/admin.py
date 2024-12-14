@@ -1,7 +1,7 @@
 from django.contrib import admin
 from core.admin import admin_site
 
-from .models import Game, GameGPSData, GameVideoData
+from .models import Game, GameGPSData, GameVideoData, GameMetaData
 from .forms import GameAdminForm, GameGPSDataForm, GameVideoDataForm
 
     
@@ -36,7 +36,15 @@ class GameVideoDataAdmin(admin.ModelAdmin):
         return obj.game.name if obj.game else "Unlinked"
     game_display.short_description = "Linked Game"
 
+class GameMetaDataAdmin(admin.ModelAdmin):
+    list_display = ('id', 'game_display', 'created_on', 'updated_on')
+    readonly_fields = ('game',)  
+
+    def game_display(self, obj):
+        return obj.game.name if obj.game else "Unlinked"
+    game_display.short_description = "Linked Game"
 
 admin_site.register(Game, GameAdmin)
 admin_site.register(GameGPSData, GameGPSDataAdmin)
 admin_site.register(GameVideoData, GameVideoDataAdmin)
+admin_site.register(GameMetaData, GameMetaDataAdmin)

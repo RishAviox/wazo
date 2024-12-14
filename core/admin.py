@@ -37,6 +37,7 @@ class WajoAdminSite(AdminSite):
             "Games",
             "Game GPS Data",
             "Game Video Data",
+            "Game Meta Data JSON",
         ],
         "Teams": [
             "Teams",
