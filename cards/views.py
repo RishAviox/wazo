@@ -14,6 +14,7 @@ from .models import *
 from .serializers import TrainingCardDataSerializer, NewsCardDataSerializer
 from events.models import MatchEventsDataFile
 from accounts.serializer import WajoUserSerializer
+from games.models import GameMetaData
 
 # greetings api, universal for all cards
 class GreetingAPI(APIView):
@@ -518,6 +519,21 @@ class VideoAnalysisCardAPI(APIView):
         print("Events: ", { 'category': category, 'sub_category': sub_category, 'records': len(event_times)})
         return Response({'event_time': event_times}, status.HTTP_200_OK)
 
+
+# Video Card JSON API
+class VideoCardJSONAPI(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, *args, **kwargs):
+        try:
+            # Retrieve the latest GameMetaData by creation time
+            latest_metadata = GameMetaData.objects.latest('created_on')
+        except GameMetaData.DoesNotExist:
+            return Response({"error": "No GameMetaData found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Return the data field from the latest GameMetaData record
+        return Response(latest_metadata.data, status=status.HTTP_200_OK)
+        
 
 # Training Card JSON data API
 class TrainingCardJSONAPI(ListAPIView):

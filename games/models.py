@@ -107,7 +107,7 @@ class GameVideoData(WajoModel):
     second_half_url = models.TextField()
     second_half_padding = models.IntegerField(default=0)
     
-    highlight_url = models.TextField()
+    highlights_url = models.TextField()
 
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)

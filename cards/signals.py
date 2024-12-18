@@ -13,6 +13,7 @@ from .models import *
 
 # run team stats here
 from teams.signals import calculate_team_gps_stats, calculate_team_video_stats
+from games.signals import generate_game_meta_data_json
 
 # process game gps data file
 @receiver(post_save, sender=GameGPSData, weak=False)
@@ -287,6 +288,8 @@ def process_video_data_file(sender, instance, created, **kwargs):
 
             # team video stats
             calculate_team_video_stats(instance)
+            # calculate game meta data json
+            generate_game_meta_data_json(instance, game)
         except Exception as e:
             print(f"Error processing video data file: {e}")
     

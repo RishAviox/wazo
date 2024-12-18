@@ -22,6 +22,9 @@ urlpatterns = [
     # video card
     path('video-analysis', VideoAnalysisCardAPI.as_view(), name='video-analysis'),
     
+    # video card
+    path('video-card-json', VideoCardJSONAPI.as_view(), name='video-card-json'),
+    
     # training card json
     path('training-card-json', TrainingCardJSONAPI.as_view(), name='training-card-json'),
     # news card json

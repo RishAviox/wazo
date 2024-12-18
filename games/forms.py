@@ -29,7 +29,18 @@ class GameGPSDataForm(forms.ModelForm):
 class GameVideoDataForm(forms.ModelForm):
     class Meta:
         model = GameVideoData
-        fields = '__all__'
+        fields = [
+            'id', 
+            'data_file', 
+            'game_type', 
+            'provider', 
+            'first_half_url',
+            'second_half_url', 
+            'highlights_url', 
+            'first_half_padding', 
+            'second_half_padding',
+            'is_processed', 
+        ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
