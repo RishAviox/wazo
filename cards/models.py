@@ -143,4 +143,33 @@ class NewsCardData(WajoModel):
     class Meta:
         verbose_name = "News Card Data (JSON)"
         verbose_name_plural = "News Card Data (JSON)"
-        
+
+# Greetings Cache
+class GreetingCache(WajoModel):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='greetings_cache')
+    text = models.TextField()
+     
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Greetings Cache"
+        verbose_name_plural = "Greetings Cache"
+
+    def __str__(self):
+        return self.user.phone_no     
+    
+# Insights Cache
+class InsightCache(WajoModel):
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='insights_cache')
+    text = models.TextField()
+     
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Insights Cache"
+        verbose_name_plural = "Insights Cache"
+
+    def __str__(self):
+        return self.user.phone_no       
