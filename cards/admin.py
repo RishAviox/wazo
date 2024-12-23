@@ -31,6 +31,13 @@ class TrainingCardDataAdmin(admin.ModelAdmin):
 class NewsCardDataAdmin(admin.ModelAdmin):
     list_display = ['id', 'title', 'data', 'created_on', 'updated_on']
 
+class GreetingCacheAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'text', 'created_on', 'updated_on']
+
+class InsightCacheAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'text', 'created_on', 'updated_on']
+
+
 admin_site.register(StatusCardMetrics, StatusCardMetricsAdmin)
 admin_site.register(RPEMetrics, RPEMetricsAdmin)
 admin_site.register(AttackingSkills, AttackingSkillsAdmin)
@@ -40,3 +47,5 @@ admin_site.register(GPSAthleticSkills, GPSAthleticSkillsAdmin)
 admin_site.register(GPSFootballAbilities, GPSFootballAbilitiesAdmin)
 admin_site.register(TrainingCardData, TrainingCardDataAdmin)
 admin_site.register(NewsCardData, NewsCardDataAdmin)
+admin_site.register(GreetingCache, GreetingCacheAdmin)
+admin_site.register(InsightCache, InsightCacheAdmin)
