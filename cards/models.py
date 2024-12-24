@@ -162,6 +162,7 @@ class GreetingCache(WajoModel):
 # Insights Cache
 class InsightCache(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='insights_cache')
+    card = models.CharField(max_length=64)
     text = models.TextField()
      
     created_on = models.DateTimeField(auto_now_add=True)
