@@ -35,7 +35,7 @@ class GreetingCacheAdmin(admin.ModelAdmin):
     list_display = ['id', 'user', 'text', 'created_on', 'updated_on']
 
 class InsightCacheAdmin(admin.ModelAdmin):
-    list_display = ['id', 'user', 'text', 'created_on', 'updated_on']
+    list_display = ['id', 'user', 'card', 'text', 'created_on', 'updated_on']
 
 
 admin_site.register(StatusCardMetrics, StatusCardMetricsAdmin)

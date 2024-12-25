@@ -856,7 +856,6 @@ def get_prompt_for_insight(user, card):
                         "defensive-skills-metrics":get_videocard_defensive_metrics(player),
                         "gps-football-abilities-metrics": get_gps_football_abilities_metrics(player),
                         'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(player),
-                        'gps-football-abilities-metrics': get_gps_football_abilities_metrics(player)
                     }
                 player_data.append(user_data)
 
@@ -874,7 +873,6 @@ def get_prompt_for_insight(user, card):
                         "defensive-skills-metrics":get_videocard_defensive_metrics(user),
                         "gps-football-abilities-metrics": get_gps_football_abilities_metrics(user),
                         'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(user),
-                        'gps-football-abilities-metrics': get_gps_football_abilities_metrics(user)
                     }
             user_data = {
                 'player-VideoCard': user_data
@@ -893,7 +891,6 @@ def get_prompt_for_insight(user, card):
                         "defensive-skills-metrics":get_videocard_defensive_metrics(player),
                         "gps-football-abilities-metrics": get_gps_football_abilities_metrics(player),
                         'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(player),
-                        'gps-football-abilities-metrics': get_gps_football_abilities_metrics(player)
                     }
                 player_data.append(user_data)
 
@@ -910,7 +907,6 @@ def get_prompt_for_insight(user, card):
                         "defensive-skills-metrics":get_videocard_defensive_metrics(user),
                         "gps-football-abilities-metrics": get_gps_football_abilities_metrics(user),
                         'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(user),
-                        'gps-football-abilities-metrics': get_gps_football_abilities_metrics(user)
                     }
             user_data = {
                 'player-VideoCard': user_data
