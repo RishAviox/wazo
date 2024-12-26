@@ -170,6 +170,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 WAJO_OTP_SERVICE_URL = env_config['WAJO_OTP_SERVICE_URL']
 WAJO_GOOGLE_GEMINI_API_KEY = env_config['WAJO_GOOGLE_GEMINI_API_KEY']
+WAJO_NOTIFICATIONS_API_URL = "https://wajo-notifications.purplestone-0eee06d8.uaenorth.azurecontainerapps.io"
 
 JWT_ACCESS_TOKEN_EXPIRATION = timedelta(hours=24)
 JWT_REFRESH_TOKEN_EXPIRATION = timedelta(days=7)

@@ -15,6 +15,8 @@ from .models import *
 from teams.signals import calculate_team_gps_stats, calculate_team_video_stats
 from games.signals import generate_game_meta_data_json
 
+from core.silent_notification import send_silent_notification
+
 # process game gps data file
 @receiver(post_save, sender=GameGPSData, weak=False)
 def process_gps_data_file(sender, instance, created, **kwargs):
@@ -87,6 +89,8 @@ def process_gps_data_file(sender, instance, created, **kwargs):
             filtered_gps_sheet = gps_sheet[gps_sheet['Player ID'].isin(player_ids)]
             print(f"Filtered GPS data sheet to include players: {list(filtered_gps_sheet['Player ID'].unique())}.")
 
+            # for silent notificaitions, send user_ids=[], card_names=[]
+            user_ids = []
             for player_id, player_info in player_mapping_dict.items():
                 user_phone = player_info['phone_no']
 
@@ -126,6 +130,12 @@ def process_gps_data_file(sender, instance, created, **kwargs):
                     else:
                         print(f"Updated GPS Football Abilities for player {player_id} (phone: {user_phone}).")
 
+                    user_ids.append(user_phone)
+                
+            card_names = ['AthleticSkills', 'FootballAbilities']
+            # send silent notification
+            print(f"Sending silent notification for users: {user_ids} with card names: {card_names}")
+            send_silent_notification(user_ids, card_names)
             # team gps stats
             calculate_team_gps_stats(instance)
         except Exception as e:
@@ -230,6 +240,8 @@ def process_video_data_file(sender, instance, created, **kwargs):
             filtered_stats_sheet = stats_sheet[stats_sheet['player_id'].isin(player_ids)]
             print(f"Filtered stats Video data sheet to include players: {list(filtered_stats_sheet['player_id'].unique())}.")
 
+            # for silent notificaitions, send user_ids=[], card_names=[]
+            user_ids = []
             for player_id, player_info in player_mapping_dict.items():
                 user_phone = player_info['phone_no']
             
@@ -286,6 +298,13 @@ def process_video_data_file(sender, instance, created, **kwargs):
                     else:
                         print(f"Updated Video Card Distributions for player {player_id} (phone: {user_phone}).")
 
+                    user_ids.append(user_phone)
+                    
+            card_names = ['AttackingSkills', 'VideocardDefensive', 'VideocardDistribution']
+            # send silent notification
+            print(f"Sending silent notification for users: {user_ids} with card names: {card_names}")
+            send_silent_notification(user_ids, card_names)
+            
             # team video stats
             calculate_team_video_stats(instance)
             # calculate game meta data json
@@ -330,7 +349,10 @@ def process_daily_wellness_user_responses(sender, instance, created, **kwargs):
             else:
                 print(f"Updated Status Card Metrics for the user (phone: {instance.user}).")
 
-    
+            # send silent notification
+            print(f"Sending StatusCard silent notification for user: {instance.user.phone_no}")
+            send_silent_notification([instance.user.phone_no], ['StatusCard'])
+            
     except Exception as e:
             print(f"Error processing daily wellness user responses: {e}")
             
@@ -383,6 +405,8 @@ def process_daily_wellness_user_responses(sender, instance, created, **kwargs):
             else:
                 print(f"Updated RPE Metrics for the user (phone: {instance.user}).")
 
-    
+            # send silent notification
+            print(f"Sending RPE silent notification for user: {instance.user.phone_no}")
+            send_silent_notification([instance.user.phone_no], ['RPEMetrics'])
     except Exception as e:
             print(f"Error processing RPE user responses: {e}")
