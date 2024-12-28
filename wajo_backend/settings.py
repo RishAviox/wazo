@@ -11,11 +11,9 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
-from dotenv import dotenv_values
 import os
 from django.utils.timezone import timedelta
 
-env_config = dotenv_values(".env")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,14 +23,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env_config["DJANGO_SECRET_KEY"]
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['api.hiwajo.com']
-CSRF_TRUSTED_ORIGINS = ['https://api.hiwajo.com']
-
+ALLOWED_HOSTS = ['.hiwajo.com']
+CSRF_TRUSTED_ORIGINS = ['https://api.hiwajo.com', 'https://api2.hiwajo.com']
 
 # Application definition
 
@@ -45,6 +42,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
+    "storages", # azure blob storage
     "core",
     "accounts",
     "onboarding",
@@ -108,11 +106,11 @@ WSGI_APPLICATION = "wajo_backend.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "mssql",
-        "NAME": env_config["WAJO_DB_NAME"],
-        "HOST": env_config["WAJO_DB_HOST"],
-        "PORT": env_config["WAJO_DB_PORT"],
-        "USER": env_config["WAJO_DB_USER"],
-        "PASSWORD": env_config["WAJO_DB_PASSWORD"],
+        "NAME": os.environ.get("WAJO_DB_NAME"),
+        "HOST": os.environ.get("WAJO_DB_HOST"),
+        "PORT": os.environ.get("WAJO_DB_PORT"),
+        "USER": os.environ.get("WAJO_DB_USER"),
+        "PASSWORD": os.environ.get("WAJO_DB_PASSWORD"),
         'OPTIONS': {
             'driver': 'ODBC Driver 17 for SQL Server', 
             'MARS_Connection': 'True',
@@ -156,21 +154,34 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_ROOT = os.path.join(BASE_DIR, 'static')
-STATIC_URL = "static/"
+# Azure Blob Storage
 
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-MEDIA_URL = '/v1/media/'
+AZURE_ACCOUNT_NAME = os.environ.get('WAJO_AZURE_STORAGE_ACCOUNT_NAME')
+AZURE_ACCOUNT_KEY = os.environ.get('WAJO_AZURE_STORAGE_ACCOUNT_KEY')
+AZURE_CONTAINER_STATIC = "static"  
+AZURE_CONTAINER_MEDIA = "media" 
 
+
+# Point STATICFILES_STORAGE to your custom static storage class
+STATICFILES_STORAGE = "core.storages.AzureStaticStorage"
+
+# Point DEFAULT_FILE_STORAGE to your custom media storage class
+DEFAULT_FILE_STORAGE = "core.storages.AzureMediaStorage"
+
+# Static files
+STATIC_URL = f"https://{AZURE_ACCOUNT_NAME}.blob.core.windows.net/{AZURE_CONTAINER_STATIC}/"
+
+# Media files
+MEDIA_URL = f"https://{AZURE_ACCOUNT_NAME}.blob.core.windows.net/{AZURE_CONTAINER_MEDIA}/"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-WAJO_OTP_SERVICE_URL = env_config['WAJO_OTP_SERVICE_URL']
-WAJO_GOOGLE_GEMINI_API_KEY = env_config['WAJO_GOOGLE_GEMINI_API_KEY']
-WAJO_NOTIFICATIONS_API_URL = "https://wajo-notifications.purplestone-0eee06d8.uaenorth.azurecontainerapps.io"
+WAJO_OTP_SERVICE_URL = os.environ.get('WAJO_OTP_SERVICE_URL')
+WAJO_GOOGLE_GEMINI_API_KEY = os.environ.get('WAJO_GOOGLE_GEMINI_API_KEY')
+WAJO_NOTIFICATIONS_API_URL = os.environ.get('WAJO_NOTIFICATIONS_API_URL')
 
 JWT_ACCESS_TOKEN_EXPIRATION = timedelta(hours=24)
 JWT_REFRESH_TOKEN_EXPIRATION = timedelta(days=7)

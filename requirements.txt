@@ -11,3 +11,5 @@ gunicorn
 whitenoise
 pandas
 openpyxl
+django-storages
+azure-storage-blob
