@@ -5,7 +5,6 @@ mssql-django==1.4.2
 Pillow==10.3.0
 google-generativeai
 PyJWT
-python-dotenv
 requests
 gunicorn
 whitenoise
