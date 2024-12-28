@@ -142,26 +142,6 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-# Azure Blob Storage
-
-AZURE_ACCOUNT_NAME = os.environ.get('wajo-azure-storage-account-name')
-AZURE_ACCOUNT_KEY = os.environ.get('wajo-azure-storage-account-key')
-AZURE_CONTAINER_STATIC = "static"  
-AZURE_CONTAINER_MEDIA = "media" 
-
-
-# Point STATICFILES_STORAGE to your custom static storage class
-STATICFILES_STORAGE = "core.storages.AzureStaticStorage"
-
-# Point DEFAULT_FILE_STORAGE to your custom media storage class
-DEFAULT_FILE_STORAGE = "core.storages.AzureMediaStorage"
-
-# Static files
-STATIC_URL = f"https://{AZURE_ACCOUNT_NAME}.blob.core.windows.net/{AZURE_CONTAINER_STATIC}/"
-
-# Media files
-MEDIA_URL = f"https://{AZURE_ACCOUNT_NAME}.blob.core.windows.net/{AZURE_CONTAINER_MEDIA}/"
-
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
@@ -186,3 +166,17 @@ https://stackoverflow.com/questions/49166768/setting-secure-hsts-seconds-can-irr
 """
 
 CSRF_COOKIE_SECURE = True
+
+AZURE_ACCOUNT_NAME = os.environ.get('wajo-azure-storage-account-name')
+AZURE_ACCOUNT_KEY = os.environ.get('wajo-azure-storage-account-key')
+# If using SAS token instead of key, use: AZURE_SAS_TOKEN = "<your_sas_token>"
+
+AZURE_CUSTOM_DOMAIN = f"{AZURE_ACCOUNT_NAME}.blob.core.windows.net"
+
+# Use the custom storages
+STATICFILES_STORAGE = 'core.azure_storages.AzureStaticStorage'
+DEFAULT_FILE_STORAGE = 'core.azure_storages.AzureMediaStorage'
+
+# Set URLs to serve static and media files
+STATIC_URL = f"https://{AZURE_CUSTOM_DOMAIN}/static/"
+MEDIA_URL = f"https://{AZURE_CUSTOM_DOMAIN}/media/"
