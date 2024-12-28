@@ -16,3 +16,4 @@ wajo_local_db.session.sql
 *.pdf
 *.html
 freelancer-work
+*_dev.txt

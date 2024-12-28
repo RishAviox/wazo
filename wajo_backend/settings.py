@@ -45,7 +45,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -145,8 +144,8 @@ USE_TZ = True
 
 # Azure Blob Storage
 
-AZURE_ACCOUNT_NAME = os.environ.get('waj-azure-storage-account-name')
-AZURE_ACCOUNT_KEY = os.environ.get('waj-azure-storage-account-key')
+AZURE_ACCOUNT_NAME = os.environ.get('wajo-azure-storage-account-name')
+AZURE_ACCOUNT_KEY = os.environ.get('wajo-azure-storage-account-key')
 AZURE_CONTAINER_STATIC = "static"  
 AZURE_CONTAINER_MEDIA = "media" 
 

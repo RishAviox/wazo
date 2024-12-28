@@ -8,7 +8,6 @@ PyJWT
 requests
 gunicorn
 pandas
-whitenoise
 openpyxl
 django-storages
 azure-storage-blob
