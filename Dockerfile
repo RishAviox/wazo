@@ -1,26 +1,36 @@
-FROM python:3.10
+FROM python:3.12-slim AS base
 
 # Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8000
 
-RUN apt-get update \
-    && apt-get install -y gnupg2 \
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl gnupg2 unixodbc-dev \
     && curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
     && curl https://packages.microsoft.com/config/debian/10/prod.list > /etc/apt/sources.list.d/mssql-release.list \
-    && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y msodbcsql17 \
-    && apt-get install -y unixodbc-dev \
+    && apt-get update && ACCEPT_EULA=Y apt-get install -y msodbcsql17 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory in the container
+# Set work directory
 WORKDIR /app
 
-# Install dependencies
+# Install Python dependencies
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the current directory contents into the container at /app
+# Copy your application code
 COPY . /app/
 
-RUN python manage.py collectstatic --noinput
+# (Optional) If you use Django's static files:
+# RUN python manage.py collectstatic --noinput
+
+# Expose the port
+EXPOSE 8000
+
+
+# Use Gunicorn to serve the WSGI application
+# Adjust "wajo_backend.wsgi:application" if your WSGI module is named differently.
+# Add workers/threads based on your app's needs.
+CMD ["gunicorn", "wajo_backend.wsgi:application", "--bind", "0.0.0.0:8000", "--workers=3", "--threads=2"]

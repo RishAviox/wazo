@@ -102,6 +102,7 @@ DATABASES = {
         'OPTIONS': {
             'driver': 'ODBC Driver 17 for SQL Server', 
             'MARS_Connection': 'True',
+            "extra_params": "Encrypt=yes;TrustServerCertificate=no;"
         },
 
     }
