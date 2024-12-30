@@ -21,8 +21,18 @@ class GreetingAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        today = datetime.today()
         user = request.user
+        
+        greeting_cache_qs = GreetingCache.objects.filter(user=user).order_by('-updated_on') 
+        latest_greeting_obj = greeting_cache_qs.first()
+        
+        if latest_greeting_obj:
+            greeting = latest_greeting_obj.text
+            print("[Cached] greeting: ", greeting)
+            return Response({ 'greeting': greeting }, status=status.HTTP_200_OK)
+ 
+        
+        today = datetime.today()
 
         if user.selected_language == 'he':
             language = "Hebrew"
@@ -48,8 +58,11 @@ class GreetingAPI(APIView):
                 """
 
         greeting = generate_llm_response(prompt)
+        
+        # store in db
+        GreetingCache.objects.create(user=user, text=greeting)
 
-        print("greeting: ", greeting)
+        print("[Generated] New Greeting: ", greeting)
 
         return Response({ 'greeting': greeting }, status=status.HTTP_200_OK)
  
@@ -57,17 +70,32 @@ class GreetingAPI(APIView):
 # ai-insight API, unique for each card
 class InsightAPI(APIView):
     permission_classes = [IsAuthenticated]
+    
     def get(self, request, card):
         try:
-            prompt = get_prompt_for_insight(request.user, card)
+            user = request.user
+            insight_cache_obj = InsightCache.objects.filter(
+                    user=user,
+                    card=card,
+                ).order_by('-updated_on').first()
+            
+            if insight_cache_obj:
+                insight = insight_cache_obj.text
+                print(f"[Cached] Insight for card '{card}':", insight)
+                return Response({'insight': insight}, status=status.HTTP_200_OK)
+
+            prompt = get_prompt_for_insight(user, card)
             print("prompt: ", prompt)
 
             if prompt == None:
                 return Response({ 'error': 'unknown card'}, status=status.HTTP_400_BAD_REQUEST)
 
             insight = generate_llm_response(prompt)
+            
+            # Store the newly generated insight in the cache
+            InsightCache.objects.create(user=user, card=card, text=insight)
 
-            print(f"insight for card -> {card}: ", insight)
+            print(f"[Generated] New insight for card '{card}':", insight)
 
             return Response({ 'insight': insight }, status=status.HTTP_200_OK)
         except:
