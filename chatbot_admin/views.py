@@ -18,7 +18,7 @@ from questionnaire.models import DailyWellnessUserResponse, RPEUserResponse
 from questionnaire.serializer import DailyWellnessUserResponseSerializer, RPEUserResponseSerializer
 from events.serializer import RecurringEventsSerializer, OneTimeEventsSerializer
 
-
+from core.schedule_event_reminder import schedule_event_reminder_notification
 # chatbot admin user is used to push data from chabot responses
 # make sure to use _Bearer instead of Bearer during API call
 class AdminTokenObtainView(APIView):
@@ -179,11 +179,15 @@ class RecurringEventsCreateView(APIView):
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
         data['user'] = phone_no
-        print("event data: ", data)
+        print("recurring event data: ", data)
         serializer = RecurringEventsSerializer(data=data)
         if serializer.is_valid():
-            serializer.save()
-            print(serializer.data)
+            instance = serializer.save()
+            # schedule event reminder notification before 30 minutes
+            schedule_event_reminder_notification(
+                instance=instance,
+                notification_type='RecurringEventReminder',
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -204,10 +208,15 @@ class OneTimeEventsCreateView(APIView):
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
         data['user'] = phone_no
-        print("event data: ", data)
+        print("one time event data: ", data)
+        
         serializer = OneTimeEventsSerializer(data=data)
         if serializer.is_valid():
-            serializer.save()
-            print(serializer.data)
+            instance = serializer.save()
+            # schedule event reminder notification before 30 minutes
+            schedule_event_reminder_notification(
+                instance=instance,
+                notification_type='OneTimeEventReminder',
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
