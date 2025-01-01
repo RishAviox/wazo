@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils.timezone import datetime
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+import random
 
 from core.llm_provider import generate_llm_response
 from .utils import *
@@ -15,6 +16,20 @@ from .serializers import TrainingCardDataSerializer, NewsCardDataSerializer
 from events.models import MatchEventsDataFile
 from accounts.serializer import WajoUserSerializer
 from games.models import GameMetaData
+
+# Fake insights for News Card
+NEWS_CARD_INSIGHTS = [
+    "Learn from the best! Watching the pros in action can sharpen your skills and elevate your game.",
+    "See how the champions play—every match is a lesson waiting to be learned.",
+    "Get inspired! Watching your favorite sport can show you strategies you never knew existed.",
+    "From technique to teamwork, every game you watch is a masterclass in action.",
+    "They play, you learn—witness greatness and take your game to the next level.",
+    "Stay in the loop! Watching sports is the quickest way to catch trends and tricks in your game.",
+    "Experience the thrill and pick up tips to dominate your own field!",
+    "Discover what makes the best players tick—watch and learn from the action.",
+    "From strategy to skills, there’s a lot to absorb when you tune into the pros.",
+    "Great athletes were once great watchers—start your journey to mastery by watching today!"
+]
 
 # greetings api, universal for all cards
 class GreetingAPI(APIView):
@@ -73,6 +88,9 @@ class InsightAPI(APIView):
     
     def get(self, request, card):
         try:
+            if card == 'NewsCard':
+                return Response({ 'insight': random.choice(NEWS_CARD_INSIGHTS) }, status=status.HTTP_200_OK)
+            
             user = request.user
             insight_cache_obj = InsightCache.objects.filter(
                     user=user,
