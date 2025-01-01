@@ -8,6 +8,7 @@ from django.utils.timezone import datetime
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 import random
+from datetime import timedelta
 
 from core.llm_provider import generate_llm_response
 from .utils import *
@@ -441,15 +442,159 @@ class DailySnapshortCardAPI(APIView):
 
 
 # card: 2 --> Status Card Metrics (Player Overview)
-class StatusCardMetricAPI(BaseCardAPI):
-    card_model = StatusCardMetrics
-    has_team = False
+class StatusCardMetricAPI(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get_8_day_average_metrics(self, user):
+        # Set today to 12:00 AM
+        today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)  
+        start_date = today - timedelta(days=7)
+        
+        # fetch metrics for the past 8 days
+        metrics_qs = StatusCardMetrics.objects.filter(
+            user=user, 
+            updated_on__date__range=(start_date, today)
+        )
+        
+        if not metrics_qs.exists():
+            print(f"No metrics found for the past 8 days for user {user}.")
+            return {
+                'Energy Level': '0.0',
+                'Muscle Soreness': '0.0',
+                'Pain Level': '0.0',
+                'Mood': '0.0',
+                'Stress Level': '0.0',
+                'Sleep Quality': '0.0',
+                'Diet Quality': '0.0',
+                'Overall Wellness': '0.0'
+            }
+        
+        # Initialize sums for metrics
+        metrics_sum = {
+            'Energy Level': 0.0,
+            'Muscle Soreness': 0.0,
+            'Pain Level': 0.0,
+            'Mood': 0.0,
+            'Stress Level': 0.0,
+            'Sleep Quality': 0.0,
+            'Diet Quality': 0.0,
+            'Overall Wellness': 0.0
+        }
+        count = 0
+        
+        # Aggregate metrics
+        for entry in metrics_qs:
+            try:
+                metrics = entry.metrics  # Assuming metrics is a dictionary
+                for key in metrics_sum.keys():
+                    metrics_sum[key] += float(metrics.get(key, 0.0))
+                count += 1
+            except Exception as e:
+                print(f"Error processing metrics for entry {entry.id}: {e}")
+
+        if count == 0:
+            return {
+                'Energy Level': '0.0',
+                'Muscle Soreness': '0.0',
+                'Pain Level': '0.0',
+                'Mood': '0.0',
+                'Stress Level': '0.0',
+                'Sleep Quality': '0.0',
+                'Diet Quality': '0.0',
+                'Overall Wellness': '0.0'
+            }
+        
+        # Calculate averages
+        metrics_average = {key: str(round(value / count, 2)) for key, value in metrics_sum.items()}
+        print(f"Calculated 8-day average metrics for user {user}: {metrics_average}")
+        return metrics_average
+    
+    
+    def get(self, request):
+        # Get the authenticated user
+        user = request.user
+
+        # Calculate the 8-day average metrics
+        metrics_average = self.get_8_day_average_metrics(user)
+
+        if not metrics_average:
+            return Response(
+                {"error": "No data available for the past 8 days."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Serve the 8-day average metrics
+        return Response(metrics_average, status=status.HTTP_200_OK)
    
         
 # card: 2.1 --> RPE Metrics (Player Overview)
 class RPEMetricAPI(BaseCardAPI):
-    card_model = RPEMetrics
-    has_team = False
+    permission_classes = [IsAuthenticated]
+
+    def get_8_day_average_metrics(self, user):
+        # Set today to 12:00 AM
+        today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = today - timedelta(days=7)
+
+        # Fetch metrics for the past 8 days
+        metrics_qs = RPEMetrics.objects.filter(
+            user=user,
+            updated_on__date__range=(start_date, today)
+        )
+
+        if not metrics_qs.exists():
+            print(f"No performance metrics found for the past 8 days for user {user}.")
+            return {
+                'Intensity': '0.0',
+                'Fatigue': '0.0',
+                'Recovery': '0.0',
+                'Readiness': '0.0'
+            }
+
+        # Initialize sums for performance metrics
+        performance_metrics_sum = {
+            'Intensity': 0.0,
+            'Fatigue': 0.0,
+            'Recovery': 0.0,
+            'Readiness': 0.0
+        }
+        count = 0
+
+        # Aggregate metrics
+        for entry in metrics_qs:
+            try:
+                metrics = entry.metrics  # Assuming metrics is a dictionary
+                for key in performance_metrics_sum.keys():
+                    performance_metrics_sum[key] += float(metrics.get(key, 0.0))
+                count += 1
+            except Exception as e:
+                print(f"Error processing performance metrics for entry {entry.id}: {e}")
+
+        if count == 0:
+            return {key: '0.0' for key in performance_metrics_sum.keys()}
+
+        # Calculate averages
+        performance_metrics_average = {
+            key: str(round(value / count, 2)) for key, value in performance_metrics_sum.items()
+        }
+        print(f"Calculated 8-day average performance metrics for user {user}: {performance_metrics_average}")
+        return performance_metrics_average
+
+    def get(self, request):
+        # Get the authenticated user
+        user = request.user
+
+        # Calculate the 8-day average performance metrics
+        metrics_average = self.get_8_day_average_metrics(user)
+
+        if not metrics_average:
+            return Response(
+                {"error": "No data available for the past 8 days."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Serve the 8-day average performance metrics
+        return Response(metrics_average, status=status.HTTP_200_OK)
         
         
 # card: 3 --> Attacking Skills
