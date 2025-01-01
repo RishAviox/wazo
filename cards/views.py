@@ -159,7 +159,7 @@ class CardSuggestedActionsAPI(APIView):
                     }
                 ]
             },
-            "Squad Hub": {
+            "Locker Room": {
                 "actions": [
                     {
                         "name": "Status",
