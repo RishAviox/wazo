@@ -457,7 +457,7 @@ class StatusCardMetricAPI(APIView):
         )
         
         if not metrics_qs.exists():
-            print(f"No metrics found for the past 8 days for user {user}.")
+            print(f"No status card metrics found for the past 8 days for user {user}.")
             return {
                 'Energy Level': '0.0',
                 'Muscle Soreness': '0.0',
@@ -490,7 +490,7 @@ class StatusCardMetricAPI(APIView):
                     metrics_sum[key] += float(metrics.get(key, 0.0))
                 count += 1
             except Exception as e:
-                print(f"Error processing metrics for entry {entry.id}: {e}")
+                print(f"Error processing status card metrics for entry {entry.id}: {e}")
 
         if count == 0:
             return {
@@ -506,7 +506,7 @@ class StatusCardMetricAPI(APIView):
         
         # Calculate averages
         metrics_average = {key: str(round(value / count, 2)) for key, value in metrics_sum.items()}
-        print(f"Calculated 8-day average metrics for user {user}: {metrics_average}")
+        print(f"Calculated 8-day average status card metrics for user {user}: {metrics_average}")
         return metrics_average
     
     
@@ -519,7 +519,7 @@ class StatusCardMetricAPI(APIView):
 
         if not metrics_average:
             return Response(
-                {"error": "No data available for the past 8 days."},
+                {"error": "No status card metrics available for the past 8 days."},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -543,7 +543,7 @@ class RPEMetricAPI(BaseCardAPI):
         )
 
         if not metrics_qs.exists():
-            print(f"No performance metrics found for the past 8 days for user {user}.")
+            print(f"No rpe metrics found for the past 8 days for user {user}.")
             return {
                 'Intensity': '0.0',
                 'Fatigue': '0.0',
@@ -551,8 +551,8 @@ class RPEMetricAPI(BaseCardAPI):
                 'Readiness': '0.0'
             }
 
-        # Initialize sums for performance metrics
-        performance_metrics_sum = {
+        # Initialize sums for rpe metrics
+        rpe_metrics_sum = {
             'Intensity': 0.0,
             'Fatigue': 0.0,
             'Recovery': 0.0,
@@ -564,36 +564,36 @@ class RPEMetricAPI(BaseCardAPI):
         for entry in metrics_qs:
             try:
                 metrics = entry.metrics  # Assuming metrics is a dictionary
-                for key in performance_metrics_sum.keys():
-                    performance_metrics_sum[key] += float(metrics.get(key, 0.0))
+                for key in rpe_metrics_sum.keys():
+                    rpe_metrics_sum[key] += float(metrics.get(key, 0.0))
                 count += 1
             except Exception as e:
-                print(f"Error processing performance metrics for entry {entry.id}: {e}")
+                print(f"Error processing rpe metrics for entry {entry.id}: {e}")
 
         if count == 0:
-            return {key: '0.0' for key in performance_metrics_sum.keys()}
+            return {key: '0.0' for key in rpe_metrics_sum.keys()}
 
         # Calculate averages
-        performance_metrics_average = {
-            key: str(round(value / count, 2)) for key, value in performance_metrics_sum.items()
+        rpe_metrics_average = {
+            key: str(round(value / count, 2)) for key, value in rpe_metrics_sum.items()
         }
-        print(f"Calculated 8-day average performance metrics for user {user}: {performance_metrics_average}")
-        return performance_metrics_average
+        print(f"Calculated 8-day average rpe metrics for user {user}: {rpe_metrics_average}")
+        return rpe_metrics_average
 
     def get(self, request):
         # Get the authenticated user
         user = request.user
 
-        # Calculate the 8-day average performance metrics
+        # Calculate the 8-day average rpe metrics
         metrics_average = self.get_8_day_average_metrics(user)
 
         if not metrics_average:
             return Response(
-                {"error": "No data available for the past 8 days."},
+                {"error": "No rpe metrics available for the past 8 days."},
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Serve the 8-day average performance metrics
+        # Serve the 8-day average rpe metrics
         return Response(metrics_average, status=status.HTTP_200_OK)
         
         
