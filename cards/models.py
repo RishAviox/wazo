@@ -118,6 +118,8 @@ class GPSFootballAbilities(WajoModel):
         return f"Football Abilities for {self.user.phone_no}" 
     
 # training card json data, send as json of all entries via api
+
+
 class TrainingCardData(WajoModel):
     first_dropdown = models.CharField(max_length=128)
     second_dropdown = models.CharField(max_length=128)
@@ -160,6 +162,8 @@ class GreetingCache(WajoModel):
         return self.user.phone_no     
     
 # Insights Cache
+
+
 class InsightCache(WajoModel):
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='insights_cache')
     card = models.CharField(max_length=64)

@@ -151,8 +151,8 @@ WAJO_OTP_SERVICE_URL = os.environ.get('wajo-otp-service-url')
 WAJO_GOOGLE_GEMINI_API_KEY = os.environ.get('wajo-google-gemini-api-key')
 WAJO_NOTIFICATIONS_API_URL = os.environ.get('wajo-notifications-api-url')
 
-JWT_ACCESS_TOKEN_EXPIRATION = timedelta(hours=24)
-JWT_REFRESH_TOKEN_EXPIRATION = timedelta(days=7)
+JWT_ACCESS_TOKEN_EXPIRATION = timedelta(hours=5)
+JWT_REFRESH_TOKEN_EXPIRATION = timedelta(days=10)
 
 """
 ?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting. 

@@ -1,34 +1,46 @@
-name: Deploy to Azure Container Apps
-
+name: CI/CD
 on:
   push:
     branches:
+      - main
       - pilot
 
+  workflow_dispatch:
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  deploy:
+    runs-on: self-hosted
     steps:
-      - name: Checkout code
+      - name: Set Branch-Specific Directory
+        id: set-dir
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "DEPLOY_DIR=./deployments/wajo_main" >> $GITHUB_ENV
+            echo "DOCKER_COMPOSE_FILE=docker-compose.yml" >> $GITHUB_ENV
+            echo "PROJECT_NAME=wajo_main" >> $GITHUB_ENV
+          elif [[ "${{ github.ref_name }}" == "pilot" ]]; then
+            echo "DEPLOY_DIR=./deployments/wajo_pilot" >> $GITHUB_ENV
+            echo "DOCKER_COMPOSE_FILE=docker-compose.pilot.yml" >> $GITHUB_ENV
+            echo "PROJECT_NAME=wajo_pilot" >> $GITHUB_ENV
+          else
+            echo "Unsupported branch for deployment: ${{ github.ref_name }}"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Create Deployment Directory
+        run: mkdir -p ${{ env.DEPLOY_DIR }}
+
+      - name: Sync Project Files to Deployment Directory
         uses: actions/checkout@v3
-
-      - name: Log in to Azure
-        uses: azure/login@v1
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          clean: false
+          path: ${{ env.DEPLOY_DIR }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Stop Running Containers for Current Project
+        run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} -p ${{ env.PROJECT_NAME }} down
+        working-directory: ${{ env.DEPLOY_DIR }}
 
-      - name: Log in to Container Registry
-        run: |
-          echo "${{ secrets.CONTAINER_REGISTRY_PASSWORD }}" | docker login ${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io -u ${{ secrets.CONTAINER_REGISTRY_USERNAME }} --password-stdin
-
-      - name: Build and Push Docker Image
-        run: |
-          IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/myapp:${{ github.sha }}
-          docker build -t $IMAGE_NAME .
-          docker push $IMAGE_NAME
+      - name: Deploy Containers for Current Project
+        run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} -p ${{ env.PROJECT_NAME }} up -d --build
+        working-directory: ${{ env.DEPLOY_DIR }}
