@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.conf import settings
 
 from core.soft_delete import WajoModel
 
@@ -142,7 +143,7 @@ class OTPStore(models.Model):
         return f"OTP {self.data} for {self.phone_no}"
     
     def is_valid(self):
-        time_valid = timezone.now() - self.created_on < timezone.timedelta(minutes=5)
+        time_valid = timezone.now() - self.created_on < timezone.timedelta(minutes=settings.OTP_EXPIRATION_TIME)
         return time_valid and not self.is_used
     
     class Meta:

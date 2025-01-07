@@ -154,6 +154,8 @@ WAJO_NOTIFICATIONS_API_URL = os.environ.get('wajo-notifications-api-url')
 JWT_ACCESS_TOKEN_EXPIRATION = timedelta(days=30)
 JWT_REFRESH_TOKEN_EXPIRATION = timedelta(days=40)
 
+OTP_EXPIRATION_TIME = 10 # 10 minutes
+
 """
 ?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting. 
 If your entire site is served only over SSL, you may want to consider setting a value and enabling HTTP Strict Transport Security. 
