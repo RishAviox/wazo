@@ -12,3 +12,8 @@ management
 .vscode
 test_*
 wajo_local_db.session.sql
+*.postman_collection.json
+*.pdf
+*.html
+freelancer-work
+*_dev.txt
