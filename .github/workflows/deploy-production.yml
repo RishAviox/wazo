@@ -30,13 +30,13 @@ jobs:
     
     - name: Build and Push Docker Image
       run: |
-        IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/wajo-prod:latest
+        IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/wajo-prod:${{ github.sha }}
         docker build -t $IMAGE_NAME .
         docker push $IMAGE_NAME
 
     - name: Deploy to ACA
       run: |
-        IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/wajo-prod:latest
+        IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/wajo-prod:${{ github.sha }}
         echo "Using image: $IMAGE_NAME"
         az containerapp update --name ${{ secrets.AZURE_ACA_PRODUCTION_NAME }} \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
