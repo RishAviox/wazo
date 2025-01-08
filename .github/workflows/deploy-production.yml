@@ -37,7 +37,12 @@ jobs:
     - name: Deploy to ACA
       run: |
         IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/wajo-prod:${{ github.sha }}
-        echo "Using image: $IMAGE_NAME"
         az containerapp update --name ${{ secrets.AZURE_ACA_PRODUCTION_NAME }} \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
           --image $IMAGE_NAME
+
+    - name: Cleanup old Docker images
+      run: |
+        # Keep only the last 3 images and delete older ones
+        az acr repository purge --name ${{ secrets.CONTAINER_REGISTRY_USERNAME }} \
+          --repository wajo-prod --filter "commit@*" --keep 3 --yes
