@@ -36,6 +36,8 @@ jobs:
 
     - name: Deploy to ACA
       run: |
+        IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/wajo-prod:latest
+        echo "Using image: $IMAGE_NAME"
         az containerapp update --name ${{ secrets.AZURE_ACA_PRODUCTION_NAME }} \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
           --image $IMAGE_NAME
