@@ -17,7 +17,11 @@ SECRET_KEY = os.environ.get("django-secret-key")
 DEBUG = False
 
 ALLOWED_HOSTS = ['.hiwajo.com']
-CSRF_TRUSTED_ORIGINS = ['https://api.hiwajo.com', 'https://api2.hiwajo.com']
+CSRF_TRUSTED_ORIGINS = [
+    'https://api.hiwajo.com', 
+    'https://api2.hiwajo.com',
+    'https://staging-api.hiwajo.com', 
+]
 
 # Application definition
 
