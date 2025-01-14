@@ -9,7 +9,9 @@ def generate_game_meta_data_json(instance, game):
         'PADDING_START_TIME_FIRST_HALF' : instance.first_half_padding,
         'PADDING_START_TIME_SECOND_HALF' : instance.second_half_padding,
         'PADDING_END_TIME_FIRST_HALF' : (-1) * instance.first_half_padding,
-        'PADDING_END_TIME_SECOND_HALF' : (-1) * instance.second_half_padding
+        'PADDING_END_TIME_SECOND_HALF' : (-1) * instance.second_half_padding,
+        'START_TIME_PADDING': instance.start_time_padding,
+        'END_TIME_PADDING': instance.end_time_padding,
     }
     
     
