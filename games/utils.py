@@ -2,11 +2,11 @@ import pandas as pd
 
 def add_padding(start_time: int, end_time: int, half: str, padding_time):
     if half == "FIRST_HALF":
-        start_time = start_time + padding_time['PADDING_START_TIME_FIRST_HALF']
-        end_time = end_time + padding_time['PADDING_END_TIME_FIRST_HALF']
+        start_time = start_time + padding_time['PADDING_START_TIME_FIRST_HALF'] - padding_time['START_TIME_PADDING']
+        end_time = end_time + padding_time['PADDING_END_TIME_FIRST_HALF'] + padding_time['END_TIME_PADDING']
     elif half == "SECOND_HALF":
-        start_time = start_time + padding_time['PADDING_START_TIME_SECOND_HALF']
-        end_time = end_time + padding_time['PADDING_END_TIME_SECOND_HALF']
+        start_time = start_time + padding_time['PADDING_START_TIME_SECOND_HALF'] - padding_time['START_TIME_PADDING']
+        end_time = end_time + padding_time['PADDING_END_TIME_SECOND_HALF'] + padding_time['END_TIME_PADDING']
     return start_time, end_time
 
 

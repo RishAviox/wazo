@@ -39,6 +39,8 @@ class GameVideoDataForm(forms.ModelForm):
             'highlights_url', 
             'first_half_padding', 
             'second_half_padding',
+            'start_time_padding',
+            'end_time_padding',
             'is_processed', 
         ]
 
