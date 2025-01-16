@@ -87,12 +87,47 @@ class GreetingAPI(APIView):
 class InsightAPI(APIView):
     permission_classes = [IsAuthenticated]
     
-    def get(self, request, card):
+    def get(self, request, card=None):
         try:
+            user = request.user
+            if not card:
+                all_card_names = ["StatusCard", "DailySnapshot", "AttackingSkills", "VideocardDefensive",
+                                  "VideocardDistribution", "AthleticSkills", "FootballAbilities",
+                                  "VideoCard", "TrainingCard", "NewsCard"]
+                cached_insights = InsightCache.objects.filter(
+                    user=user,
+                    card__in=all_card_names
+                ).order_by('-updated_on')
+                
+                cached_insights_dict = {}
+                for insight in cached_insights:
+                    if insight.card not in cached_insights_dict:
+                        cached_insights_dict[insight.card] = insight.text
+                        
+                all_insights = {}
+                                
+                for card_name in all_card_names:
+                    if card_name in cached_insights_dict:
+                        all_insights[card_name] = cached_insights_dict[card_name]
+                    else:
+                        if card_name == 'NewsCard':
+                            all_insights[card_name] = random.choice(NEWS_CARD_INSIGHTS)
+                        else:
+                            prompt = get_prompt_for_insight(user, card_name)
+                            if prompt is None:
+                                all_insights[card_name] = 'unknown card'
+                                continue
+                            insight = generate_llm_response(prompt)
+                            InsightCache.objects.create(user=user, card=card_name, text=insight)
+                            all_insights[card_name] = insight
+                            print(f"[Generated and Cached] Insight for card '{card_name}':", insight)
+
+                print(f"[Final Insights] All insights for user '{user}':", all_insights)
+                return Response(all_insights, status=status.HTTP_200_OK)
+
             if card == 'NewsCard':
                 return Response({ 'insight': random.choice(NEWS_CARD_INSIGHTS) }, status=status.HTTP_200_OK)
             
-            user = request.user
             insight_cache_obj = InsightCache.objects.filter(
                     user=user,
                     card=card,

@@ -897,7 +897,7 @@ def get_prompt_for_insight(user, card):
             user_data = {
                 'team-VideoCard': player_data
             }
-            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided calendar data, team wellness data, and offensive and defensive performance metrics. This is mandatory. Analyze the team’s last game and recommend one specific training area for the team. Consider wellness and other stats to set the training priorities. Avoid mentioning the data passed to you or athletes and coaches. Data provided: {json_data}. Address the coach directly. Maximum 40 words. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
+            prompt = f"Generate a concise expert analysis for coaches only in {language} language based on the provided calendar data, team wellness data, and offensive and defensive performance metrics. This is mandatory. Analyze the team’s last game and recommend one specific training area for the team. Consider wellness and other stats to set the training priorities. Avoid mentioning the data passed to you or athletes and coaches. Data provided: {user_data}. Address the coach directly. Maximum 40 words. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
         
         else:
