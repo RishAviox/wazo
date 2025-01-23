@@ -90,7 +90,7 @@ class InsightAPI(APIView):
     def get(self, request, card=None):
         try:
             user = request.user
-            if not card:
+            if card == "all":
                 all_card_names = ["StatusCard", "DailySnapshot", "AttackingSkills", "VideocardDefensive",
                                   "VideocardDistribution", "AthleticSkills", "FootballAbilities",
                                   "VideoCard", "TrainingCard", "NewsCard"]
