@@ -4,7 +4,7 @@ from .views import *
 urlpatterns = [ 
     # greeting and insight
     path('greeting', GreetingAPI.as_view(), name='greeting'),
-    path('insight/<str:card>/', InsightAPI.as_view(), name='insight'),
+    path('insight/<str:card>', InsightAPI.as_view(), name='insight'),
 
     # suggested actions for cards
     path('suggested-actions', CardSuggestedActionsAPI.as_view(), name='card-suggested-actions'),
