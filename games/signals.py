@@ -48,10 +48,13 @@ def generate_game_meta_data_json(instance, game):
     highlights = generate_highlights_json(
         event_data_df, team_mapping, players_df, sequence_data_df, padding_time
     )
+    
+    # Load reference dataframe
+    reference_df = pd.read_json('games/constants.json', orient='index').reset_index()
 
     # Generate Event Details JSON
     events = generate_event_details_json(
-        event_data_df, team_mapping, players_df, sequence_data_df, padding_time
+        event_data_df, team_mapping, players_df, sequence_data_df, padding_time, reference_df
     )
 
     # Generate Video urls JSON
