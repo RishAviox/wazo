@@ -57,9 +57,9 @@ def generate_goals_json(df, teams, players_df, sequence_df, padding_time):
                     "team_name": teams.get(str(int(row.team_id)), "Unknown"),
                     "player_id": str(int(row.player_id)),
                     "player_name": filtered_df["player_name_en"].iloc[0],
-                    "event_time": str(row.event_time),
-                    "start_time": str(start_time),
-                    "end_time": str(end_time),
+                    "event_time": int(row.event_time),
+                    "start_time": int(start_time) if start_time else None,
+                    "end_time": int(end_time) if end_time else None,
                     "half": half.lower(),
                 }
             )
@@ -103,8 +103,8 @@ def generate_highlights_json( df, teams, players_df, sequence_df, padding_time):
                     "team_name": teams.get(str(int(row.team_id)), "Unknown"),
                     "player_id": str(int(row.player_id)),
                     "player_name": filtered_df["player_name_en"].iloc[0],
-                    "start_time": str(start_time),
-                    "end_time": str(end_time),
+                    "start_time": int(start_time) if start_time else None,
+                    "end_time": int(end_time) if end_time else None,
                     "eventType": row.eventType,
                     "subEventType": row.outcome,
                     "half": half.lower(),
