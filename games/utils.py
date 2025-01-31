@@ -114,15 +114,15 @@ def generate_highlights_json( df, teams, players_df, sequence_df, padding_time):
     return highlights
 
 
-def generate_event_details_json(df, teams, players_df, sequence_df, padding_time):
+def generate_event_details_json(df, teams, players_df, sequence_df, padding_time, reference_df):
     """Generates JSON of all events"""
     events = []
 
-    for row in df.itertuples():
+    for idx, row in df.iterrows():
         half = row.event_period
         try:
             # If player id not found then pass that iteration
-            filtered_df = players_df[players_df["id"] == row.player_id]
+            filtered_df = players_df[players_df["id"] == int(row.player_id)]
         except ValueError:
             continue
 
@@ -138,27 +138,110 @@ def generate_event_details_json(df, teams, players_df, sequence_df, padding_time
             end_time = int(sequence_filter_df["end_time"].iloc[0])
             start_time, end_time = add_padding(start_time, end_time, half, padding_time)
         else:
-            start_time = None
-            end_time = None
-            
-        if not filtered_df.empty:
-            events.append(
-                {
-                    "team_id": str(int(row.team_id)),
-                    "team_name": teams.get(str(int(row.team_id)), "Unknown"),
-                    "player_id": str(int(row.player_id)),
-                    "player_name": filtered_df["player_name_en"].iloc[0],
-                    "start_time": str(start_time),
-                    "end_time": str(end_time),
-                    "eventType": None if pd.isna(row.eventType) else row.eventType,
-                    "subEventType": (
-                        None if pd.isna(row.subEventType) else row.subEventType
-                    ),
-                    "half": half.lower(),
-                }
-            )
+            continue
+        
+        mapped_events, sub_event = map_event_and_subevent(row, row.eventType, reference_df)
+
+        for idx, event in enumerate(mapped_events):
+            if not filtered_df.empty:
+                events.append(
+                    {
+                        "team_id": str(int(row.team_id)),
+                        "team_name": teams.get(str(int(row.team_id)), "Unknown"),
+                        "player_id": str(int(row.player_id)),
+                        "player_name": filtered_df["player_name_en"].iloc[0],
+                        "start_time": int(start_time),
+                        "end_time": int(end_time),
+                        "eventType": event,
+                        "subEventType": sub_event[idx],
+                        "half": half.lower(),
+                    }
+                )
 
     return events
+
+
+def map_event_and_subevent(df, event_type, reference_df):
+    if isinstance(event_type, str):
+        event_type = event_type.strip()
+    cols_list = []
+    if event_type == "Pass":
+        cols_list.append(["eventType", "outcome", "cross", "keyPass", "assist", "bodyPart"])
+    if df['cross'] == True:
+        cols_list.append(["cross", "outcome", "bodyPart"])
+    if df['assist'] == True:
+        cols_list.append(["assist"])
+    if df["keyPass"] == True:
+        cols_list.append(["keyPass"])
+    if event_type == "Shot":
+        cols_list.append(["eventType", "outcome", "subEventType", "bodyPart"])
+    if event_type == "Goal Conceded":
+        cols_list.append(["eventType"])
+    if event_type == "Tackle":
+        cols_list.append(["eventType", "outcome"])
+    if event_type == "Aerial Clearance":
+        cols_list.append(["eventType", "outcome"])
+        cols_list.append(["subEventType", "outcome"])
+    if event_type in ["Pass Received", "Ball Received", "Block", "Carry", "Clearance", "Cross Received", "Error", "Interception", "Intervention", "Offside", "Pause", "Recovery"]:
+        cols_list.append(["eventType"])
+    if event_type == "Defensive Line Support":
+        cols_list.append(["eventType", "outcome"])
+    if event_type == "Duel":
+        cols_list.append(["eventType", "subEventType"])
+    if event_type == "Foul":
+        cols_list.append(["eventType", "subEventType", "outcome"])
+    if event_type == "Save":
+        cols_list.append(["eventType", "subEventType", "bodyPart"])
+    if event_type == "Set Piece":
+        cols_list.append(["eventType", "subEventType"])
+    if event_type == "Substitution":
+        cols_list.append(["eventType", "outcome"])
+    
+    event_list = []
+    sub_event_list = []
+
+    for cols in cols_list:
+        flag = False
+    
+        if len(cols) == 1:
+            for col in cols:
+                header_name = f"{col}_{df[col]}"
+                if header_name.endswith("_True"):
+                    header_name = header_name.replace("_True", "_true")
+                if reference_df['index'].eq(header_name).any():
+                    matching_rows = reference_df[reference_df['index'] == header_name]
+                    for _, row in matching_rows.iterrows():
+                        event_list.append(str(row['eventType']))
+                        sub_event_list.append(str(row['subEvent']))
+                        flag = True
+        if flag:
+            continue
+        first_col = cols[0]
+
+        for col in cols[1:]:
+            header_name = f"{first_col}_{df[first_col]}, {col}_{df[col]}"
+            if header_name.endswith("_True"):
+                header_name = header_name.replace("_True", "_true")
+            if reference_df['index'].eq(header_name).any():
+                matching_rows = reference_df[reference_df['index'] == header_name]
+                for _, row in matching_rows.iterrows():
+                    event_list.append(str(row['eventType']))
+                    sub_event_list.append(str(row['subEvent']))
+                    flag = True
+        
+        if flag:
+            continue
+        
+        header_name = f"{first_col}_{df[first_col]}"
+        if header_name.endswith("_True"):
+            header_name = header_name.replace("_True", "_true")
+        if reference_df['index'].eq(header_name).any():
+            matching_rows = reference_df[reference_df['index'] == header_name]
+            for _, row in matching_rows.iterrows():
+                event_list.append(str(row['eventType']))
+                sub_event_list.append(str(row['subEvent']))
+    
+    return event_list, sub_event_list
 
 
 def generate_video_urls() -> dict:

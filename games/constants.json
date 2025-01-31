@@ -1,0 +1,318 @@
+{
+    "eventType_Shot": {
+        "eventType": "Shots & Goals (all)",
+        "subEvent": "Shots"
+    },
+    "eventType_Shot, outcome_Goal": {
+        "eventType": "Shots & Goals (all)",
+        "subEvent": "Goals"
+    },
+    "eventType_Shot, outcome_On Target": {
+        "eventType": "Shots & Goals (all)",
+        "subEvent": "On Target"
+    },
+    "eventType_Shot, outcome_Off Target": {
+        "eventType": "Shots & Goals (all)",
+        "subEvent": "Missed Shots"
+    },
+    "eventType_Shot, outcome_Goal Conceded": {
+        "eventType": "Shots & Goals (all)",
+        "subEvent": "Goal Conceded"
+    },
+    "eventType_Shot, outcome_Blocked": {
+        "eventType": "Shots & Goals (all)",
+        "subEvent": "Blocked Shots"
+    },
+    "eventType_Shot, subEventType_Keeper Rush-Out": {
+        "eventType": "Shots & Goals (all)",
+        "subEvent": "Keeper Rush-Out"
+    },
+    "eventType_Shot, bodyPart_Left Foot": {
+        "eventType": "Shots & Goals (all)",
+        "subEvent": "Left Foot"
+    },
+    "eventType_Shot, bodyPart_Right Foot": {
+        "eventType": "Shots & Goals (all)",
+        "subEvent": "Right Foot"
+    },
+    "eventType_Shot, bodyPart_Header": {
+        "eventType": "Shots & Goals (all)",
+        "subEvent": "Header"
+    },
+    "eventType_Goal Conceded": {
+        "eventType": "Goal Conceded",
+        "subEvent": "-"
+    },
+    "eventType_Pass": {
+        "eventType": "Passes",
+        "subEvent": "Passes"
+    },
+    "eventType_Pass, outcome_Successful": {
+        "eventType": "Passes",
+        "subEvent": "Successful"
+    },
+    "eventType_Pass, outcome_Unsuccessful": {
+        "eventType": "Passes",
+        "subEvent": "Failed"
+    },
+    "eventType_Pass, cross_true": {
+        "eventType": "Passes",
+        "subEvent": "Crosses"
+    },
+    "eventType_Pass, keyPass_true": {
+        "eventType": "Passes",
+        "subEvent": "Key Passes"
+    },
+    "eventType_Pass, assist_true": {
+        "eventType": "Passes",
+        "subEvent": "Assists"
+    },
+    "eventType_Pass, bodyPart_Left Foot": {
+        "eventType": "Passes",
+        "subEvent": "Left Foot"
+    },
+    "eventType_Pass, bodyPart_Right Foot": {
+        "eventType": "Passes",
+        "subEvent": "Right Foot"
+    },
+    "eventType_Pass, bodyPart_Header": {
+        "eventType": "Passes",
+        "subEvent": "Headers"
+    },
+    "cross_true": {
+        "eventType": "Crosses",
+        "subEvent": "Crosses"
+    },
+    "cross_true, outcome_Successful": {
+        "eventType": "Crosses",
+        "subEvent": "Successful"
+    },
+    "cross_true, outcome_Unsuccessful": {
+        "eventType": "Crosses",
+        "subEvent": "Failed"
+    },
+    "cross_true, bodyPart_Left Foot": {
+        "eventType": "Crosses",
+        "subEvent": "Left Foot"
+    },
+    "cross_true, bodyPart_Right Foot": {
+        "eventType": "Crosses",
+        "subEvent": "Right Foot"
+    },
+    "cross_true, bodyPart_Header": {
+        "eventType": "Crosses",
+        "subEvent": "Header"
+    },
+    "assist_true": {
+        "eventType": "Assists",
+        "subEvent": "-"
+    },
+    "keyPass_true": {
+        "eventType": "Key Passes",
+        "subEvent": "-"
+    },
+    "eventType_Pass Received": {
+        "eventType": "Pass Received",
+        "subEvent": "-"
+    },
+    "eventType_Tackle": {
+        "eventType": "Tackles",
+        "subEvent": "Tackles"
+    },
+    "eventType_Tackle, outcome_Successful": {
+        "eventType": "Tackles",
+        "subEvent": "Successful"
+    },
+    "eventType_Tackle, outcome_Unsuccessful": {
+        "eventType": "Tackles",
+        "subEvent": "Failed"
+    },
+    "eventType_Aerial Clearance": {
+        "eventType": "Aerial Clearances (all)",
+        "subEvent": "Aerial Clearances"
+    },
+    "eventType_Aerial Clearance, outcome_Successful": {
+        "eventType": "Aerial Control",
+        "subEvent": "Successful Aerial Clearances"
+    },
+    "eventType_Aerial Clearance, outcome_Unsuccessful": {
+        "eventType": "Aerial Control",
+        "subEvent": "Failed Aerial Clearances"
+    },
+    "NaN": {
+        "eventType": "Aerial Control",
+        "subEvent": "-"
+    },
+    "subEventType_Aerial, outcome_Successful": {
+        "eventType": "Aerial Control",
+        "subEvent": "Successful Aerial Duels"
+    },
+    "subEventType_Aerial, outcome_Unsuccessful": {
+        "eventType": "Aerial Control",
+        "subEvent": "Failed Aerial Duels"
+    },
+    "eventType_Ball Received": {
+        "eventType": "Ball Received",
+        "subEvent": "-"
+    },
+    "eventType_Block": {
+        "eventType": "Blocks",
+        "subEvent": "-"
+    },
+    "eventType_Carry": {
+        "eventType": "Step-in",
+        "subEvent": "-"
+    },
+    "eventType_Clearance": {
+        "eventType": "Clearances",
+        "subEvent": "-"
+    },
+    "eventType_Cross Received": {
+        "eventType": "Cross Received",
+        "subEvent": "-"
+    },
+    "eventType_Defensive Line Support": {
+        "eventType": "Defensive Line Supports",
+        "subEvent": "Defensive Line Supports"
+    },
+    "eventType_Defensive Line Support, outcome_Successful": {
+        "eventType": "Defensive Line Supports",
+        "subEvent": "Successful"
+    },
+    "eventType_Defensive Line Support, outcome_Unsuccessful": {
+        "eventType": "Defensive Line Supports",
+        "subEvent": "Failed"
+    },
+    "eventType_Duel": {
+        "eventType": "Duels",
+        "subEvent": "Duels"
+    },
+    "eventType_Duel, subEventType_Ground": {
+        "eventType": "Duels",
+        "subEvent": "Ground"
+    },
+    "eventType_Duel, subEventType_Aerial": {
+        "eventType": "Duels (continued)",
+        "subEvent": "Aerial"
+    },
+    "eventType_Duel, subEventType_Loose Ball Duels": {
+        "eventType": "Duels (continued)",
+        "subEvent": "Loose Balls"
+    },
+    "eventType_Duel, outcome_Successful": {
+        "eventType": "Duels (continued)",
+        "subEvent": "Successful"
+    },
+    "eventType_Duel, outcome_Unsuccessful": {
+        "eventType": "Duels (continued)",
+        "subEvent": "Failed"
+    },
+    "eventType_Error": {
+        "eventType": "Errors",
+        "subEvent": "Errors"
+    },
+    "eventType_Foul": {
+        "eventType": "Fouls",
+        "subEvent": "Fouls"
+    },
+    "eventType_Foul Won, subEventType_Foul": {
+        "eventType": "Fouls",
+        "subEvent": "Foul Wons"
+    },
+    "eventType_Foul, outcome_Yellow Card": {
+        "eventType": "Fouls",
+        "subEvent": "Yellow Cards"
+    },
+    "eventType_Foul, outcome_Red Card": {
+        "eventType": "Fouls",
+        "subEvent": "Red Cards"
+    },
+    "eventType_Interception": {
+        "eventType": "Interceptions",
+        "subEvent": "-"
+    },
+    "eventType_Intervention": {
+        "eventType": "Interventions",
+        "subEvent": "-"
+    },
+    "eventType_Offside": {
+        "eventType": "Offsides",
+        "subEvent": "-"
+    },
+    "eventType_Pause": {
+        "eventType": "Pauses",
+        "subEvent": "Pauses"
+    },
+    "eventType_Recovery": {
+        "eventType": "Recoveries",
+        "subEvent": "-"
+    },
+    "eventType_Save": {
+        "eventType": "Saves",
+        "subEvent": "Saves"
+    },
+    "eventType_Save, subEventType_Parry": {
+        "eventType": "Saves",
+        "subEvent": "Parrys"
+    },
+    "eventType_Save, subEventType_Catch": {
+        "eventType": "Saves",
+        "subEvent": "Catches"
+    },
+    "eventType_Save, bodyPart_Lower Body": {
+        "eventType": "Saves",
+        "subEvent": "Lower Body"
+    },
+    "eventType_Save, bodyPart_Upper Body": {
+        "eventType": "Saves",
+        "subEvent": "Upper Body"
+    },
+    "eventType_Save, bodyPart_Hands": {
+        "eventType": "Saves",
+        "subEvent": "Hands"
+    },
+    "eventType_Save, bodyPart_Right Foot": {
+        "eventType": "Saves",
+        "subEvent": "Right Foot"
+    },
+    "eventType_Save, bodyPart_Left Foot": {
+        "eventType": "Saves",
+        "subEvent": "Left Foot"
+    },
+    "eventType_Set Piece": {
+        "eventType": "Set Pieces",
+        "subEvent": "Set Pieces"
+    },
+    "eventType_Set Piece, subEventType_Throw-In": {
+        "eventType": "Set Pieces",
+        "subEvent": "Throw-In's"
+    },
+    "eventType_Set Piece, subEventType_Corner": {
+        "eventType": "Set Pieces",
+        "subEvent": "Corners"
+    },
+    "eventType_Set Piece, subEventType_Freekick": {
+        "eventType": "Set Pieces",
+        "subEvent": "Free-kicks"
+    },
+    "eventType_Set Piece, subEventType_Goal Kick": {
+        "eventType": "Set Pieces",
+        "subEvent": "Goal Kicks"
+    },
+    "eventType_Set Piece, subEventType_Penalty Kick": {
+        "eventType": "Set Pieces",
+        "subEvent": "Penalty Kicks"
+    },
+    "eventType_Substitution": {
+        "eventType": "Substitutions",
+        "subEvent": "Substitutions"
+    },
+    "eventType_Substitution, outcome_On": {
+        "eventType": "Substitutions",
+        "subEvent": "On"
+    },
+    "eventType_Substitution, outcome_Off": {
+        "eventType": "Substitutions",
+        "subEvent": "Off"
+    }
+}

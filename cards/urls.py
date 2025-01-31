@@ -23,7 +23,8 @@ urlpatterns = [
     path('video-analysis', VideoAnalysisCardAPI.as_view(), name='video-analysis'),
     
     # video card
-    path('video-card-json', VideoCardJSONAPI.as_view(), name='video-card-json'),
+    path('video-card-json', VideoCardJSONAPI_Deprecated.as_view(), name='video-card-json'),
+    path('v1/video-card-json', VideoCardJSONAPI.as_view(), name='video-card-json-v1'),
     
     # training card json
     path('training-card-json', TrainingCardJSONAPI.as_view(), name='training-card-json'),

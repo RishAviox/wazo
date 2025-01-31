@@ -746,8 +746,8 @@ class VideoAnalysisCardAPI(APIView):
         return Response({'event_time': event_times}, status.HTTP_200_OK)
 
 
-# Video Card JSON API
-class VideoCardJSONAPI(APIView):
+# Video Card JSON API ---> Deprecated
+class VideoCardJSONAPI_Deprecated(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request, *args, **kwargs):
@@ -760,7 +760,54 @@ class VideoCardJSONAPI(APIView):
         # Return the data field from the latest GameMetaData record
         return Response(latest_metadata.data, status=status.HTTP_200_OK)
         
+# Video Card JSON API ---> V1
+class VideoCardJSONAPI(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def get_available_dates(self):
+        """
+        Gather all distinct dates found in GameMetaData.game.date, sorted descending.
+        """
+        return list(
+            GameMetaData.objects
+            .exclude(game__date__isnull=True)
+            .values_list('game__date', flat=True)
+            .distinct()
+            .order_by('-game__date')
+        )
+
+    def get(self, request, *args, **kwargs):
+        # Parse optional 'date' parameter
+        date_str = request.query_params.get('date')
+        target_date = parse_date(date_str) if date_str else None
+
+        # Filter by target_date if provided, else get all
+        if target_date:
+            queryset = GameMetaData.objects.filter(game__date=target_date)
+        else:
+            queryset = GameMetaData.objects.all()
+
+        # Order by the creation time, newest first
+        queryset = queryset.order_by('-created_on')
+
+        # Pick the newest item
+        latest_metadata = queryset.first()
+        if not latest_metadata:
+            return Response(
+                {
+                    "data": {},
+                    "available_dates": self.get_available_dates()
+                },
+                status=status.HTTP_200_OK
+            )
+
+        response_data = {
+            "data": latest_metadata.data,
+            "available_dates": self.get_available_dates()
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
+    
+    
 # Training Card JSON data API
 class TrainingCardJSONAPI(ListAPIView):
     permission_classes = [IsAuthenticated]
