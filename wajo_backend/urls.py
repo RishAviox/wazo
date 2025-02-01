@@ -11,6 +11,7 @@ urlpatterns = [
     path("api/notifications/", include("notifications.urls")),
     path("api/chatbot-admin/", include("chatbot_admin.urls")),
     path("api/cards/", include("cards.urls")),
+    path("api/calendar/", include("calendar_entry.urls"))
 ]
 
 
