@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "corsheaders",
+    "calendar_entry",
     "rest_framework",
     "storages", # azure blob storage
     "core",
