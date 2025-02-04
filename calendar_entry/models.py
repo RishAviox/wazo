@@ -6,15 +6,6 @@ from accounts.models import WajoUser
 
 class CalendarEventEntry(models.Model):
 
-    CATEGORY_CHOICES = (
-        ('Event', 'Event'),
-    )
-
-    SUB_CATEGORY_CHOICES = (
-        ('Training', 'Training'),
-        ('Match', 'Match')
-    )
-
     FREQUENCY_CHOICES = (
         ('Daily', 'Daily'),
         ('Weekly', 'Weekly'),
@@ -25,8 +16,8 @@ class CalendarEventEntry(models.Model):
     )
 
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='calendar_events')
-    category = models.CharField(max_length=15, choices=CATEGORY_CHOICES)
-    sub_category = models.CharField(max_length=15, choices=SUB_CATEGORY_CHOICES)
+    category = models.CharField(max_length=30)
+    sub_category = models.CharField(max_length=30)
     detail = models.TextField(max_length=1000)
     title = models.CharField(max_length=250)
     date = models.DateField()
@@ -43,13 +34,9 @@ class CalendarEventEntry(models.Model):
 
 
 class CalendarGoalEntry(models.Model):
-    CATEGORY_CHOICES = (
-        ('Short-Term Goal', 'Short-Term Goal'),
-        ('Long-Term Goal', 'Long-Term Goal')
-    )
 
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='calendar_goals')
-    category = models.CharField(max_length=15, choices=CATEGORY_CHOICES)
+    category = models.CharField(max_length=30)
     title = models.CharField(max_length=250)
     start_date = models.DateField()
     end_date = models.DateField()
