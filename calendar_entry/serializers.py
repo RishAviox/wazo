@@ -5,9 +5,11 @@ from calendar_entry.models import CalendarEventEntry, CalendarGoalEntry
 
 class CalendarEventCreateSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
+    user_id = serializers.CharField()
+
     class Meta:
         model = CalendarEventEntry
-        fields = ('id', 'category', 'sub_category', 'detail', 'title', 'date', 'start_time', 'end_time',
+        fields = ('id', 'user_id', 'category', 'sub_category', 'detail', 'title', 'date', 'start_time', 'end_time',
                   'location', 'repeat', 'participants', 'notes', 'custom_repeat')
 
     def validate(self, data):
@@ -42,10 +44,11 @@ class CalendarEventSerializer(serializers.ModelSerializer):
 
 class CalendarGoalCreateSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
+    user_id = serializers.CharField()
 
     class Meta:
         model = CalendarGoalEntry
-        fields = ('id', 'category', 'title', 'start_date', 'end_date', 'notes')
+        fields = ('id', 'user_id', 'category', 'title', 'start_date', 'end_date', 'notes')
 
 
 class CalendarGoalSerializer(serializers.ModelSerializer):
