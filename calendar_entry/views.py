@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -18,14 +21,38 @@ from calendar_entry.serializers import (
 
 class CalendarEntryListView(APIView):
     def get(self, request, user_id):
+        # Get the user object based on the phone number
         user = get_object_or_404(WajoUser, phone_no=user_id)
+        
+        # Initialize the response dictionary
         response = {}
+
+        # Get start_date and end_date from query parameters
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        
+        # Convert start_date and end_date to datetime objects if they are provided
+        try:
+            if start_date:
+                start_date = datetime.strptime(start_date, '%Y-%m-%d')  # or adjust the format as needed
+            if end_date:
+                end_date = datetime.strptime(end_date, '%Y-%m-%d')  # or adjust the format as needed
+        except ValueError:
+            raise ValidationError("Invalid date format. Use 'YYYY-MM-DD'.")
+        
+        # Filter events based on the user and date range
         events = CalendarEventEntry.objects.filter(user=user)
-        serializer = CalendarEventSerializer(events, many=True)
-        response["events"] = serializer.data
+        if start_date and end_date:
+            events = events.filter(start_date__gte=start_date, end_date__lte=end_date)
+        event_serializer = CalendarEventSerializer(events, many=True)
+        response["events"] = event_serializer.data
+
+        # Filter goals based on the user and date range
         goals = CalendarGoalEntry.objects.filter(user=user)
-        serializer = CalendarGoalSerializer(goals, many=True)
-        response["goals"] = serializer.data
+        if start_date and end_date:
+            goals = goals.filter(start_date__gte=start_date, end_date__lte=end_date)
+        goal_serializer = CalendarGoalSerializer(goals, many=True)
+        response["goals"] = goal_serializer.data
 
         return Response(data=response)
 
