@@ -1,5 +1,4 @@
-from datetime import datetime
-
+from datetime import datetime, timedelta
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError
 from rest_framework import generics
@@ -7,7 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
-
+from django.db.models import Q
 from accounts.models import WajoUser
 from .permissions import IsAdminUser
 from calendar_entry.models import CalendarEventEntry, CalendarGoalEntry
@@ -30,20 +29,34 @@ class CalendarEntryListView(APIView):
         # Get start_date and end_date from query parameters
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
-        
+        repeat_type = request.query_params.get('repeat_type')
+        custom_repeat = request.query_params.get('custom_repeat')
+
         # Convert start_date and end_date to datetime objects if they are provided
         try:
             if start_date:
-                start_date = datetime.strptime(start_date, '%Y-%m-%d')  # or adjust the format as needed
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
             if end_date:
-                end_date = datetime.strptime(end_date, '%Y-%m-%d')  # or adjust the format as needed
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         except ValueError:
             raise ValidationError("Invalid date format. Use 'YYYY-MM-DD'.")
-        
+
         # Filter events based on the user and date range
-        events = CalendarEventEntry.objects.filter(user=user)
+        event_query = Q(user=user)
         if start_date and end_date:
-            events = events.filter(start_date__gte=start_date, end_date__lte=end_date)
+            event_query &= Q(date__gte=start_date, date__lte=end_date)
+        if repeat_type:
+            event_query &= Q(repeat=repeat_type)
+        
+        if custom_repeat:
+            try:
+                custom_repeat_days = eval(custom_repeat) # Ensure input safety
+                event_query &= Q(custom_repeat__days=custom_repeat_days)
+            except Exception as e:
+                raise ValidationError("Invalid format for custom_repeat.")
+
+        # Fetch and serialize events
+        events = CalendarEventEntry.objects.filter(event_query)
         event_serializer = CalendarEventSerializer(events, many=True)
         response["events"] = event_serializer.data
 
