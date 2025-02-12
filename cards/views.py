@@ -8,7 +8,8 @@ from django.utils.timezone import datetime
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 import random
-from datetime import timedelta
+from datetime import timedelta, timezone
+import pytz
 
 from core.llm_provider import generate_llm_response
 from .utils import *
@@ -67,10 +68,15 @@ class GreetingAPI(APIView):
         print("*" * 100)
         # print("user_data for greeting generation: ", user_data)
 
+        israel_tz = pytz.timezone('Asia/Jerusalem')
+        utc_time = datetime.now(timezone.utc)
+        israel_local_time = utc_time.astimezone(israel_tz)
+
         prompt = f"""Generate a two-liner greeting only in {language} language for the user with the following data. 
                     Keep the word count around 60 words and make it crisp and to the point for a athelete. Do not include JSON data. 
                     From the data passed, see what should be his main focus for the day.: {user_data}. 
                     {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}
+                    Current Date and time: {israel_local_time}
                 """
 
         greeting = generate_llm_response(prompt)
