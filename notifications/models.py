@@ -10,6 +10,7 @@ class Notification(WajoModel):
     title = models.CharField(max_length=100)
     body = models.CharField(max_length=255)
     postback = models.CharField(max_length=24)
+    is_read = models.BooleanField(default=False)
     created_on = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
