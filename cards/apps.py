@@ -7,3 +7,5 @@ class CardsConfig(AppConfig):
 
     def ready(self):
         import cards.signals
+        from .scheduler import start_scheduler
+        start_scheduler()
