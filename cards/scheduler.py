@@ -90,7 +90,7 @@ def start_scheduler():
     scheduler.add_job(update_greeting_text, 'interval', hours=4)
 
     # Add the update_insight_text job to run every 4 hours
-    scheduler.add_job(update_insight_text, 'interval', minutes=5)
+    scheduler.add_job(update_insight_text, 'interval', hours=4)
 
     # Optionally, you can handle job execution and errors
     scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
