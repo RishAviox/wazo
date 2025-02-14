@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from core.llm_provider import generate_llm_response
+from django.utils import timezone
 
 from cards.models import GreetingCache, InsightCache
 from cards.utils import get_status_card_metrics, get_daily_snapshot, get_prompt_for_insight
@@ -75,11 +76,12 @@ def update_insight_text():
                 if prompt:
                     insight = generate_llm_response(prompt)
                     cached_insight.text = insight  # Update the cached insight text
+                    cached_insight.updated_on = timezone.now()
                     updated_insights.append(cached_insight)  # Collect it for bulk save
 
             # Perform bulk update in one go
             if updated_insights:
-                InsightCache.objects.bulk_update(updated_insights, ['text'])
+                InsightCache.objects.bulk_update(updated_insights, ['text', 'updated_on'])
 
         logger.info("Successfully updated all greeting cache records.")
     except Exception as e:
