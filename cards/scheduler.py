@@ -59,25 +59,19 @@ def update_greeting_text():
 
 def update_insight_text():
     try:
-        all_card_names = ["StatusCard", "DailySnapshot", "AttackingSkills", "VideocardDefensive",
-                          "VideocardDistribution", "AthleticSkills", "FootballAbilities",
-                          "VideoCard", "TrainingCard"]
-
         # Query all insights related to the specified card names in one go
-        cached_insights = InsightCache.objects.filter(card__in=all_card_names)
+        cached_insights = InsightCache.objects.all()
 
         for cached_insight in cached_insights:
             # Collect updates for bulk saving
             updated_insights = []
 
-            # Generate the insight text for each card once
-            for card_name in all_card_names:
-                prompt = get_prompt_for_insight(cached_insight.user, card_name)
-                if prompt:
-                    insight = generate_llm_response(prompt)
-                    cached_insight.text = insight  # Update the cached insight text
-                    cached_insight.updated_on = timezone.now()
-                    updated_insights.append(cached_insight)  # Collect it for bulk save
+            prompt = get_prompt_for_insight(cached_insight.user, cached_insight.card)
+            if prompt:
+                insight = generate_llm_response(prompt)
+                cached_insight.text = insight  # Update the cached insight text
+                cached_insight.updated_on = timezone.now()
+                updated_insights.append(cached_insight)  # Collect it for bulk save
 
             # Perform bulk update in one go
             if updated_insights:
@@ -96,7 +90,7 @@ def start_scheduler():
     scheduler.add_job(update_greeting_text, 'interval', hours=4)
 
     # Add the update_insight_text job to run every 4 hours
-    scheduler.add_job(update_insight_text, 'interval', hours=4)
+    scheduler.add_job(update_insight_text, 'interval', minutes=5)
 
     # Optionally, you can handle job execution and errors
     scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
