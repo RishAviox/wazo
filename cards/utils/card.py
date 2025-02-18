@@ -7,7 +7,8 @@ from django.utils.timezone import datetime
 
 
 from ..models import *
-from events.models import OneTimeEvents, RecurringEvents
+# from events.models import OneTimeEvents, RecurringEvents
+from calendar_entry.models import CalendarEventEntry
 from .status_metrics_calculations import *
 from .gps import get_gps_athletic_skills_metrics, get_gps_football_abilities_metrics
 
@@ -73,20 +74,21 @@ def get_events_for_next_5_days(user, start_date):
         next_5_days = timezone.make_aware(next_5_days, timezone.get_current_timezone())
 
     # get one time events
-    one_time_events = OneTimeEvents.objects.filter(user=user, date__range=(start_date, next_5_days))
+    # one_time_events = OneTimeEvents.objects.filter(user=user, date__range=(start_date, next_5_days))
+    one_time_events = CalendarEventEntry.objects.filter(user=user, date__range=(start_date, next_5_days), repeat="None")
     
     # get recurring events
     recurring_events = []
-    for event in RecurringEvents.objects.filter(user=user).all():
+    for event in CalendarEventEntry.objects.filter(user=user).exclude(repeat="None"):
         # if event.date <= next_5_days and (event.end_date is None or event.end_date >= start_date):
         if timezone.localtime(event.date) <= next_5_days:
             recurrence_dates = calculate_recurrence_dates(event, start_date, next_5_days)
             for recurrence_date in recurrence_dates:
                 recurring_events.append({
-                    'event_type': event.event_type,
-                    'event': event.event,
+                    'event_type': event.sub_category,
+                    'event': event.category,
                     'date': recurrence_date,
-                    'source': event.source
+                    'source': "From App"
                 })
 
     return one_time_events, recurring_events
@@ -98,7 +100,8 @@ def get_events_for_date(user, event_date):
         event_date = timezone.make_aware(event_date, timezone.get_current_timezone())
 
     # Get one-time events
-    one_time_events = OneTimeEvents.objects.filter(user=user, date__date=event_date.date())
+    # one_time_events = OneTimeEvents.objects.filter(user=user, date__date=event_date.date())
+    one_time_events = CalendarEventEntry.objects.filter(user=user, date=event_date.date(), repeat="None")
 
     # Get recurring events
     recurring_events = []
@@ -106,15 +109,15 @@ def get_events_for_date(user, event_date):
     # Set end_date to the last minute of the day
     end_date = event_date.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-    for event in RecurringEvents.objects.filter(user=user):
+    for event in CalendarEventEntry.objects.filter(user=user).exclude(repeat="None"):
         recurrence_dates = calculate_recurrence_dates(event, event_date, end_date)
         for recurrence_date in recurrence_dates:
             if recurrence_date.date() == event_date.date():
                 recurring_events.append({
-                    'event_type': event.event_type,
-                    'event': event.event,
+                    'event_type': event.sub_category,
+                    'event': event.category,
                     'date': recurrence_date,
-                    'source': event.source
+                    'source': "From App"
                 })
 
     return one_time_events, recurring_events
@@ -124,25 +127,25 @@ def calculate_recurrence_dates(event, start_date, end_date):
     dates = []
     current_date = timezone.localtime(event.date)
 
-    if event.frequency == 'Daily':
+    if event.repeat == 'Daily':
         while current_date <= end_date:
             if current_date >= start_date:
                 dates.append(current_date)
             current_date += timedelta(days=1)
     
-    elif event.frequency == 'Weekly':
+    elif event.repeat == 'Weekly':
         while current_date <= end_date:
             if current_date >= start_date:
                 dates.append(current_date)
             current_date += timedelta(weeks=1)
     
-    elif event.frequency == 'Monthly':
+    elif event.repeat == 'Monthly':
         while current_date <= end_date:
             if current_date >= start_date:
                 dates.append(current_date)
             current_date += timedelta(days=30)  # Simple monthly increment, adjust as needed
     
-    elif event.frequency == 'Yearly':
+    elif event.repeat == 'Yearly':
         while current_date <= end_date:
             if current_date >= start_date:
                 dates.append(current_date)
@@ -156,10 +159,10 @@ def get_daily_snapshot(user, event_date):
     print("one_time_events: ", list(one_time_events), recurring_events)
     one_time_events_data = [
         {
-            'event_type': event.event_type,
-            'event': event.event,
-            'date': timezone.localtime(event.date),
-            'source': event.source,
+            'event_type': event.sub_category,
+            'event': event.category,
+            'date': event.date,
+            'source': "From App",
         }
         for event in one_time_events
     ]
