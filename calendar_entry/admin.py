@@ -1,7 +1,7 @@
-from django.contrib import admin
+from core.admin import admin_site
 
 from calendar_entry.models import CalendarEventEntry, CalendarGoalEntry
 
 
-admin.site.register(CalendarEventEntry)
-admin.site.register(CalendarGoalEntry)
+admin_site.register(CalendarEventEntry)
+admin_site.register(CalendarGoalEntry)
