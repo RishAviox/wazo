@@ -1,5 +1,6 @@
 from django.utils.timezone import timedelta
 from django.utils import timezone
+from datetime import timezone as tz
 from django.db.models import Sum, FloatField, ExpressionWrapper
 from django.db.models.functions import Cast, Coalesce
 from django.db.models.fields.json import KeyTextTransform
@@ -125,7 +126,10 @@ def get_events_for_date(user, event_date):
 
 def calculate_recurrence_dates(event, start_date, end_date):
     dates = []
-    current_date = timezone.localtime(event.date)
+
+    event_datetime = datetime.combine(event.date, datetime.min.time())
+    event_datetime = timezone.make_aware(event_datetime, tz.utc)
+    current_date = timezone.localtime(event_datetime)
 
     if event.repeat == 'Daily':
         while current_date <= end_date:
