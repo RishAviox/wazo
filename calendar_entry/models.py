@@ -29,6 +29,9 @@ class CalendarEventEntry(models.Model):
     participants = models.CharField(max_length=250)
     notes = models.TextField(max_length=1000, blank=True, null=True)
 
+    class Meta:
+        verbose_name_plural = "Calendar Event Entries"
+
     def __str__(self):
         return f"{self.category} / {self.sub_category}"
 
@@ -41,6 +44,9 @@ class CalendarGoalEntry(models.Model):
     start_date = models.DateField()
     end_date = models.DateField()
     notes = models.TextField(max_length=1000)
+
+    class Meta:
+        verbose_name_plural = "Calendar Goal Entries"
 
     def __str__(self):
         return f"{self.category} / {self.title}" 
