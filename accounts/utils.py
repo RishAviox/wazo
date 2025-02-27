@@ -38,6 +38,9 @@ def generate_refresh_token(user):
 
 # generate, store and send otp
 def generate_and_send_otp(phone_no):
+    # For guest account
+    if phone_no == "+11111111111":
+        return "123456"
     otp_number = secrets.randbelow(900000) + 100000 # 6 digit 
     otp = OTPStore(data=str(otp_number), phone_no=phone_no)
     otp.save()
@@ -62,6 +65,9 @@ def validate_otp(phone_no, input_otp):
         Prevent race conditions with atomic and select_for_update() for row level locking
         Reference: https://docs.djangoproject.com/en/5.0/topics/db/transactions/
     """
+    # For guest account
+    if phone_no == "+11111111111" and input_otp == "123456":
+        return True
     with transaction.atomic(): 
         try:
             otp = OTPStore.objects.select_for_update().filter(phone_no=phone_no).latest('created_on')
