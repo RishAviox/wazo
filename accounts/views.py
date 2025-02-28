@@ -10,7 +10,7 @@ from jwt.exceptions import ExpiredSignatureError, DecodeError, InvalidTokenError
 
 from .models import WajoUser, WajoUserDevice
 from .utils import generate_and_send_otp, validate_otp, generate_access_token, generate_refresh_token
-from .serializer import WajoUserSerializer
+from .serializer import UserRequestSerializer, WajoUserSerializer
 
 from onboarding.models import OnboardingStep
 
@@ -153,3 +153,14 @@ class WajoUserProfileDetails(APIView):
             return Response({'error': 'User does not exist'}, status=status.HTTP_400_BAD_REQUEST)
 
 
+class UserRequestCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, *args, **kwargs):
+        request.data["user"] = request.user
+        serializer = UserRequestSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
