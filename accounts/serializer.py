@@ -18,3 +18,10 @@ class WajoUserSerializer(serializers.ModelSerializer):
         if WajoUser.objects.filter(phone_no=value).exists():
             raise serializers.ValidationError("A user with this phone number already exists.")
         return value
+
+
+class UserRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserRequest
+        fields = ['user', 'request_type', 'description', 'status', 'requested_at', 'processed_at', 'admin_notes']
+        read_only_fields = ['requested_at', 'status', 'processed_at']
