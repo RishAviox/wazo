@@ -149,3 +149,29 @@ class OTPStore(models.Model):
     class Meta:
         verbose_name = "OTP Store"
         verbose_name_plural = "OTP Store"
+
+
+class UserRequest(models.Model):
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    )
+    REQUEST_TYPE_CHOICES = (
+        ('account_deletion', 'Account Deletion'),
+    )
+    # Link the request to the user
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='requests')
+    request_type = models.CharField(max_length=50, choices=REQUEST_TYPE_CHOICES)
+    description = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    requested_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    admin_notes = models.TextField(blank=True, null=True)
+    
+    def __str__(self):
+        return f"Request by {self.user.phone_no} - Type: {self.request_type} (Status: {self.status})"
+
+    class Meta:
+        verbose_name = 'User Request'
+        verbose_name_plural = 'User Requests'
