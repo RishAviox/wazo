@@ -69,7 +69,7 @@ class GreetingAPI(APIView):
         # print("user_data for greeting generation: ", user_data)
 
         israel_tz = pytz.timezone('Asia/Jerusalem')
-        utc_time = datetime.now(timezone.utc)
+        utc_time = datetime.now(pytz.utc)
         israel_local_time = utc_time.astimezone(israel_tz)
 
         prompt = f"""Generate a two-liner greeting only in {language} language for the user with the following data. 
