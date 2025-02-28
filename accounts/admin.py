@@ -19,7 +19,14 @@ class OTPStoreAdmin(admin.ModelAdmin):
     list_display = ['phone_no', 'data', 'is_used', 'created_on']
 
 
+class UserRequestAdmin(admin.ModelAdmin):
+    list_display = ['user', 'request_type', 'status', 'requested_at', 'processed_at']
+    list_filter = ['request_type', 'status', 'requested_at']
+    search_fields = ['user__phone_no', 'description']
+
+
 admin_site.register(WajoUser, WajoUserAdmin)
 admin_site.register(WajoUserDevice, WajoUserDeviceAdmin)
 admin_site.register(PlayerIDMapping, PlayerIDMappingAdmin)
 admin_site.register(OTPStore, OTPStoreAdmin)
+admin_site.register(UserRequest, UserRequestAdmin)
