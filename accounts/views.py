@@ -157,7 +157,7 @@ class UserRequestCreateView(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request, *args, **kwargs):
-        request.data["user"] = request.user
+        request.data["user"] = request.user.phone_no
         serializer = UserRequestSerializer(data=request.data)
         
         if serializer.is_valid():
