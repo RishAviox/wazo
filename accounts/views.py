@@ -8,7 +8,7 @@ import jwt
 import re
 from jwt.exceptions import ExpiredSignatureError, DecodeError, InvalidTokenError
 
-from .models import WajoUser, WajoUserDevice
+from .models import WajoUser, WajoUserDevice, UserRequest
 from .utils import generate_and_send_otp, validate_otp, generate_access_token, generate_refresh_token
 from .serializer import UserRequestSerializer, WajoUserSerializer
 
@@ -161,6 +161,18 @@ class UserRequestCreateView(APIView):
         serializer = UserRequestSerializer(data=request.data)
         
         if serializer.is_valid():
-            serializer.save(user=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            # Try to update or create the UserRequest
+            user_request, created = UserRequest.objects.update_or_create(
+                user=request.user,
+                defaults=serializer.validated_data
+            )
+            
+            # Serialize the result after saving
+            response_data = UserRequestSerializer(user_request).data
+            
+            if created:
+                return Response(response_data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(response_data, status=status.HTTP_200_OK)
+        
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
