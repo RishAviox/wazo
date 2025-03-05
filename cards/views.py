@@ -319,6 +319,10 @@ class BaseCardAPI(APIView):
                             .order_by(f'-{date_field}')
                             .first()
                         )
+        if user.selected_language == 'he' and metrics_entry:
+            entries = metrics_entry.metrics
+            translate_units_en_to_he(entries)
+
         return metrics_entry
     
     def get_available_dates_for_user(self, user, date_field):
