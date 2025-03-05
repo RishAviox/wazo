@@ -167,132 +167,260 @@ class CardSuggestedActionsAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        data = {
-            "Calendar": {
-                "actions": [
-                    {
-                        "name": "Add Schedule",
-                        "postback": "add_schedule"
+        if request.user.selected_language == 'he':
+            data = {
+                    "Calendar": {
+                        "actions": [
+                            {
+                                "name": "הוסף לוח זמנים",
+                                "postback": "add_schedule"
+                            },
+                            {
+                                "name": "עדכן את לוח הזמנים למחר",
+                                "postback": "add_eventsfortomorrow"
+                            }
+                        ]
                     },
-                    {
-                        "name": "Update tomorrow's schedule",
-                        "postback": "add_eventsfortomorrow"
+                    "Wellness": {
+                        "actions": [
+                            {
+                                "name": "עדכן רווחה",
+                                "postback": "update_wellness"
+                            },
+                            {
+                                "name": "RPE עדכן",
+                                "postback": "log_rpe"
+                            },
+                            {
+                                "name": "קבל תובנות",
+                                "postback": "get_insights"
+                            },
+                            {
+                                "name": "RPE תובנות",
+                                "postback": "get_rpe_insights"
+                            }
+                        ]
+                    },
+                    "Locker Room": {
+                        "actions": [
+                            {
+                                "name": "סטטוס",
+                                "postback": "status"
+                            },
+                            {
+                                "name": "סטטיסטיקות",
+                                "postback": "stats"
+                            },
+                            {
+                                "name": "התפתחות",
+                                "postback": "development"
+                            }
+                        ]
+                    },
+                    "Daily Snapshot": {
+                        "actions": [
+                            {
+                                "name": "תמונת מצב יומית",
+                                "postback": "daily-snapshot"
+                            }
+                        ]
+                    },
+                    "Match Center": {
+                        "actions": [
+                            {
+                                "name": "לפני המשחק",
+                                "postback": "pre-match"
+                            },
+                            {
+                                "name": "אחרי המשחק",
+                                "postback": "post-match"
+                            },
+                            {
+                                "name": "במהלך המשחק",
+                                "postback": "in-match"
+                            }
+                        ]
+                    },
+                    "Development Center": {
+                        "actions": [
+                            {
+                                "name": "מעקב התפתחות קבוצתי",
+                                "postback": "team-journey"
+                            },
+                            {
+                                "name": "מעקב התפתחות אישי",
+                                "postback": "career-journey"
+                            }
+                        ]
+                    },
+                    "Reporting and Analysis": {
+                        "actions": [
+                            {
+                                "name": "דיווח ביצועי שחקן",
+                                "postback": "player-performance-reporting"
+                            },
+                            {
+                                "name": "דיווח ביצועי קבוצה",
+                                "postback": "team-performance-reporting"
+                            },
+                            {
+                                "name": "דיווח אחרי המשחק וניתוח טקטי",
+                                "postback": "post-match-tactical-reporting"
+                            },
+                            {
+                                "name": "דיווח על בריאות ורווחה",
+                                "postback": "health-wellness-reporting"
+                            }
+                        ]
+                    },
+                    "Performance & Data Insights": {
+                        "actions": [
+                            {
+                                "name": "מדדים מתקדמים לביצועים",
+                                "postback": "advaced-performance-metrics"
+                            },
+                            {
+                                "name": "תובנות נתונים של שחקן",
+                                "postback": "player-data-insights"
+                            },
+                            {
+                                "name": "מגמות ביצועי קבוצה",
+                                "postback": "team-performance-trends"
+                            },
+                            {
+                                "name": "ניתוח נתוני יריב",
+                                "postback": "opponent-data-analysis"
+                            }
+                        ]
                     }
-                ]
-            },
-            "Wellness": {
-                "actions": [
-                    {
-                        "name": "Update Wellness",
-                        "postback": "update_wellness"
-                    },
-                    {
-                        "name": "Update RPE",
-                        "postback": "log_rpe"
-                    },
-                    {
-                        "name": "How am I doing?",
-                        "postback": "get_insights"
-                    },
-                    {
-                        "name": "RPE Insights",
-                        "postback": "get_rpe_insights"
-                    }
-                ]
-            },
-            "Locker Room": {
-                "actions": [
-                    {
-                        "name": "Status",
-                        "postback": "status"
-                    },
-                    {
-                        "name": "Stats",
-                        "postback": "stats"
-                    },
-                    {
-                        "name": "Development",
-                        "postback": "development"
-                    }
-                ]
-            },
-            "Daily Snapshot": {
-                "actions": [
-                    {
-                        "name": "Daily Snapshot",
-                        "postback": "daily-snapshot"
-                    }
-                ]
-            },
-            "Match Center": {
-                "actions": [
-                    {
-                        "name": "Pre-Match",
-                        "postback": "pre-match"
-                    },
-                    {
-                        "name": "Post-Match",
-                        "postback": "post-match"
-                    },
-                    {
-                        "name": "In-Match",
-                        "postback": "in-match"
-                    }
-                ]
-            },
-            "Development Center": {
-                "actions": [
-                    {
-                        "name": "Team Journey",
-                        "postback": "team-journey"
-                    },
-                    {
-                        "name": "Career Journey",
-                        "postback": "career-journey"
-                    }
-                ]
-            },
-            "Reporting and Analysis": {
-                "actions": [
-                    {
-                        "name": "Player Performance Reporting",
-                        "postback": "player-performance-reporting"
-                    },
-                    {
-                        "name": "Team Performance Reporting",
-                        "postback": "team-performance-reporting"
-                    },
-                    {
-                        "name": "Post-Match & Tactical Reporting",
-                        "postback": "post-match-tactical-reporting"
-                    },
-                    {
-                        "name": "Health & Wellness Reporting",
-                        "postback": "health-wellness-reporting"
-                    }
-                ]
-            },
-            "Performance & Data Insights": {
-                "actions": [
-                    {
-                        "name": "Advanced Performance Metrics",
-                        "postback": "advaced-performance-metrics"
-                    },
-                    {
-                        "name": "Player Data Insights",
-                        "postback": "player-data-insights"
-                    },
-                    {
-                        "name": "Team Performance Trends",
-                        "postback": "team-performance-trends"
-                    },
-                    {
-                        "name": "Opponent Data Analysis",
-                        "postback": "opponent-data-analysis"
-                    }
-                ]
+                }
+        else:
+            data = {
+                "Calendar": {
+                    "actions": [
+                        {
+                            "name": "Add Schedule",
+                            "postback": "add_schedule"
+                        },
+                        {
+                            "name": "Update tomorrow's schedule",
+                            "postback": "add_eventsfortomorrow"
+                        }
+                    ]
+                },
+                "Wellness": {
+                    "actions": [
+                        {
+                            "name": "Update Wellness",
+                            "postback": "update_wellness"
+                        },
+                        {
+                            "name": "Update RPE",
+                            "postback": "log_rpe"
+                        },
+                        {
+                            "name": "How am I doing?",
+                            "postback": "get_insights"
+                        },
+                        {
+                            "name": "RPE Insights",
+                            "postback": "get_rpe_insights"
+                        }
+                    ]
+                },
+                "Locker Room": {
+                    "actions": [
+                        {
+                            "name": "Status",
+                            "postback": "status"
+                        },
+                        {
+                            "name": "Stats",
+                            "postback": "stats"
+                        },
+                        {
+                            "name": "Development",
+                            "postback": "development"
+                        }
+                    ]
+                },
+                "Daily Snapshot": {
+                    "actions": [
+                        {
+                            "name": "Daily Snapshot",
+                            "postback": "daily-snapshot"
+                        }
+                    ]
+                },
+                "Match Center": {
+                    "actions": [
+                        {
+                            "name": "Pre-Match",
+                            "postback": "pre-match"
+                        },
+                        {
+                            "name": "Post-Match",
+                            "postback": "post-match"
+                        },
+                        {
+                            "name": "In-Match",
+                            "postback": "in-match"
+                        }
+                    ]
+                },
+                "Development Center": {
+                    "actions": [
+                        {
+                            "name": "Team Journey",
+                            "postback": "team-journey"
+                        },
+                        {
+                            "name": "Career Journey",
+                            "postback": "career-journey"
+                        }
+                    ]
+                },
+                "Reporting and Analysis": {
+                    "actions": [
+                        {
+                            "name": "Player Performance Reporting",
+                            "postback": "player-performance-reporting"
+                        },
+                        {
+                            "name": "Team Performance Reporting",
+                            "postback": "team-performance-reporting"
+                        },
+                        {
+                            "name": "Post-Match & Tactical Reporting",
+                            "postback": "post-match-tactical-reporting"
+                        },
+                        {
+                            "name": "Health & Wellness Reporting",
+                            "postback": "health-wellness-reporting"
+                        }
+                    ]
+                },
+                "Performance & Data Insights": {
+                    "actions": [
+                        {
+                            "name": "Advanced Performance Metrics",
+                            "postback": "advaced-performance-metrics"
+                        },
+                        {
+                            "name": "Player Data Insights",
+                            "postback": "player-data-insights"
+                        },
+                        {
+                            "name": "Team Performance Trends",
+                            "postback": "team-performance-trends"
+                        },
+                        {
+                            "name": "Opponent Data Analysis",
+                            "postback": "opponent-data-analysis"
+                        }
+                    ]
+                }
             }
-        }
 
         return Response(data, status=status.HTTP_200_OK)
  
