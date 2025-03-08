@@ -58,6 +58,18 @@ class BeproMatchData(models.Model):
 
     def __str__(self):
         return f"{self.season_name} - ({self.match_id})"
+    
+    def final_score(self):
+        return f"{match_data.home_team_name} {match_data.home_team_score}–{match_data.away_team_score} {match_data.away_team_name}"
+    
+    def recent_results(self):
+        """Fetches the last 5 matches between the same teams."""
+        matches = BeproMatchData.objects.filter(
+            home_team_id__in=[self.home_team_id, self.away_team_id],
+            away_team_id__in=[self.home_team_id, self.away_team_id]
+        ).exclude(match_id=self.match_id).order_by('-start_time')[:5]
+
+        return [f"{m.final_score()} ({m.start_time.strftime('%Y-%m-%d')})" for m in matches]
 
 class BeproMatchDetail(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid4())
@@ -88,31 +100,54 @@ class BeproMatchDetail(models.Model):
 
 
 class BeproEventData(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
-    record_id = models.PositiveBigIntegerField(null=True)
-    match_id = models.ForeignKey(to=BeproMatchData, on_delete=models.CASCADE)
-    team_id = models.PositiveIntegerField(null=True)
-    player_id = models.PositiveIntegerField(null=True)
-    event_period = models.CharField(max_length=30, null=True)
-    event_time = models.CharField(max_length=10, null=True)
-    x = models.CharField(max_length=10, null=True)
-    y = models.CharField(max_length=10, null=True)
-    ball_position_x = models.CharField(max_length=10, null=True)
-    ball_position_y = models.CharField(max_length=10, null=True)
-    relative_event_id = models.CharField(max_length=30, null=True)
-    relative_event_x = models.CharField(max_length=10, null=True)
-    relative_event_y = models.CharField(max_length=10, null=True)
-    xg = models.CharField(max_length=30, null=True)
-    event_type = models.CharField(max_length=30, null=True)
-    outcome = models.CharField(max_length=30, null=True)
-    sub_event_type = models.CharField(max_length=30, null=True)
-    cross = models.CharField(max_length=5, null=True)
-    key_pass = models.CharField(max_length=5, null=True)
-    assist = models.CharField(max_length=5, null=True)
-    body_part = models.CharField(max_length=20, null=True)
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    match_id = models.ForeignKey(to=BeproMatchData, on_delete=models.CASCADE, related_name="events")
+    event = models.CharField(max_length=100)
+    event_sub_event = models.CharField(max_length=100, null=True, blank=True)
+    reference = models.CharField(max_length=100)
+    explanation = models.TextField(null=True, blank=True)
+
+    event_hebrew = models.CharField(max_length=100, null=True, blank=True)
+    sub_event_hebrew = models.CharField(max_length=100, null=True, blank=True)
+    explanation_hebrew = models.TextField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Bepro Event Data"
+        verbose_name_plural = "Bepro Event Data"
 
     def __str__(self):
-        return f"{self.event_type}"
+        return f"{self.event} - {self.event_sub_event} ({self.reference})"
+
+# class BeproEventData(models.Model):
+#     id = models.UUIDField(primary_key=True, default=uuid4())
+#     record_id = models.PositiveBigIntegerField(null=True)
+#     match_id = models.ForeignKey(to=BeproMatchData, on_delete=models.CASCADE)
+#     team_id = models.PositiveIntegerField(null=True)
+#     player_id = models.PositiveIntegerField(null=True)
+#     event_period = models.CharField(max_length=30, null=True)
+#     event_time = models.CharField(max_length=10, null=True)
+#     x = models.CharField(max_length=10, null=True)
+#     y = models.CharField(max_length=10, null=True)
+#     ball_position_x = models.CharField(max_length=10, null=True)
+#     ball_position_y = models.CharField(max_length=10, null=True)
+#     relative_event_id = models.CharField(max_length=30, null=True)
+#     relative_event_x = models.CharField(max_length=10, null=True)
+#     relative_event_y = models.CharField(max_length=10, null=True)
+#     xg = models.CharField(max_length=30, null=True)
+#     event_type = models.CharField(max_length=30, null=True)
+#     outcome = models.CharField(max_length=30, null=True)
+#     sub_event_type = models.CharField(max_length=30, null=True)
+#     cross = models.CharField(max_length=5, null=True)
+#     key_pass = models.CharField(max_length=5, null=True)
+#     assist = models.CharField(max_length=5, null=True)
+#     body_part = models.CharField(max_length=20, null=True)
+
+#     def __str__(self):
+#         return f"{self.event_type}"
 
 
 class BeproFormationData(models.Model):

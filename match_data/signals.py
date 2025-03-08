@@ -405,6 +405,25 @@ def process_excel_file(sender, instance, created, **kwargs):
                             )
                         BeproTeamStat.objects.bulk_create(details, ignore_conflicts=True)
 
+                    if sheet_name == f"EventData_{instance.match_id}":
+                        match_data = BeproMatchData.objects.get(match_id=instance.match_id)
+                        event_data = []
+                        for _, row in data.iterrows():
+                            event_data.append(
+                                BeproEventData(
+                                    id=uuid4(),
+                                    match_id=match_data,
+                                    event=row['Event'] if pd.notna(row['Event']) else None,
+                                    event_sub_event=row['Event Sub-event'] if pd.notna(row['Event Sub-event']) else None,
+                                    reference=row['Reference'] if pd.notna(row['Reference']) else None,
+                                    explanation=row['Explanation'] if pd.notna(row['Explanation']) else None,
+                                    event_hebrew=row['אירוע/Event'] if pd.notna(row['אירוע/Event']) else None,
+                                    sub_event_hebrew=row['אירוע משנה/Sub-event'] if pd.notna(row['אירוע משנה/Sub-event']) else None,
+                                    explanation_hebrew=row['הסבר/Explanation'] if pd.notna(row['הסבר/Explanation']) else None,
+                                )
+                            )
+                        # Bulk insert event data
+                        BeproEventData.objects.bulk_create(event_data, ignore_conflicts=True)
 
                 
                 print("Excel file processed successfully!")
