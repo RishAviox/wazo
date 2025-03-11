@@ -322,10 +322,12 @@ def process_excel_file(sender, instance, created, **kwargs):
                         BeproPlayer.objects.bulk_create(details, ignore_conflicts=True)
                     elif sheet_name == f"TeamStats_{instance.match_id}":
                         details = []
+                        match_data = BeproMatchData.objects.get(match_id=instance.match_id)
                         for _, row in data.iterrows():
                             details.append(
                                 BeproTeamStat(
                                     id=uuid4(),
+                                    match=match_data,
                                     team_id=row['team_id'] if pd.notna(row['team_id']) else None,
                                     aerial_clearance=row['aerial_clearance'] if pd.notna(row['aerial_clearance']) else None,
                                     aerial_clearance_failed=row['aerial_clearance_failed'] if pd.notna(row['aerial_clearance_failed']) else None,

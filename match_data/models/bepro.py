@@ -59,9 +59,6 @@ class BeproMatchData(models.Model):
     def __str__(self):
         return f"{self.season_name} - ({self.match_id})"
     
-    def final_score(self):
-        return f"{match_data.home_team_name} {match_data.home_team_score}–{match_data.away_team_score} {match_data.away_team_name}"
-    
     def recent_results(self):
         """Fetches the last 5 matches between the same teams."""
         matches = BeproMatchData.objects.filter(
@@ -70,6 +67,7 @@ class BeproMatchData(models.Model):
         ).exclude(match_id=self.match_id).order_by('-start_time')[:5]
 
         return [f"{m.final_score()} ({m.start_time.strftime('%Y-%m-%d')})" for m in matches]
+
 
 class BeproMatchDetail(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid4())
@@ -347,6 +345,7 @@ class BeproPlayer(models.Model):
 
 class BeproTeamStat(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid4())
+    match = models.ForeignKey(BeproMatchData, on_delete=models.CASCADE)
     team_id = models.PositiveIntegerField(null=True)
     aerial_clearance = models.PositiveSmallIntegerField(null=True)
     aerial_clearance_failed = models.PositiveSmallIntegerField(null=True)

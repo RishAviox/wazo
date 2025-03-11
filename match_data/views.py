@@ -1,38 +1,87 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.shortcuts import get_object_or_404
-from .models import BeproMatchData, BeproEventData
+from rest_framework.permissions import IsAuthenticated
+
+from .models import *
+from .utils import (
+    get_match, get_match_details,
+    get_key_match_events,
+    generate_key_match_events_obj,
+    get_my_team,
+    generate_performance_metric_obj,
+    get_player_rating,
+    get_strengths_and_weakness,
+    get_tactical_adjustments,
+    get_tactical_formation_breakdown,
+    get_next_steps,
+    get_final_score
+)
 
 
 class MatchOverviewAPIView(APIView):
     """
     API to return match overview including final score, summary, and smart note.
     """
-
+    permission_classes = [IsAuthenticated]
     def get(self, request, match_id):
         # Fetch match data
-        match_data = get_object_or_404(BeproMatchData, match_id=match_id)
+        response_data = {}
+        match_data = get_match(match_id=match_id)
+        my_team = get_my_team(request.user)
+        response_data["matchOverview"] = {
+            "finalScore": get_final_score(match_data, my_team),
+            "summary": "Coach, your team showcased strong control during this match. Despite defensive lapses, the ability to dominate possession and capitalize on key moments secured a crucial victory. Let’s delve into the analysis to refine and build on this performance.",
+            "smartNote": "Your team maintained 68% possession, showcasing midfield dominance. However, 64 turnovers exposed vulnerabilities, offering opportunities for counterattacks. This match also marked the third consecutive game where your team conceded from a set piece—defensive organization on dead-ball situations needs urgent attention."
+        }
+        event_data = get_match_details(match=match_data)
 
-        # Fetch match events
-        events = BeproEventData.objects.filter(match_id=match_data)
+        events = get_key_match_events(events=event_data)
 
-        # Calculate statistics
-        possession_percentage = 10 #NOTE
-        turnovers = events.filter(event_type='turnover').count()
-        set_piece_goals = events.filter(sub_event_type='set_piece', event_type='goal').count()
+        # Making key match events object
+        event_list: list = generate_key_match_events_obj(events)
 
-        response_data = {
-            "matchOverview": {
-                "finalScore": match_data.final_score(),
-                "summary": "Coach, your team showcased strong control during this match. Despite defensive lapses, the ability to dominate possession and capitalize on key moments secured a crucial victory. Let’s delve into the analysis to refine and build on this performance.",
-                "smartNote": generate_smart_note(possession_percentage, turnovers, set_piece_goals)
+        response_data["keyMatchEvents"] = {
+            "events": event_list,
+            "momentOfTheMatch": "Player A’s stunning free-kick goal in the 87th minute showcased exceptional set-piece preparation and was decisive for the win."
+        }
+
+        if my_team:
+            team_stats = generate_performance_metric_obj(team=my_team, match=match_data)
+
+            response_data["performanceMetrics"] = {
+                "metrics": team_stats
+            }
+        
+        player_ratings = get_player_rating()
+        response_data["playerRatings"] = {
+            "ratings": player_ratings,
+            "standoutPerformers": {
+                "playerA": "Delivered in key moments with precision and composure.",
+                "playerB": "Orchestrated the game’s tempo through sharp passing.",
+                "playerC": "Kept the defensive line organized under pressure."
+            },
+            "areasOfImprovement": {
+                "playerD": "Missed key tackles; focus on defensive positioning.",
+                "playerE": "Distribution accuracy requires refinement."
             }
         }
 
+        analysis = get_strengths_and_weakness()
+        tactical_adjustments = get_tactical_adjustments()
+
+        response_data["tacticalAnalysisAndAdjustments"] = {
+            "analysis": analysis,
+            "forOurTeam": tactical_adjustments['forOurTeam'],
+            "forOpponent": tactical_adjustments['forOpponent']
+        }
+
+        response_data["tacticalFormationBreakdown"] = get_tactical_formation_breakdown()
+        response_data["whatsNext"] = get_next_steps()
+
         return Response(response_data, status=status.HTTP_200_OK)
 
-    def generate_smart_note(self, possession, turnovers, set_piece_goals):
+    def generate_smart_note(self, possession, turnovers):
         return (
             f"Your team maintained {possession}% possession, showcasing midfield dominance. "
             f"However, {turnovers} turnovers exposed vulnerabilities, offering opportunities for counterattacks. "
