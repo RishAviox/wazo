@@ -26,60 +26,64 @@ class MatchOverviewAPIView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request, match_id):
         # Fetch match data
-        response_data = {}
-        match_data = get_match(match_id=match_id)
-        my_team = get_my_team(request.user)
-        response_data["matchOverview"] = {
-            "finalScore": get_final_score(match_data, my_team),
-            "summary": "Coach, your team showcased strong control during this match. Despite defensive lapses, the ability to dominate possession and capitalize on key moments secured a crucial victory. Let’s delve into the analysis to refine and build on this performance.",
-            "smartNote": "Your team maintained 68% possession, showcasing midfield dominance. However, 64 turnovers exposed vulnerabilities, offering opportunities for counterattacks. This match also marked the third consecutive game where your team conceded from a set piece—defensive organization on dead-ball situations needs urgent attention."
-        }
-        event_data = get_match_details(match=match_data)
+        try:
+            response_data = {}
+            match_data = get_match(match_id=match_id)
+            my_team = get_my_team(request.user)
+            if my_team:
+                response_data["matchOverview"] = {
+                    "finalScore": get_final_score(match_data, my_team),
+                    "summary": "Coach, your team showcased strong control during this match. Despite defensive lapses, the ability to dominate possession and capitalize on key moments secured a crucial victory. Let’s delve into the analysis to refine and build on this performance.",
+                    "smartNote": "Your team maintained 68% possession, showcasing midfield dominance. However, 64 turnovers exposed vulnerabilities, offering opportunities for counterattacks. This match also marked the third consecutive game where your team conceded from a set piece—defensive organization on dead-ball situations needs urgent attention."
+                }
+            event_data = get_match_details(match=match_data)
 
-        events = get_key_match_events(events=event_data)
+            events = get_key_match_events(events=event_data)
 
-        # Making key match events object
-        event_list: list = generate_key_match_events_obj(events)
+            # Making key match events object
+            event_list: list = generate_key_match_events_obj(events)
 
-        response_data["keyMatchEvents"] = {
-            "events": event_list,
-            "momentOfTheMatch": "Player A’s stunning free-kick goal in the 87th minute showcased exceptional set-piece preparation and was decisive for the win."
-        }
-
-        if my_team:
-            team_stats = generate_performance_metric_obj(team=my_team, match=match_data)
-
-            response_data["performanceMetrics"] = {
-                "metrics": team_stats
+            response_data["keyMatchEvents"] = {
+                "events": event_list,
+                "momentOfTheMatch": "Player A’s stunning free-kick goal in the 87th minute showcased exceptional set-piece preparation and was decisive for the win."
             }
-        
-        player_ratings = get_player_rating()
-        response_data["playerRatings"] = {
-            "ratings": player_ratings,
-            "standoutPerformers": {
-                "playerA": "Delivered in key moments with precision and composure.",
-                "playerB": "Orchestrated the game’s tempo through sharp passing.",
-                "playerC": "Kept the defensive line organized under pressure."
-            },
-            "areasOfImprovement": {
-                "playerD": "Missed key tackles; focus on defensive positioning.",
-                "playerE": "Distribution accuracy requires refinement."
+
+            if my_team:
+                team_stats = generate_performance_metric_obj(team=my_team, match=match_data)
+
+                response_data["performanceMetrics"] = {
+                    "metrics": team_stats
+                }
+            
+            player_ratings = get_player_rating()
+            response_data["playerRatings"] = {
+                "ratings": player_ratings,
+                "standoutPerformers": {
+                    "playerA": "Delivered in key moments with precision and composure.",
+                    "playerB": "Orchestrated the game’s tempo through sharp passing.",
+                    "playerC": "Kept the defensive line organized under pressure."
+                },
+                "areasOfImprovement": {
+                    "playerD": "Missed key tackles; focus on defensive positioning.",
+                    "playerE": "Distribution accuracy requires refinement."
+                }
             }
-        }
 
-        analysis = get_strengths_and_weakness()
-        tactical_adjustments = get_tactical_adjustments()
+            analysis = get_strengths_and_weakness()
+            tactical_adjustments = get_tactical_adjustments()
 
-        response_data["tacticalAnalysisAndAdjustments"] = {
-            "analysis": analysis,
-            "forOurTeam": tactical_adjustments['forOurTeam'],
-            "forOpponent": tactical_adjustments['forOpponent']
-        }
+            response_data["tacticalAnalysisAndAdjustments"] = {
+                "analysis": analysis,
+                "forOurTeam": tactical_adjustments['forOurTeam'],
+                "forOpponent": tactical_adjustments['forOpponent']
+            }
 
-        response_data["tacticalFormationBreakdown"] = get_tactical_formation_breakdown()
-        response_data["whatsNext"] = get_next_steps()
+            response_data["tacticalFormationBreakdown"] = get_tactical_formation_breakdown()
+            response_data["whatsNext"] = get_next_steps()
 
-        return Response(response_data, status=status.HTTP_200_OK)
+            return Response(response_data, status=status.HTTP_200_OK)
+        except Exception:
+            return Response({"detail": "Something went wrong"}, status=status.HTTP_400_BAD_REQUEST)
 
     def generate_smart_note(self, possession, turnovers):
         return (

@@ -34,7 +34,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     season_ids=row['season_ids'] if pd.notna(row['season_ids']) else None
                                 )
                             )
-                        BeproLeagueDetail.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproLeagueDetail.objects.bulk_create(details)
                     elif sheet_name == "Seasons":
                         details = []
                         for _, row in data.iterrows():
@@ -50,7 +50,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     season_ids=row['season_ids'] if pd.notna(row['season_ids']) else None
                                 )
                             )
-                        BeproSeason.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproSeason.objects.bulk_create(details)
                     elif sheet_name == "MatchDetails":
                         details = []
                         for _, row in data.iterrows():
@@ -78,7 +78,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     venue_ground_height=row['venue.ground_height'] if pd.notna(row['venue.ground_height']) else None
                                 )
                             )
-                        BeproMatchData.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproMatchData.objects.bulk_create(details)
                     elif sheet_name == f"MatchDetails_{instance.match_id}":
                         details = []
                         match_data = BeproMatchData.objects.get(match_id=instance.match_id)
@@ -92,8 +92,8 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     player_id=row['player_id'] if pd.notna(row['player_id']) else None,
                                     event_period=row['event_period'] if pd.notna(row['event_period']) else None,
                                     event_time=row['event_time'] if pd.notna(row['event_time']) else None,
-                                    x=row['x'] if pd.notna(row['x']) else None,
-                                    y=row['y'] if pd.notna(row['y']) else None,
+                                    x=round(float(row['x']), 8) if pd.notna(row['x']) else None,
+                                    y=round(float(row['y']), 8) if pd.notna(row['y']) else None,
                                     ball_position_x=row['ball_position.x'] if pd.notna(row['ball_position.x']) else None,
                                     ball_position_y=row['ball_position.y'] if pd.notna(row['ball_position.y']) else None,
                                     relative_event_id=row['relative_event.id'] if pd.notna(row['relative_event.id']) else None,
@@ -109,7 +109,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     body_part=row['bodyPart'] if pd.notna(row['bodyPart']) else None
                                 )
                             )
-                        BeproMatchDetail.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproMatchDetail.objects.bulk_create(details)
                     elif sheet_name == f"FormationData_{instance.match_id}":
                         details = []
                         for _, row in data.iterrows():
@@ -124,21 +124,21 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     y=row['y'] if pd.notna(row['y']) else None
                                 )
                             )
-                        BeproFormationData.objects.bulk_create(details, ignore_conflicts=True)
-                    elif sheet_name == f"SequenceData_{instance.match_id}":
-                        details = []
-                        for _, row in data.iterrows():
-                            details.append(
-                                BeproSequenceData(
-                                    id=uuid4(),
-                                    team_id=row['team_id'] if pd.notna(row['team_id']) else None,
-                                    event_period=row['event_period'] if pd.notna(row['event_period']) else None,
-                                    start_time=row['start_time'] if pd.notna(row['start_time']) else None,
-                                    end_time=row['end_time'] if pd.notna(row['end_time']) else None,
-                                    event_ids=row['event_ids'] if pd.notna(row['event_ids']) else None
-                                )
-                            )
-                        BeproSequenceData.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproFormationData.objects.bulk_create(details)
+                    # elif sheet_name == f"SequenceData_{instance.match_id}":
+                    #     details = []
+                    #     for _, row in data.iterrows():
+                    #         details.append(
+                    #             BeproSequenceData(
+                    #                 id=uuid4(),
+                    #                 team_id=int(row['team_id']) if pd.notna(row['team_id']) else None,
+                    #                 event_period=row['event_period'] if pd.notna(row['event_period']) else None,
+                    #                 start_time=int(row['start_time']) if pd.notna(row['start_time']) else None,
+                    #                 end_time=int(row['end_time']) if pd.notna(row['end_time']) else None,
+                    #                 event_ids=row['event_ids'] if pd.notna(row['event_ids']) else None
+                    #             )
+                    #         )
+                    #     BeproSequenceData.objects.bulk_create(details)
                     elif sheet_name == f"PhysicalEventData_{instance.match_id}":
                         details = []
                         match_data = BeproMatchData.objects.get(match_id=instance.match_id)
@@ -168,7 +168,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     body_part=row['bodyPart'] if pd.notna(row['bodyPart']) else None
                                 )
                             )
-                        BeproPhysicalEventData.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproPhysicalEventData.objects.bulk_create(details)
                     elif sheet_name == f"LineUp_{instance.match_id}":
                         details = []
                         for _, row in data.iterrows():
@@ -187,7 +187,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     position_y=row['position.y'] if pd.notna(row['position.y']) else None
                                 )
                             )
-                        BeproLineUp.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproLineUp.objects.bulk_create(details)
                     elif sheet_name == f"PlayerStats_{instance.match_id}":
                         details = []
                         for _, row in data.iterrows():
@@ -272,7 +272,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     yellow_card=row['yellow_card'] if pd.notna(row['yellow_card']) else None
                                 )
                             )
-                        BeproPlayerStat.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproPlayerStat.objects.bulk_create(details)
                     elif sheet_name == f"PlayerStatsExtended_{instance.match_id}":
                         details = []
                         match_data = BeproMatchData.objects.get(match_id=instance.match_id)
@@ -302,7 +302,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     venue_ground_height=row['venue.ground_height'] if pd.notna(row['venue.ground_height']) else None
                                 )
                             )
-                        BeproPlayerStatsExtended.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproPlayerStatsExtended.objects.bulk_create(details)
                     elif sheet_name == f"Players_{instance.match_id}" or sheet_name == f"Players_{instance.match_id}_2":
                         details = []
                         for _, row in data.iterrows():
@@ -319,7 +319,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     player_role=row['player_role'] if pd.notna(row['player_role']) else None
                                 )
                             )
-                        BeproPlayer.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproPlayer.objects.bulk_create(details)
                     elif sheet_name == f"TeamStats_{instance.match_id}":
                         details = []
                         match_data = BeproMatchData.objects.get(match_id=instance.match_id)
@@ -405,7 +405,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                     yellow_card=row['yellow_card'] if pd.notna(row['yellow_card']) else None
                                 )
                             )
-                        BeproTeamStat.objects.bulk_create(details, ignore_conflicts=True)
+                        BeproTeamStat.objects.bulk_create(details)
 
                     if sheet_name == f"EventData_{instance.match_id}":
                         match_data = BeproMatchData.objects.get(match_id=instance.match_id)
@@ -415,9 +415,9 @@ def process_excel_file(sender, instance, created, **kwargs):
                                 BeproEventData(
                                     id=uuid4(),
                                     match_id=match_data,
-                                    event=row['Event'] if pd.notna(row['Event']) else None,
+                                    event=row['Event'] if pd.notna(row['Event']) else "",
                                     event_sub_event=row['Event Sub-event'] if pd.notna(row['Event Sub-event']) else None,
-                                    reference=row['Reference'] if pd.notna(row['Reference']) else None,
+                                    reference=row['Reference'] if pd.notna(row['Reference']) else "",
                                     explanation=row['Explanation'] if pd.notna(row['Explanation']) else None,
                                     event_hebrew=row['אירוע/Event'] if pd.notna(row['אירוע/Event']) else None,
                                     sub_event_hebrew=row['אירוע משנה/Sub-event'] if pd.notna(row['אירוע משנה/Sub-event']) else None,
@@ -425,7 +425,7 @@ def process_excel_file(sender, instance, created, **kwargs):
                                 )
                             )
                         # Bulk insert event data
-                        BeproEventData.objects.bulk_create(event_data, ignore_conflicts=True)
+                        BeproEventData.objects.bulk_create(event_data)
 
                 
                 print("Excel file processed successfully!")
