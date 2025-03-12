@@ -2,6 +2,7 @@ from django.db.models import Q
 
 from teams.models import Team
 from accounts.models import WajoUser
+from games.models import Game
 
 from .models import *
 
@@ -110,11 +111,15 @@ def generate_performance_metric_obj(match: BeproMatchData, team: Team):
 
     return metrics
 
-
+def get_player(user_id: str):
+    return WajoUser.objects.get(phone_no=user_id)
 
 def get_my_team(player: WajoUser):
     coach = player.coach.first()
     return Team.objects.filter(coach=coach).first()
+
+def get_latest_game(team: Team):
+    return Game.objects.filter(teams=team).order_by('-created_on').first()
 
 
 def get_player_rating():
