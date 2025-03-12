@@ -1,8 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 
+from .permissions import IsAdminUser
 from .models import *
 from .utils import (
     get_match, get_match_details,
@@ -15,7 +15,9 @@ from .utils import (
     get_tactical_adjustments,
     get_tactical_formation_breakdown,
     get_next_steps,
-    get_final_score
+    get_final_score,
+    get_latest_game,
+    get_player
 )
 
 
@@ -23,13 +25,15 @@ class MatchOverviewAPIView(APIView):
     """
     API to return match overview including final score, summary, and smart note.
     """
-    permission_classes = [IsAuthenticated]
-    def get(self, request, match_id):
+    permission_classes = [IsAdminUser]
+    def get(self, request, user_id):
         # Fetch match data
         try:
             response_data = {}
-            match_data = get_match(match_id=match_id)
-            my_team = get_my_team(request.user)
+            player = get_player(user_id)
+            my_team = get_my_team(player)
+            latest_match = get_latest_game(team=my_team)
+            match_data = get_match(match_id=latest_match.id)
             if my_team:
                 response_data["matchOverview"] = {
                     "finalScore": get_final_score(match_data, my_team),
@@ -82,8 +86,8 @@ class MatchOverviewAPIView(APIView):
             response_data["whatsNext"] = get_next_steps()
 
             return Response(response_data, status=status.HTTP_200_OK)
-        except Exception:
-            return Response({"detail": "Something went wrong"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": "Something went wrong", "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def generate_smart_note(self, possession, turnovers):
         return (
