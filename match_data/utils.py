@@ -159,7 +159,7 @@ def get_player_rating():
     for player_stat in player_stats:
         player = BeproPlayer.objects.get(record_id=player_stat.player_id)
         ratings.append({
-            "palyer": f"{player.player_name_en} {player.player_last_name_en}",
+            "player": f"{player.player_name_en} {player.player_last_name_en}",
             "rating": round(player_stat.rating, 1),
             "contributions": "AI generated response..." # AI response
         })
