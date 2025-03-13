@@ -42,7 +42,7 @@ class MatchOverviewAPIView(APIView):
                     "smartNote": "Your team maintained 68% possession, showcasing midfield dominance. However, 64 turnovers exposed vulnerabilities, offering opportunities for counterattacks. This match also marked the third consecutive game where your team conceded from a set piece—defensive organization on dead-ball situations needs urgent attention."
                 }
 
-                response_data = ["historicalContext"] = get_historical_context()    # TODO: Need to be dynamic on basis of historical data
+                response_data["historicalContext"] = get_historical_context(match_data, my_team)    # TODO: Need to be dynamic on basis of historical data
 
             event_data = get_match_details(match=match_data)
 
