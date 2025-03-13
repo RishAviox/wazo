@@ -32,10 +32,15 @@ def generate_key_match_events_obj(events):
             player = BeproPlayer.objects.get(record_id=player_id)
         except BeproPlayer.DoesNotExist:
             continue
+        text = f"{obj.outcome}: [{player.player_name_en} {player.player_last_name_en}] ({obj.event_type})"
+        if obj.outcome.lower() == 'goal':
+            text = f"⚽ " + text
+        elif obj.outcome.lower() == 'red card':
+            text = f"🔵 " + text
         event_list.append(
             {
                 "time": f"{int(int(obj.event_time) / (1000 * 60))}'",
-                "event": f"{obj.outcome}: [{player.player_name_en} {player.player_last_name_en}] ({obj.event_type})",
+                "event": text,
                 "insight": "Effective midfield build-up led to a clinical finish."
             }
         )
@@ -159,7 +164,7 @@ def get_player_rating():
     for player_stat in player_stats:
         player = BeproPlayer.objects.get(record_id=player_stat.player_id)
         ratings.append({
-            "palyer": f"{player.player_name_en} {player.player_last_name_en}",
+            "player": f"{player.player_name_en} {player.player_last_name_en}",
             "rating": round(player_stat.rating, 1),
             "contributions": "AI generated response..." # AI response
         })
