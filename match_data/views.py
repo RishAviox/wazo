@@ -17,7 +17,8 @@ from .utils import (
     get_next_steps,
     get_final_score,
     get_latest_game,
-    get_player
+    get_player,
+    get_historical_context
 )
 
 
@@ -40,6 +41,9 @@ class MatchOverviewAPIView(APIView):
                     "summary": "Coach, your team showcased strong control during this match. Despite defensive lapses, the ability to dominate possession and capitalize on key moments secured a crucial victory. Let’s delve into the analysis to refine and build on this performance.",
                     "smartNote": "Your team maintained 68% possession, showcasing midfield dominance. However, 64 turnovers exposed vulnerabilities, offering opportunities for counterattacks. This match also marked the third consecutive game where your team conceded from a set piece—defensive organization on dead-ball situations needs urgent attention."
                 }
+
+                response_data = ["historicalContext"] = get_historical_context()    # TODO: Need to be dynamic on basis of historical data
+
             event_data = get_match_details(match=match_data)
 
             events = get_key_match_events(events=event_data)

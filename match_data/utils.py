@@ -111,6 +111,36 @@ def generate_performance_metric_obj(match: BeproMatchData, team: Team):
 
     return metrics
 
+
+def get_historical_context(match: BeproMatchData, team: Team):
+    team_stats = BeproTeamStat.objects.filter(match=match)
+
+    if match.home_team_id == team.id:
+        my_team = team_stats.get(team_id=match.home_team_id)
+        opponent_team = team_stats.get(team_id=match.away_team_id)
+    else:
+        my_team = team_stats.get(team_id=match.away_team_id)
+        opponent_team = team_stats.get(team_id=match.home_team_id)
+    
+    return {
+        "recentResults": [
+            "Our Team vs. Opponent last 5 results",
+            "Our Team vs. Opponent last 5 results",
+            "Our Team vs. Opponent last 5 results",
+            "Our Team vs. Opponent last 5 results",
+            "Our Team vs. Opponent last 5 results"
+        ],
+        "keyPlayerStats": {
+        "playerA": "[Goals/assists vs. this opponent]",
+        "playerB": "[Defensive actions in previous matches]"
+        },
+        "notableMoments": [
+        "The last encounter ended in a thrilling 3-3 draw.",
+        "Player A scored a brace in the previous matchup."
+        ]
+    }
+
+
 def get_player(user_id: str):
     return WajoUser.objects.get(phone_no=user_id)
 
