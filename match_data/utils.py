@@ -362,6 +362,23 @@ class IndividualPlayerPerformanceReport:
     
     @staticmethod
     def __get_under_performers():
+        return [
+            {
+                "player": "Defender D",
+                "keyMetrics": "Tackles: 3/8, Pass Accuracy: 67%",
+                "issue":
+                "Positional lapses led to the opponent’s goal; struggled with marking assignments.",
+            },
+            {
+                "player": "Goalkeeper E",
+                "keyMetrics": "Distribution Accuracy: 60%",
+                "issue":
+                "Poor decision-making under pressure resulted in turnovers in critical areas.",
+            },
+        ]
+    
+    @staticmethod
+    def __get_under_performer_reviews():
         return {
             "defenderDReview": "Missed marking in the 42nd minute",
             "defenderDLink": "[Insert Link]",
@@ -418,6 +435,7 @@ class IndividualPlayerPerformanceReport:
         response['topPerformers'] = __class__.__get_top_performers()
         response['topPerformerHighlights'] = __class__.__get_top_performer_highlights()
         response['underperformers'] = __class__.__get_under_performers()
+        response['underperformerReviews'] = __class__.__get_under_performer_reviews()
         response['keyPlayerTakeaways'] = __class__.__get_key_player_takeaways()
         response['wajoSuggestions'] = __class__.__get_wajo_suggestions()
         response['whatsNext'] = __class__.__get_next_metrics()
@@ -754,6 +772,102 @@ class FitnessRecoverySuggestion:
         response['wajoInsights'] = __class__.__get_wajo_insight()
         response['fitnessHighlights'] = __class__.__get_fitness_highlights()
         response['actionSteps'] = __class__.__get_action_steps()
+        response['whatsNext'] = __class__.__get_next_metrics()
+
+        return response
+
+
+class TrainingRecommendationReport:
+    @staticmethod
+    def __get_wajo_summary():
+        return "Our training focus should address weaknesses in pressing coordination, defensive marking, and final-third composure while leveraging our strengths in possession and set-pieces. Recovery plans tailored to individual fatigue levels will prepare the team for upcoming challenges. Let’s maximize our training impact with precision drills and targeted strategies."
+
+
+    @staticmethod
+    def __get_priority_areas():
+        return {
+            "focusArea": {
+                "PressingDrills": {
+                    "Drill": "Positional pressing drills focusing on coordination and timing under fatigue scenarios.",
+                    "Outcome": "Enhance the team’s ability to disrupt opponent build-up play consistently."
+                },
+                "FinishingDrills": {
+                    "Drill": "1v1 finishing drills and situational small-sided games simulating high-pressure scenarios.",
+                    "Outcome": "Improve composure and decision-making to increase goal conversion rates in the final third."
+                },
+                "DefensiveMarking": {
+                    "Drill": "Zonal and man-marking simulations focusing on rotation and awareness in defensive phases.",
+                    "Outcome": "Reduce positional lapses and improve defensive awareness during transitions."
+                }
+            }
+        }
+
+    @staticmethod
+    def __get_recovery_plans():
+        return {
+            "Player": {
+                "PlayerA": {
+                    "RecoverFocus": "Light aerobic work and sprint recovery exercises.",
+                    "Outcome": "Reduce fatigue levels and maintain performance consistency."
+                },
+                "PlayerB": {
+                    "RecoverFocus": "Hydration protocols, stretching, and lighter loads.",
+                    "Outcome": "Maintain energy balance and ensure readiness for the next match."
+                },
+                "PlayerC": {
+                    "RecoverFocus": "High-intensity tactical simulations.",
+                    "Outcome": "Refine positional understanding and improve match preparedness."
+                }
+            }
+        }
+    
+    @staticmethod
+    def __get_tactical_reviews():
+        return {
+            "Issue": {
+                "CrossingAccuracy": {
+                    "Drill": "Wide-area crossing drills under high-pressure scenarios.",
+                    "Outcome": "Improve delivery accuracy and maximize effectiveness in wing play."
+                },
+                "TurnoverReduction": {
+                    "Drill": "Quick-decision passing drills and high-pressure possession games.",
+                    "Outcome": "Reduce risky turnovers and enhance composure under pressure."
+                }
+            }
+        }
+    
+    @staticmethod
+    def __get_training_video_resources():
+        return {
+            "Pressing Coordination Drills": "[Insert Link]",
+            "Finishing Drills in the Final Third": "[Insert Link]",
+            "Defensive Marking and Awareness Drills": "[Insert Link]"
+        }
+    
+    @staticmethod
+    def __get_effectiveness_insights():
+        return {
+            "TeamLevelImpact": "Tactical reviews and drills will strengthen weak areas while further building on existing strengths.",
+            "PlayerLevel Development": "Recovery and improvement plans for individual players align with their match performance and team needs."
+        }
+    
+    @staticmethod
+    def __get_next_metrics():
+        return {
+            "TailoredTrainingPlan": "Finalize drills and schedules to prepare for the next match.",
+            "IndividualDevelopmentInsights": "Incorporate player-specific recovery and training focus areas.",
+            "MatchPreparationReview": "Sync insights into upcoming match strategies and tactical objectives."
+        }
+
+
+    def get_report(self):
+        response = {}
+        response['wajoSummary'] = __class__.__get_wajo_summary()
+        response['priorityAreas'] = __class__.__get_priority_areas()
+        response['recoveryPlans'] = __class__.__get_recovery_plans()
+        response['tacticalReviews'] = __class__.__get_tactical_reviews()
+        response['trainingVideoResources'] = __class__.__get_training_video_resources()
+        response['wajoGameEffectivenessInsights'] = __class__.__get_effectiveness_insights()
         response['whatsNext'] = __class__.__get_next_metrics()
 
         return response
