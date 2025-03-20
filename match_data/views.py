@@ -1,6 +1,9 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny
 
 from .permissions import IsAdminUser
 from .models import *
@@ -18,7 +21,12 @@ from .utils import (
     get_final_score,
     get_latest_game,
     get_player,
-    get_historical_context
+    get_historical_context,
+    KeyTacticalInsightReport,
+    IndividualPlayerPerformanceReport,
+    TeamPerformanceReport,
+    SetPieceAnalysisReport,
+    FitnessRecoverySuggestion
 )
 
 
@@ -98,3 +106,37 @@ class MatchOverviewAPIView(APIView):
             f"Your team maintained {possession}% possession, showcasing midfield dominance. "
             f"However, {turnovers} turnovers exposed vulnerabilities, offering opportunities for counterattacks. "
         )
+
+
+class MatchOverviewAPIViewset(ModelViewSet):
+
+    @action(detail=True, methods=['GET'])
+    def key_tactical_insight_report(self, request, user_id: str):
+        report = KeyTacticalInsightReport()
+        insight_report = {"KeyTacticalInsightsReport": report.get_tactical_insights_report()}
+        return Response(data=insight_report, status=status.HTTP_200_OK)
+
+
+    @action(detail=False, methods=["GET"])
+    def individual_player_performance(self, request, user_id: str):
+        report = IndividualPlayerPerformanceReport()
+        individual_player_performance_report = {"IndividualPlayerPerformance": report.get_report()}
+        return Response(data=individual_player_performance_report, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=["GET"])
+    def team_performance_report(self, request, user_id: str):
+        report = TeamPerformanceReport()
+        team_performance_report = {"TeamPerformanceOverviewReport": report.get_report()}
+        return Response(data=team_performance_report, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=["GET"])
+    def set_piece_analysis_report(self, request, user_id: str):
+        report = SetPieceAnalysisReport()
+        set_piece_analysis_report = {"SetPieceAnalysisReport": report.get_report()}
+        return Response(data=set_piece_analysis_report, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=["GET"])
+    def fitness_recovery_suggestion(self, request, user_id: str):
+        report = FitnessRecoverySuggestion()
+        fitness_recovery = {"FitnessRecoverySuggestions": report.get_report()}
+        return Response(data=fitness_recovery, status=status.HTTP_200_OK)
