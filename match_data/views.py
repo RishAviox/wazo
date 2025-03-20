@@ -26,7 +26,8 @@ from .utils import (
     IndividualPlayerPerformanceReport,
     TeamPerformanceReport,
     SetPieceAnalysisReport,
-    FitnessRecoverySuggestion
+    FitnessRecoverySuggestion,
+    TrainingRecommendationReport
 )
 
 
@@ -110,6 +111,8 @@ class MatchOverviewAPIView(APIView):
 
 class MatchOverviewAPIViewset(ModelViewSet):
 
+    permission_classes = [IsAdminUser]
+
     @action(detail=True, methods=['GET'])
     def key_tactical_insight_report(self, request, user_id: str):
         report = KeyTacticalInsightReport()
@@ -140,3 +143,9 @@ class MatchOverviewAPIViewset(ModelViewSet):
         report = FitnessRecoverySuggestion()
         fitness_recovery = {"FitnessRecoverySuggestions": report.get_report()}
         return Response(data=fitness_recovery, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['GET'])
+    def training_recommendation_report(self, request, user_id: str):
+        report = TrainingRecommendationReport()
+        recommendation_report = {"TrainingRecommendationsReport": report.get_report()}
+        return Response(data=recommendation_report, status=status.HTTP_200_OK)
