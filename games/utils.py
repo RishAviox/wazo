@@ -47,11 +47,15 @@ def generate_goals_json(df, teams, players_df, sequence_df, padding_time):
             end_time = int(sequence_filter_df["end_time"].iloc[0])
             start_time, end_time = add_padding(start_time, end_time, half, padding_time)
         else:
-            start_time = int(event_time - padding_time['START_TIME_PADDING'])
-            end_time = int(event_time + padding_time['END_TIME_PADDING'])
+            start_time = None
+            end_time = None
             
         if not filtered_df.empty:
             event_time = int(row.event_time)
+            if not start_time:
+                start_time = int(event_time - padding_time['START_TIME_PADDING'])
+            if not end_time:
+                end_time = int(event_time + padding_time['END_TIME_PADDING'])
             goals.append(
                 {
                     "team_id": str(int(row.team_id)),
