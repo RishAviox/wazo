@@ -234,7 +234,7 @@ def process_video_data_file(sender, instance, created, **kwargs):
             player_ids = set(player_mapping_dict.keys())
 
             # Convert player_id columns to strings for consistent comparison
-            stats_sheet['player_id'] = stats_sheet['player_id'].astype(int).astype(str)
+            stats_sheet['player_id'] = stats_sheet['player_id'].fillna(-1).astype(int).astype(str)
 
             # Filter stats_sheet based on player_ids
             filtered_stats_sheet = stats_sheet[stats_sheet['player_id'].isin(player_ids)]
