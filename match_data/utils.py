@@ -785,78 +785,80 @@ class TrainingRecommendationReport:
 
     @staticmethod
     def __get_priority_areas():
-        return {
-            "focusArea": {
-                "PressingDrills": {
-                    "Drill": "Positional pressing drills focusing on coordination and timing under fatigue scenarios.",
-                    "Outcome": "Enhance the team’s ability to disrupt opponent build-up play consistently."
-                },
-                "FinishingDrills": {
-                    "Drill": "1v1 finishing drills and situational small-sided games simulating high-pressure scenarios.",
-                    "Outcome": "Improve composure and decision-making to increase goal conversion rates in the final third."
-                },
-                "DefensiveMarking": {
-                    "Drill": "Zonal and man-marking simulations focusing on rotation and awareness in defensive phases.",
-                    "Outcome": "Reduce positional lapses and improve defensive awareness during transitions."
-                }
+        return [
+            {
+                "focusArea": "Pressing Drills",
+                "drill": "Positional pressing drills focusing on coordination and timing under fatigue scenarios.",
+                "outcome": "Enhance the team’s ability to disrupt opponent build-up play consistently.",
+            },
+            {
+                "focusArea": "Finishing Drills",
+                "drill": "1v1 finishing drills and situational small-sided games simulating high-pressure scenarios.",
+                "outcome": "Improve composure and decision-making to increase goal conversion rates in the final third.",
+            },
+            {
+                "focusArea": "Defensive Marking",
+                "drill": "Zonal and man-marking simulations focusing on rotation and awareness in defensive phases.",
+                "outcome": "Reduce positional lapses and improve defensive awareness during transitions.",
             }
-        }
+        ]
 
     @staticmethod
     def __get_recovery_plans():
-        return {
-            "Player": {
-                "PlayerA": {
-                    "RecoverFocus": "Light aerobic work and sprint recovery exercises.",
-                    "Outcome": "Reduce fatigue levels and maintain performance consistency."
-                },
-                "PlayerB": {
-                    "RecoverFocus": "Hydration protocols, stretching, and lighter loads.",
-                    "Outcome": "Maintain energy balance and ensure readiness for the next match."
-                },
-                "PlayerC": {
-                    "RecoverFocus": "High-intensity tactical simulations.",
-                    "Outcome": "Refine positional understanding and improve match preparedness."
-                }
-            }
-        }
+        return [
+            {
+                "player": "Player A",
+                "recoveryFocus": "Light aerobicRecovery work and sprint recovery exercises.",
+                "outcome": "Reduce fatigue levels and maintain performance consistency.",
+            },
+            {
+                "player": "Player B",
+                "recoveryFocus": "Hydration protocols, stretching, and lighter loads.",
+                "outcome": "Maintain energy balance and ensure readiness for the next match.",
+            },
+            {
+                "player": "Player C",
+                "recoveryFocus": "High-intensity tactical simulations.",
+                "outcome": "Refine positional understanding and improve match preparedness.",
+            },
+        ]
     
     @staticmethod
     def __get_tactical_reviews():
-        return {
-            "Issue": {
-                "CrossingAccuracy": {
-                    "Drill": "Wide-area crossing drills under high-pressure scenarios.",
-                    "Outcome": "Improve delivery accuracy and maximize effectiveness in wing play."
-                },
-                "TurnoverReduction": {
-                    "Drill": "Quick-decision passing drills and high-pressure possession games.",
-                    "Outcome": "Reduce risky turnovers and enhance composure under pressure."
-                }
+        return [
+            {
+                "issue": "Crossing Accuracy",
+                "drill": "Wide-area crossing drills under high-pressure scenarios.",
+                "outcome": "Improve delivery accuracy and maximize effectiveness in wing play.",
+            },
+            {
+                "issue": "Turnover Reduction",
+                "drill": "Quick-decision passing drills and high-pressure possession games.",
+                "outcome": "Reduce risky turnovers and enhance composure under pressure.",
             }
-        }
+        ]
     
     @staticmethod
     def __get_training_video_resources():
         return {
-            "Pressing Coordination Drills": "[Insert Link]",
-            "Finishing Drills in the Final Third": "[Insert Link]",
-            "Defensive Marking and Awareness Drills": "[Insert Link]"
+            "pressingCoordinationDrills": "[Insert Link]",
+            "finishingDrillsInFinalThird": "[Insert Link]",
+            "defensiveMarkingAndAwarenessDrills": "[Insert Link]"
         }
     
     @staticmethod
     def __get_effectiveness_insights():
         return {
-            "TeamLevelImpact": "Tactical reviews and drills will strengthen weak areas while further building on existing strengths.",
-            "PlayerLevel Development": "Recovery and improvement plans for individual players align with their match performance and team needs."
+            "teamLevelImpact": "Tactical reviews and drills will strengthen weak areas while further building on existing strengths.",
+            "playerLevelDevelopment": "Recovery and improvement plans for individual players align with their match performance and team needs."
         }
     
     @staticmethod
     def __get_next_metrics():
         return {
-            "TailoredTrainingPlan": "Finalize drills and schedules to prepare for the next match.",
-            "IndividualDevelopmentInsights": "Incorporate player-specific recovery and training focus areas.",
-            "MatchPreparationReview": "Sync insights into upcoming match strategies and tactical objectives."
+            "tailoredTrainingPlan": "Finalize drills and schedules to prepare for the next match.",
+            "individualDevelopmentInsights": "Incorporate player-specific recovery and training focus areas.",
+            "matchPreparationReview": "Sync insights into upcoming match strategies and tactical objectives."
         }
 
 
