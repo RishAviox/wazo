@@ -43,8 +43,8 @@ def generate_goals_json(df, teams, players_df, sequence_df, padding_time):
             )
         ]
         if not sequence_filter_df.empty:
-            start_time = int(sequence_filter_df["start_time"].iloc[0])
-            end_time = int(sequence_filter_df["end_time"].iloc[0])
+            start_time = int(sequence_filter_df["start_time"].iloc[0]) / 1000
+            end_time = int(sequence_filter_df["end_time"].iloc[0]) / 1000
             start_time, end_time = add_padding(start_time, end_time, half, padding_time)
         else:
             start_time = None
@@ -95,8 +95,8 @@ def generate_highlights_json( df, teams, players_df, sequence_df, padding_time):
             )
         ]
         if not sequence_filter_df.empty:
-            start_time = int(sequence_filter_df["start_time"].iloc[0])
-            end_time = int(sequence_filter_df["end_time"].iloc[0])
+            start_time = int(sequence_filter_df["start_time"].iloc[0]) / 1000
+            end_time = int(sequence_filter_df["end_time"].iloc[0]) / 1000
             start_time, end_time = add_padding(start_time, end_time, half, padding_time)
         else:
             start_time = None
@@ -139,8 +139,8 @@ def generate_event_details_json(df, teams, players_df, sequence_df, padding_time
             )
         ]
         if not sequence_filter_df.empty:
-            start_time = int(sequence_filter_df["start_time"].iloc[0])
-            end_time = int(sequence_filter_df["end_time"].iloc[0])
+            start_time = int(sequence_filter_df["start_time"].iloc[0]) / 1000
+            end_time = int(sequence_filter_df["end_time"].iloc[0]) / 1000
             start_time, end_time = add_padding(start_time, end_time, half, padding_time)
         else:
             continue
