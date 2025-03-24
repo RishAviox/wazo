@@ -173,7 +173,13 @@ def get_daily_snapshot(user, event_date):
 
     combined_events = one_time_events_data + recurring_events
 
-    combined_events.sort(key=lambda x: x['date'])
+    # Convert all datetime.datetime to datetime.date for consistent comparison
+    combined_events.sort(key=lambda x: x['date'].date() if isinstance(x['date'], datetime) else x['date'])
+
+    # After sorting, ensure that 'date' remains as datetime.date objects
+    for event in combined_events:
+        if isinstance(event['date'], datetime):
+            event['date'] = event['date'].date()
 
     return combined_events
 
