@@ -63,8 +63,8 @@ def generate_goals_json(df, teams, players_df, sequence_df, padding_time):
                     "player_id": str(int(row.player_id)),
                     "player_name": filtered_df["player_name_en"].iloc[0],
                     "event_time": event_time,
-                    "start_time": start_time,
-                    "end_time": end_time,
+                    "start_time": start_time / 1000,
+                    "end_time": end_time / 1000,
                     "half": half.lower(),
                 }
             )
@@ -95,21 +95,26 @@ def generate_highlights_json( df, teams, players_df, sequence_df, padding_time):
             )
         ]
         if not sequence_filter_df.empty:
-            start_time = int(sequence_filter_df["start_time"].iloc[0]) / 1000
-            end_time = int(sequence_filter_df["end_time"].iloc[0]) / 1000
+            start_time = int(sequence_filter_df["start_time"].iloc[0])
+            end_time = int(sequence_filter_df["end_time"].iloc[0])
             start_time, end_time = add_padding(start_time, end_time, half, padding_time)
         else:
             start_time = None
             end_time = None
         if not filtered_df.empty:
+            event_time = int(row.event_time)
+            if not start_time:
+                start_time = int(event_time - padding_time['START_TIME_PADDING'])
+            if not end_time:
+                end_time = int(event_time + padding_time['END_TIME_PADDING'])
             highlights.append(
                 {
                     "team_id": str(int(row.team_id)),
                     "team_name": teams.get(str(int(row.team_id)), "Unknown"),
                     "player_id": str(int(row.player_id)),
                     "player_name": filtered_df["player_name_en"].iloc[0],
-                    "start_time": int(start_time) if start_time else None,
-                    "end_time": int(end_time) if end_time else None,
+                    "start_time": start_time / 1000,
+                    "end_time": end_time / 1000,
                     "eventType": row.eventType,
                     "subEventType": row.outcome,
                     "half": half.lower(),
@@ -139,24 +144,30 @@ def generate_event_details_json(df, teams, players_df, sequence_df, padding_time
             )
         ]
         if not sequence_filter_df.empty:
-            start_time = int(sequence_filter_df["start_time"].iloc[0]) / 1000
-            end_time = int(sequence_filter_df["end_time"].iloc[0]) / 1000
+            start_time = int(sequence_filter_df["start_time"].iloc[0])
+            end_time = int(sequence_filter_df["end_time"].iloc[0])
             start_time, end_time = add_padding(start_time, end_time, half, padding_time)
         else:
-            continue
+            start_time = None
+            end_time = None
         
         mapped_events, sub_event = map_event_and_subevent(row, row.eventType, reference_df)
 
         for idx, event in enumerate(mapped_events):
             if not filtered_df.empty:
+                event_time = int(row.event_time)
+                if not start_time:
+                    start_time = int(event_time - padding_time['START_TIME_PADDING'])
+                if not end_time:
+                    end_time = int(event_time + padding_time['END_TIME_PADDING'])
                 events.append(
                     {
                         "team_id": str(int(row.team_id)),
                         "team_name": teams.get(str(int(row.team_id)), "Unknown"),
                         "player_id": str(int(row.player_id)),
                         "player_name": filtered_df["player_name_en"].iloc[0],
-                        "start_time": int(start_time),
-                        "end_time": int(end_time),
+                        "start_time": start_time / 1000,
+                        "end_time": end_time / 1000,
                         "eventType": event,
                         "subEventType": sub_event[idx],
                         "half": half.lower(),
