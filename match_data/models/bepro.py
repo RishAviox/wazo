@@ -424,3 +424,10 @@ class BeproTeamStat(models.Model):
 
     def __str__(self):
         return f"{self.team_id}"
+
+
+class MatchSummaryStats(models.Model):
+    summary_json = models.JSONField()
+
+    class Meta:
+        verbose_name_plural = "Match Summary Stats"
