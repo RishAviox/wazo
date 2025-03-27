@@ -153,6 +153,9 @@ class MatchOverviewAPIViewset(ModelViewSet):
 
 
 class MatchSummaryView(APIView):
+
+    permission_classes = [IsAdminUser]
+
     def get(self, request, user_id: str):
         report = MatchSummaryReport()
         summary = report.get_match_summary()
