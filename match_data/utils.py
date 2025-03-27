@@ -873,3 +873,11 @@ class TrainingRecommendationReport:
         response['whatsNext'] = __class__.__get_next_metrics()
 
         return response
+
+
+class MatchSummaryReport:
+    def get_match_summary(self):
+        summary = MatchSummaryStats.objects.first()
+        if not summary:
+            return {}
+        return summary.summary_json
