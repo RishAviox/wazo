@@ -22,6 +22,7 @@ from .utils import (
     get_latest_game,
     get_player,
     get_historical_context,
+    MatchSummaryReport,
     KeyTacticalInsightReport,
     IndividualPlayerPerformanceReport,
     TeamPerformanceReport,
@@ -149,3 +150,10 @@ class MatchOverviewAPIViewset(ModelViewSet):
         report = TrainingRecommendationReport()
         recommendation_report = {"TrainingRecommendationsReport": report.get_report()}
         return Response(data=recommendation_report, status=status.HTTP_200_OK)
+
+
+class MatchSummaryView(APIView):
+    def get(self, request, user_id: str):
+        report = MatchSummaryReport()
+        summary = report.get_match_summary()
+        return Response(data=summary, status=status.HTTP_200_OK)
