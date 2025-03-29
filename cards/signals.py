@@ -135,7 +135,7 @@ def process_gps_data_file(sender, instance, created, **kwargs):
             card_names = ['AthleticSkills', 'FootballAbilities']
             # send silent notification
             print(f"Sending silent notification for users: {user_ids} with card names: {card_names}")
-            send_silent_notification(user_ids, card_names)
+            send_silent_notification(user_ids, card_names, game_created)
             # team gps stats
             calculate_team_gps_stats(instance)
         except Exception as e:
@@ -303,7 +303,7 @@ def process_video_data_file(sender, instance, created, **kwargs):
             card_names = ['AttackingSkills', 'VideocardDefensive', 'VideocardDistribution']
             # send silent notification
             print(f"Sending silent notification for users: {user_ids} with card names: {card_names}")
-            send_silent_notification(user_ids, card_names)
+            send_silent_notification(user_ids, card_names, game_created)
             
             # team video stats
             calculate_team_video_stats(instance)
@@ -351,7 +351,7 @@ def process_daily_wellness_user_responses(sender, instance, created, **kwargs):
 
             # send silent notification
             print(f"Sending StatusCard silent notification for user: {instance.user.phone_no}")
-            send_silent_notification([instance.user.phone_no], ['StatusCard'])
+            send_silent_notification([instance.user.phone_no], ['StatusCard'], False)
             
     except Exception as e:
             print(f"Error processing daily wellness user responses: {e}")
@@ -407,6 +407,6 @@ def process_daily_wellness_user_responses(sender, instance, created, **kwargs):
 
             # send silent notification
             print(f"Sending RPE silent notification for user: {instance.user.phone_no}")
-            send_silent_notification([instance.user.phone_no], ['RPEMetrics'])
+            send_silent_notification([instance.user.phone_no], ['RPEMetrics'], False)
     except Exception as e:
             print(f"Error processing RPE user responses: {e}")
