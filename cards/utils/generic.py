@@ -1,12 +1,14 @@
 def translate_units_en_to_he(entries: dict):
-    translations = {
-                'Play Time': '‘דק',
-                'Kick Power': 'קמ״ש',
-                'Dribbling': 'מ׳'
+    translation_metrics = {
+                'min': '‘דק',
+                'km/h': 'קמ״ש',
+                'km': 'ק”מ',
+                'm': 'מ׳'
             }
-            
-    for key, translation in translations.items():
-        if key in entries:
-            entries[key] = entries[key].replace(entries.get(key).split()[1], translation)
+    
+    for key, value in entries.items():
+        for t_key, t_value in translation_metrics.items():
+            if isinstance(value, str) and value.lower().endswith(t_key):
+                entries[key] = entries[key].lower().replace(t_key, t_value)
     
     return entries

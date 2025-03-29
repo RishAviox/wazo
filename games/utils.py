@@ -2,12 +2,85 @@ import pandas as pd
 
 def add_padding(start_time: int, end_time: int, half: str, padding_time):
     if half == "FIRST_HALF":
-        start_time = start_time + padding_time['PADDING_START_TIME_FIRST_HALF'] - padding_time['START_TIME_PADDING']
-        end_time = end_time + padding_time['PADDING_END_TIME_FIRST_HALF'] + padding_time['END_TIME_PADDING']
+        start_time = start_time - padding_time['START_TIME_PADDING']
+        end_time = end_time + padding_time['END_TIME_PADDING']
     elif half == "SECOND_HALF":
-        start_time = start_time + padding_time['PADDING_START_TIME_SECOND_HALF'] - padding_time['START_TIME_PADDING']
-        end_time = end_time + padding_time['PADDING_END_TIME_SECOND_HALF'] + padding_time['END_TIME_PADDING']
+        start_time = start_time - padding_time['PADDING_START_TIME_SECOND_HALF'] - padding_time['START_TIME_PADDING']
+        end_time = end_time - padding_time['PADDING_END_TIME_SECOND_HALF'] + padding_time['END_TIME_PADDING']
     return start_time, end_time
+
+
+def convert_event_type_en_to_he(event: str):
+    event_in_he = ""
+    if event == "Shots & Goals (all)":
+        event_in_he = "בעיטות ושערים"
+    elif event == "Goal":
+        event_in_he = "שערים"
+    elif event == "Goal Conceded":
+        event_in_he = "ספיגות שערים"
+    elif event == "Passes":
+        event_in_he = "מסירות"
+    elif event == "Crosses":
+        event_in_he = "הגבהות"
+    elif event == "Assists":
+        event_in_he = "בישולים"
+    elif event == "Key Passes":
+        event_in_he = "מסירות מפתח"
+    elif event == "Pass Received":
+        event_in_he = "מסירות שהתקבלו"
+    elif event == "Tackles":
+        event_in_he = "תיקולים"
+    elif event == "Aerial Clearances (all)":
+        event_in_he = "ניקויים אוויריים"
+    elif event == "Aerial Control":
+        event_in_he = "שליטה אווירית"
+    elif event == "Ball Received":
+        event_in_he = "קבלת כדור"
+    elif event == "Blocks":
+        event_in_he = "חסימות"
+    elif event == "Step-in":
+        event_in_he = "התערבות הגנתית"
+    elif event == "Clearances":
+        event_in_he = "הרחקות"
+    elif event == "Cross Received":
+        event_in_he = "קבלת הגבהה"
+    elif event == "Defensive Line Supports":
+        event_in_he = "תמיכה בקו ההגנה"
+    elif event == "Duels":
+        event_in_he = "קרבות"
+    elif event == "Duels (continued)":
+        event_in_he = "דו קרב (המשך"
+    elif event == "Errors":
+        event_in_he = "טעויות"
+    elif event == "Fouls":
+        event_in_he = "עבירות"
+    elif event == "Interceptions":
+        event_in_he = "חטיפת מסירה"
+    elif event == "Interventions":
+        event_in_he = "פעולות הגנתיות"
+    elif event == "Offsides":
+        event_in_he = "נבדלים"
+    elif event == "Pauses":
+        event_in_he = "עצירות משחק"
+    elif event == "Recoveries":
+        event_in_he = "השגת כדור חוזר"
+    elif event == "Saves":
+        event_in_he = "הצלות"
+    elif event == "Set Pieces":
+        event_in_he = "מצבים נייחים"
+    elif event == "Substitutions":
+        event_in_he = "חילופים"
+    return event_in_he
+
+def convert_subevent_en_to_he(subevent):
+    subevent_in_he = ""
+    if subevent == "Missed Shots":
+        subevent_in_he = "החמצות"
+    elif subevent == "On Target":
+        subevent_in_he = "למסגרת"
+    elif subevent == "Off Target":
+        subevent_in_he = "החטיא"
+    return subevent_in_he
 
 
 def generate_teams_json(df: pd.DataFrame) -> list[dict]:
@@ -51,15 +124,20 @@ def generate_goals_json(df, teams, players_df, sequence_df, padding_time):
             end_time = None
             
         if not filtered_df.empty:
+            event_time = int(row.event_time)
+            if not start_time:
+                start_time = int(event_time - padding_time['START_TIME_PADDING'])
+            if not end_time:
+                end_time = int(event_time + padding_time['END_TIME_PADDING'])
             goals.append(
                 {
                     "team_id": str(int(row.team_id)),
                     "team_name": teams.get(str(int(row.team_id)), "Unknown"),
                     "player_id": str(int(row.player_id)),
                     "player_name": filtered_df["player_name_en"].iloc[0],
-                    "event_time": int(row.event_time),
-                    "start_time": int(start_time) if start_time else None,
-                    "end_time": int(end_time) if end_time else None,
+                    "event_time": event_time,
+                    "start_time": 0 if start_time < 0 else start_time,
+                    "end_time": end_time,
                     "half": half.lower(),
                 }
             )
@@ -97,16 +175,26 @@ def generate_highlights_json( df, teams, players_df, sequence_df, padding_time):
             start_time = None
             end_time = None
         if not filtered_df.empty:
+            event_time = int(row.event_time)
+            if not start_time:
+                start_time = int(event_time - padding_time['START_TIME_PADDING'])
+            if not end_time:
+                end_time = int(event_time + padding_time['END_TIME_PADDING'])
+            event_type = row.eventType
+            sub_event_type = row.outcome
+
             highlights.append(
                 {
                     "team_id": str(int(row.team_id)),
                     "team_name": teams.get(str(int(row.team_id)), "Unknown"),
                     "player_id": str(int(row.player_id)),
                     "player_name": filtered_df["player_name_en"].iloc[0],
-                    "start_time": int(start_time) if start_time else None,
-                    "end_time": int(end_time) if end_time else None,
-                    "eventType": row.eventType,
-                    "subEventType": row.outcome,
+                    "start_time": 0 if start_time < 0 else start_time,
+                    "end_time": end_time,
+                    "eventType": event_type,
+                    "subEventType": sub_event_type,
+                    "eventTypeHe": convert_event_type_en_to_he(event_type),
+                    "subEventTypeHe": convert_subevent_en_to_he(sub_event_type),
                     "half": half.lower(),
                 }
             )
@@ -138,20 +226,27 @@ def generate_event_details_json(df, teams, players_df, sequence_df, padding_time
             end_time = int(sequence_filter_df["end_time"].iloc[0])
             start_time, end_time = add_padding(start_time, end_time, half, padding_time)
         else:
-            continue
+            start_time = None
+            end_time = None
         
         mapped_events, sub_event = map_event_and_subevent(row, row.eventType, reference_df)
 
         for idx, event in enumerate(mapped_events):
             if not filtered_df.empty:
+                event_time = int(row.event_time)
+                if not start_time:
+                    start_time = int(event_time - padding_time['START_TIME_PADDING'])
+                if not end_time:
+                    end_time = int(event_time + padding_time['END_TIME_PADDING'])
+
                 events.append(
                     {
                         "team_id": str(int(row.team_id)),
                         "team_name": teams.get(str(int(row.team_id)), "Unknown"),
                         "player_id": str(int(row.player_id)),
                         "player_name": filtered_df["player_name_en"].iloc[0],
-                        "start_time": int(start_time),
-                        "end_time": int(end_time),
+                        "start_time": 0 if start_time < 0 else start_time,
+                        "end_time": end_time,
                         "eventType": event,
                         "subEventType": sub_event[idx],
                         "half": half.lower(),

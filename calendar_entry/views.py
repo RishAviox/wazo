@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError
+from rest_framework import status
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -17,7 +18,7 @@ from calendar_entry.serializers import (
     CalendarGoalSerializer
 )
 
-
+from django.utils import timezone
 class CalendarEntryListView(APIView):
     def get(self, request, user_id):
         # Get the user object based on the phone number
@@ -32,14 +33,29 @@ class CalendarEntryListView(APIView):
         repeat_type = request.query_params.get('repeat_type')
         custom_repeat = request.query_params.get('custom_repeat')
 
+        # Get the current date in the configured Django timezone
+        today = timezone.localtime().date()
+
         # Convert start_date and end_date to datetime objects if they are provided
         try:
             if start_date:
-                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                start_date = timezone.make_aware(datetime.fromisoformat(start_date)).date()
+                if start_date < today:
+                    return Response({"error": "start_date cannot be in the past"}, status=status.HTTP_400_BAD_REQUEST)
             if end_date:
-                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                end_date = timezone.make_aware(datetime.fromisoformat(end_date)).date()
+                if end_date < today:
+                    return Response({"error": "end_date cannot be in the past"}, status=status.HTTP_400_BAD_REQUEST)
+
+                if start_date and end_date < start_date:
+                    return Response({"error": "end_date cannot be before start_date"}, status=status.HTTP_400_BAD_REQUEST)
         except ValueError:
             raise ValidationError("Invalid date format. Use 'YYYY-MM-DD'.")
+
+        if not start_date:
+            start_date = today
+        if not end_date:
+            end_date = today
 
         # Filter events based on the user and date range
         event_query = Q(user=user)
