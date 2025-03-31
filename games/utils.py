@@ -11,76 +11,93 @@ def add_padding(start_time: int, end_time: int, half: str, padding_time):
 
 
 def convert_event_type_en_to_he(event: str):
-    event_in_he = ""
-    if event == "Shots & Goals (all)":
-        event_in_he = "בעיטות ושערים"
-    elif event == "Goal":
-        event_in_he = "שערים"
-    elif event == "Goal Conceded":
-        event_in_he = "ספיגות שערים"
-    elif event == "Passes":
-        event_in_he = "מסירות"
-    elif event == "Crosses":
-        event_in_he = "הגבהות"
-    elif event == "Assists":
-        event_in_he = "בישולים"
-    elif event == "Key Passes":
-        event_in_he = "מסירות מפתח"
-    elif event == "Pass Received":
-        event_in_he = "מסירות שהתקבלו"
-    elif event == "Tackles":
-        event_in_he = "תיקולים"
-    elif event == "Aerial Clearances (all)":
-        event_in_he = "ניקויים אוויריים"
-    elif event == "Aerial Control":
-        event_in_he = "שליטה אווירית"
-    elif event == "Ball Received":
-        event_in_he = "קבלת כדור"
-    elif event == "Blocks":
-        event_in_he = "חסימות"
-    elif event == "Step-in":
-        event_in_he = "התערבות הגנתית"
-    elif event == "Clearances":
-        event_in_he = "הרחקות"
-    elif event == "Cross Received":
-        event_in_he = "קבלת הגבהה"
-    elif event == "Defensive Line Supports":
-        event_in_he = "תמיכה בקו ההגנה"
-    elif event == "Duels":
-        event_in_he = "קרבות"
-    elif event == "Duels (continued)":
-        event_in_he = "דו קרב (המשך"
-    elif event == "Errors":
-        event_in_he = "טעויות"
-    elif event == "Fouls":
-        event_in_he = "עבירות"
-    elif event == "Interceptions":
-        event_in_he = "חטיפת מסירה"
-    elif event == "Interventions":
-        event_in_he = "פעולות הגנתיות"
-    elif event == "Offsides":
-        event_in_he = "נבדלים"
-    elif event == "Pauses":
-        event_in_he = "עצירות משחק"
-    elif event == "Recoveries":
-        event_in_he = "השגת כדור חוזר"
-    elif event == "Saves":
-        event_in_he = "הצלות"
-    elif event == "Set Pieces":
-        event_in_he = "מצבים נייחים"
-    elif event == "Substitutions":
-        event_in_he = "חילופים"
-    return event_in_he
+    event_translations = {
+        "Shots & Goals (all)": "בעיטות ושערים",
+        "Goal": "שערים",
+        "Goal Conceded": "ספיגות שערים",
+        "Passes": "מסירות",
+        "Crosses": "הגבהות",
+        "Assists": "בישולים",
+        "Key Passes": "מסירות מפתח",
+        "Pass Received": "מסירות שהתקבלו",
+        "Tackles": "תיקולים",
+        "Aerial Clearances (all)": "ניקויים אוויריים",
+        "Aerial Control": "שליטה אווירית",
+        "Ball Received": "קבלת כדור",
+        "Blocks": "חסימות",
+        "Step-in": "התערבות הגנתית",
+        "Clearances": "הרחקות",
+        "Cross Received": "קבלת הגבהה",
+        "Defensive Line Supports": "תמיכה בקו ההגנה",
+        "Duels": "קרבות",
+        "Duels (continued)": "דו קרב (המשך)",
+        "Errors": "טעויות",
+        "Fouls": "עבירות",
+        "Interceptions": "חטיפת מסירה",
+        "Interventions": "פעולות הגנתיות",
+        "Offsides": "נבדלים",
+        "Pauses": "עצירות משחק",
+        "Recoveries": "השגת כדור חוזר",
+        "Saves": "הצלות",
+        "Set Pieces": "מצבים נייחים",
+        "Substitutions": "חילופים"
+    }
+    return event_translations.get(event, event)
+
 
 def convert_subevent_en_to_he(subevent):
-    subevent_in_he = ""
-    if subevent == "Missed Shots":
-        subevent_in_he = "החמצות"
-    elif subevent == "On Target":
-        subevent_in_he = "למסגרת"
-    elif subevent == "Off Target":
-        subevent_in_he = "החטיא"
-    return subevent_in_he
+    translations = {
+        "Goals": "שערים",
+        "Shots": "בעיטות",
+        "On Target": "בעיטות למסגרת",
+        "Missed Shots": "החמצות",
+        "Goal Conceded": "שער שספג",
+        "Blocked Shots": "בעיטות שנחסמו",
+        "Keeper Rush-Out": "יציאת שוער",
+        "Left Foot": "רגל שמאל",
+        "Right Foot": "רגל ימין",
+        "Header": "נגיחה",
+        "Passes": "מסירות",
+        "Successful": "הצלחה",
+        "Failed": "נכשל",
+        "Crosses": "הרמות",
+        "Key Passes": "מסירות מפתח",
+        "Assists": "בישולים",
+        "Tackles": "תיקולים",
+        "Aerial Clearances": "הרחקות אוויריות",
+        "Unsuccessful": "לא מוצלח",
+        "Successful Aerial Clearances": "הרחקות אוויריות מוצלחות",
+        "Failed Aerial Clearances": "הרחקות אוויריות שנכשלו",
+        "Successful Aerial Duels": "מאבקי אוויר מוצלחים",
+        "Failed Aerial Duels": "מאבקי אוויר שנכשלו",
+        "Defensive Line Supports": "תמיכה בקו ההגנה",
+        "Duels": "מאבקים",
+        "Ground": "מאבקי קרקע",
+        "Aerial": "מאבקי אוויר",
+        "Loose Balls": "כדורים חופשיים",
+        "Errors": "טעויות",
+        "Fouls": "עבירות",
+        "Foul Wons": "עבירות שהושגו",
+        "Yellow Cards": "כרטיסים צהובים",
+        "Red Cards": "כרטיסים אדומים",
+        "Pauses": "הפסקות",
+        "Saves": "הצלות",
+        "Parrys": "הדיפות",
+        "Catches": "תפיסות",
+        "Lower Body": "גוף תחתון",
+        "Upper Body": "גוף עליון",
+        "Hands": "ידיים",
+        "Set Pieces": "מצבים נייחים",
+        "Throw-In's": "חוץ",
+        "Corners": "קרנות",
+        "Free-kicks": "בעיטות חופשיות",
+        "Goal Kicks": "בעיטות שוער",
+        "Penalty Kicks": "בעיטות עונשין",
+        "Substitutions": "חילופים",
+        "On": "נכנס",
+        "Off": "יצא"
+    }
+    return translations.get(subevent, subevent)
 
 
 def generate_teams_json(df: pd.DataFrame) -> list[dict]:
