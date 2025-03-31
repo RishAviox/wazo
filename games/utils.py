@@ -12,6 +12,7 @@ def add_padding(start_time: int, end_time: int, half: str, padding_time):
 
 def convert_event_type_en_to_he(event: str):
     event_translations = {
+        "Shot": "בְּעִיטָה",
         "Shots & Goals (all)": "בעיטות ושערים",
         "Goal": "שערים",
         "Goal Conceded": "ספיגות שערים",
@@ -47,11 +48,14 @@ def convert_event_type_en_to_he(event: str):
 
 def convert_subevent_en_to_he(subevent):
     translations = {
+        "Shot": "בְּעִיטָה",
         "Goals": "שערים",
         "Shots": "בעיטות",
         "On Target": "בעיטות למסגרת",
+        "Off Target": "החטיא",
         "Missed Shots": "החמצות",
         "Goal Conceded": "שער שספג",
+        "Goal": "שערים",
         "Blocked Shots": "בעיטות שנחסמו",
         "Keeper Rush-Out": "יציאת שוער",
         "Left Foot": "רגל שמאל",
@@ -266,6 +270,8 @@ def generate_event_details_json(df, teams, players_df, sequence_df, padding_time
                         "end_time": end_time,
                         "eventType": event,
                         "subEventType": sub_event[idx],
+                        "eventTypeHe": convert_event_type_en_to_he(event),
+                        "subEventTypeHe": convert_subevent_en_to_he(sub_event[idx]),
                         "half": half.lower(),
                     }
                 )
