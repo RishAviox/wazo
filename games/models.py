@@ -102,15 +102,15 @@ class GameVideoData(WajoModel):
         related_name="video_data"
     )
     first_half_url = models.TextField()
-    first_half_padding = models.FloatField(default=0.0)
+    first_half_padding = models.FloatField(default=0.0, verbose_name="First Half Padding (Seconds)")
     
     second_half_url = models.TextField()
-    second_half_padding = models.FloatField(default=0.0)
+    second_half_padding = models.FloatField(default=0.0, verbose_name="Second Half Padding (Seconds)")
     
     # start time padding is subttracted from start time
-    start_time_padding = models.FloatField(default=0.0)
+    start_time_padding = models.FloatField(default=0.0, verbose_name="Start Time Padding (Seconds)")
     # end time padding is added to end time
-    end_time_padding = models.FloatField(default=0.0)
+    end_time_padding = models.FloatField(default=0.0, verbose_name="End Time Padding (Seconds)")
     
     highlights_url = models.TextField()
 

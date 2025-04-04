@@ -10,6 +10,26 @@ def add_padding(start_time: int, end_time: int, half: str, padding_time):
     return start_time, end_time
 
 
+def calculate_start_time_from_event_time(half: str, event_time: int, padding_time: dict):
+    if half.lower() == "first_half":
+        start_time = int(event_time - padding_time['START_TIME_PADDING'])
+    else:
+        start_time = int(event_time - padding_time['PADDING_START_TIME_SECOND_HALF'] - padding_time['START_TIME_PADDING'])
+    
+    return int(start_time)
+    
+
+
+def calculate_end_time_from_event_time(half: str, event_time: int, padding_time: dict):
+    if half.lower() == "first_half":
+        end_time = int(event_time + padding_time['END_TIME_PADDING'])
+    else:
+        end_time = int(event_time - padding_time['PADDING_START_TIME_SECOND_HALF'] + padding_time['END_TIME_PADDING'])
+    
+    return int(end_time)
+
+
+
 def convert_event_type_en_to_he(event: str):
     event_translations = {
         "Shot": "בְּעִיטָה",
@@ -147,9 +167,9 @@ def generate_goals_json(df, teams, players_df, sequence_df, padding_time):
         if not filtered_df.empty:
             event_time = int(row.event_time)
             if not start_time:
-                start_time = int(event_time - padding_time['START_TIME_PADDING'])
+                start_time = calculate_start_time_from_event_time(half, event_time, padding_time)
             if not end_time:
-                end_time = int(event_time + padding_time['END_TIME_PADDING'])
+                end_time = calculate_end_time_from_event_time(half, event_time, padding_time)
             goals.append(
                 {
                     "team_id": str(int(row.team_id)),
@@ -198,9 +218,9 @@ def generate_highlights_json( df, teams, players_df, sequence_df, padding_time):
         if not filtered_df.empty:
             event_time = int(row.event_time)
             if not start_time:
-                start_time = int(event_time - padding_time['START_TIME_PADDING'])
+                start_time = calculate_start_time_from_event_time(half, event_time, padding_time)
             if not end_time:
-                end_time = int(event_time + padding_time['END_TIME_PADDING'])
+                end_time = calculate_end_time_from_event_time(half, event_time, padding_time)
             event_type = row.eventType
             sub_event_type = row.outcome
 
@@ -256,9 +276,9 @@ def generate_event_details_json(df, teams, players_df, sequence_df, padding_time
             if not filtered_df.empty:
                 event_time = int(row.event_time)
                 if not start_time:
-                    start_time = int(event_time - padding_time['START_TIME_PADDING'])
+                    start_time = calculate_start_time_from_event_time(half, event_time, padding_time)
                 if not end_time:
-                    end_time = int(event_time + padding_time['END_TIME_PADDING'])
+                    end_time = calculate_end_time_from_event_time(half, event_time, padding_time)
 
                 events.append(
                     {
