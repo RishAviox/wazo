@@ -172,13 +172,13 @@ class CardSuggestedActionsAPI(APIView):
                     "Calendar": {
                         "actions": [
                             {
-                                "name": "הוסף לוח זמנים",
+                                "name": "הוסף או עדכן את לוח הזמנים",
                                 "postback": "add_schedule"
                             },
-                            {
-                                "name": "עדכן את לוח הזמנים למחר",
-                                "postback": "add_eventsfortomorrow"
-                            }
+                            # {
+                            #     "name": "עדכן את לוח הזמנים למחר",
+                            #     "postback": "add_eventsfortomorrow"
+                            # }
                         ]
                     },
                     "Wellness": {
@@ -195,9 +195,17 @@ class CardSuggestedActionsAPI(APIView):
                                 "name": "קבל תובנות",
                                 "postback": "get_insights"
                             },
+                            # {
+                            #     "name": "RPE תובנות",
+                            #     "postback": "get_rpe_insights"
+                            # }
+                        ]
+                    },
+                    "Squad Hub": {
+                        "actions": [
                             {
-                                "name": "RPE תובנות",
-                                "postback": "get_rpe_insights"
+                                "name": "הוסף ניתוח התאמה לאחר",
+                                "postback": "post_match_analysis"
                             }
                         ]
                     },
@@ -299,13 +307,13 @@ class CardSuggestedActionsAPI(APIView):
                 "Calendar": {
                     "actions": [
                         {
-                            "name": "Add Schedule",
+                            "name": "Add or Update Schedule",
                             "postback": "add_schedule"
                         },
-                        {
-                            "name": "Update tomorrow's schedule",
-                            "postback": "add_eventsfortomorrow"
-                        }
+                        # {
+                        #     "name": "Update tomorrow's schedule",
+                        #     "postback": "add_eventsfortomorrow"
+                        # }
                     ]
                 },
                 "Wellness": {
@@ -322,9 +330,17 @@ class CardSuggestedActionsAPI(APIView):
                             "name": "How am I doing?",
                             "postback": "get_insights"
                         },
+                        # {
+                        #     "name": "RPE Insights",
+                        #     "postback": "get_rpe_insights"
+                        # }
+                    ]
+                },
+                "Squad Hub": {
+                    "actions": [
                         {
-                            "name": "RPE Insights",
-                            "postback": "get_rpe_insights"
+                            "name": "Add Post Match Analysis",
+                            "postback": "post_match_analysis"
                         }
                     ]
                 },
