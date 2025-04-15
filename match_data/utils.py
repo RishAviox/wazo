@@ -222,6 +222,18 @@ def get_next_steps():
     }
 
 
+class MatchOverView:
+    # Need to be removed once llm responses integrated
+    def __init__(self):
+        pass
+
+    def get_match_overview(self, lang='en'):
+        report = PostMatchAnalysis.objects.first()
+        if lang == "he":
+            return report.overview_json_he
+        return report.overview_json
+
+
 class KeyTacticalInsightReport:
     def __init__(self):
         pass
@@ -305,7 +317,12 @@ class KeyTacticalInsightReport:
         }
 
 
-    def get_tactical_insights_report(self):
+    def get_tactical_insights_report(self, lang: str = "en"):
+        # Need to be removed once llm responses integrated
+        if lang == "he":
+            analysis = PostMatchAnalysis.objects.first()
+            return analysis.key_tactical_insight_report_json_he
+
         response = {}
 
         response['wajoSummary'] = __class__.__get_wajo_summary()
@@ -428,7 +445,11 @@ class IndividualPlayerPerformanceReport:
         }
 
 
-    def get_report(self):
+    def get_report(self, lang: str = "en"):
+        # Need to be removed once llm responses integrated
+        if lang == "he":
+            analysis = PostMatchAnalysis.objects.first()
+            return analysis.individual_player_performance_report_json_he
         response = {}
 
         response['wajoSummary'] = __class__.__get_wajo_summary()
@@ -563,7 +584,11 @@ class TeamPerformanceReport:
             "trainingRecommendations": "Actionable drills to build on strengths and address weaknesses.",
         }
     
-    def get_report(self):
+    def get_report(self, lang: str = "en"):
+        # Need to be removed once llm responses integrated
+        if lang == "he":
+            analysis = PostMatchAnalysis.objects.first()
+            return analysis.team_performance_report_json_he
         response = {}
         response['wajoSummary'] = __class__.__get_wajo_summary()
         response['strengths'] = __class__.__get_strengths()
@@ -672,7 +697,11 @@ class SetPieceAnalysisReport:
         }
 
 
-    def get_report(self):
+    def get_report(self, lang: str = "en"):
+        # Need to be removed once llm responses integrated
+        if lang == "he":
+            analysis = PostMatchAnalysis.objects.first()
+            return analysis.set_piece_analysis_report_json_he
         response = {}
         response['wajoSummary'] = __class__.__get_wajo_summary()
         response['setPiecePerformanceOverview'] = __class__.__get_set_piece_performance()
@@ -764,7 +793,11 @@ class FitnessRecoverySuggestion:
             "wrapItUp": "Plan ahead for the next training cycle.",
         }
     
-    def get_report(self):
+    def get_report(self, lang="en"):
+        # Need to be removed once llm responses integrated
+        if lang == "he":
+            analysis = PostMatchAnalysis.objects.first()
+            return analysis.fitness_recovery_suggestion_json_he
         response = {}
         response['wajoSummary'] = __class__.__get_wajo_summary()
         response['keyMetricsAndObservations'] = __class__.__get_key_metrics_observations()
@@ -862,7 +895,11 @@ class TrainingRecommendationReport:
         }
 
 
-    def get_report(self):
+    def get_report(self, lang="en"):
+        # Need to be removed once llm responses integrated
+        if lang == "he":
+            analysis = PostMatchAnalysis.objects.first()
+            return analysis.training_recommendation_report_json_he
         response = {}
         response['wajoSummary'] = __class__.__get_wajo_summary()
         response['priorityAreas'] = __class__.__get_priority_areas()
