@@ -37,7 +37,7 @@ class MatchOverviewAPIView(APIView):
     """
     API to return match overview including final score, summary, and smart note.
     """
-    # permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminUser]
     def get(self, request, user_id):
         # Fetch match data
         try:
@@ -118,7 +118,7 @@ class MatchOverviewAPIView(APIView):
 
 class MatchOverviewAPIViewset(ModelViewSet):
 
-    # permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminUser]
 
     @action(detail=True, methods=['GET'])
     def key_tactical_insight_report(self, request, user_id: str):
@@ -166,7 +166,7 @@ class MatchOverviewAPIViewset(ModelViewSet):
 
 class MatchSummaryView(APIView):
 
-    # permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminUser]
 
     def get(self, request, user_id: str):
         player = get_player(user_id)
