@@ -876,8 +876,10 @@ class TrainingRecommendationReport:
 
 
 class MatchSummaryReport:
-    def get_match_summary(self):
-        summary = MatchSummaryStats.objects.first()
+    def get_match_summary(self, lang='en'):
+        summary = PostMatchAnalysis.objects.first()
         if not summary:
             return {}
+        if lang == "he":
+            return summary.summary_json_he
         return summary.summary_json

@@ -426,8 +426,30 @@ class BeproTeamStat(models.Model):
         return f"{self.team_id}"
 
 
-class MatchSummaryStats(models.Model):
+class PostMatchAnalysis(models.Model):
+    overview_json = models.JSONField()
+    overview_json_he = models.JSONField()
+    key_tactical_insight_report_json = models.JSONField()
+    key_tactical_insight_report_json_he = models.JSONField()
+    individual_player_performance_report_json = models.JSONField()
+    individual_player_performance_report_json_he = models.JSONField()
+    team_performance_report_json = models.JSONField()
+    team_performance_report_json_he = models.JSONField()
+    set_piece_analysis_report_json = models.JSONField()
+    set_piece_analysis_report_json_he = models.JSONField()
+    fitness_recovery_suggestion_json = models.JSONField()
+    fitness_recovery_suggestion_json_he = models.JSONField()
+    training_recommendation_report_json = models.JSONField()
+    training_recommendation_report_json_he = models.JSONField()
     summary_json = models.JSONField()
+    summary_json_he = models.JSONField()
 
     class Meta:
-        verbose_name_plural = "Match Summary Stats"
+        verbose_name_plural = "Post Match Analysis"
+
+
+# class MatchSummaryStats(models.Model):
+#     summary_json = models.JSONField()
+
+#     class Meta:
+#         verbose_name_plural = "Match Summary Stats"
