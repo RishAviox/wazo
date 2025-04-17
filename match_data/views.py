@@ -40,13 +40,14 @@ class MatchOverviewAPIView(APIView):
     permission_classes = [IsAdminUser]
     def get(self, request, user_id):
         # Fetch match data
+        lang = request.query_params.get('lang', 'en')
         try:
             response_data = {}
             player = get_player(user_id)
             # Remove below if condition, Once llm responses added
-            if player.selected_language == "he":
+            if lang == "he":
                 overview = MatchOverView()
-                response_data = overview.get_match_overview(player.selected_language)
+                response_data = overview.get_match_overview(lang)
                 return Response(response_data, status=status.HTTP_200_OK)
             my_team = get_my_team(player)
             latest_match = get_latest_game(team=my_team)
@@ -122,45 +123,51 @@ class MatchOverviewAPIViewset(ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def key_tactical_insight_report(self, request, user_id: str):
-        player = get_player(user_id)
+        lang = request.query_params.get('lang', 'en')
+        # player = get_player(user_id)
         report = KeyTacticalInsightReport()
-        insight_report = {"KeyTacticalInsightsReport": report.get_tactical_insights_report(player.selected_language)}
+        insight_report = {"KeyTacticalInsightsReport": report.get_tactical_insights_report(lang)}
         return Response(data=insight_report, status=status.HTTP_200_OK)
 
 
     @action(detail=False, methods=["GET"])
     def individual_player_performance(self, request, user_id: str):
-        player = get_player(user_id)
+        lang = request.query_params.get('lang', 'en')
+        # player = get_player(user_id)
         report = IndividualPlayerPerformanceReport()
-        individual_player_performance_report = {"IndividualPlayerPerformance": report.get_report(player.selected_language)}
+        individual_player_performance_report = {"IndividualPlayerPerformance": report.get_report(lang)}
         return Response(data=individual_player_performance_report, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=["GET"])
     def team_performance_report(self, request, user_id: str):
-        player = get_player(user_id)
+        lang = request.query_params.get('lang', 'en')
+        # player = get_player(user_id)
         report = TeamPerformanceReport()
-        team_performance_report = {"TeamPerformanceOverviewReport": report.get_report(player.selected_language)}
+        team_performance_report = {"TeamPerformanceOverviewReport": report.get_report(lang)}
         return Response(data=team_performance_report, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=["GET"])
     def set_piece_analysis_report(self, request, user_id: str):
-        player = get_player(user_id)
+        lang = request.query_params.get('lang', 'en')
+        # player = get_player(user_id)
         report = SetPieceAnalysisReport()
-        set_piece_analysis_report = {"SetPieceAnalysisReport": report.get_report(player.selected_language)}
+        set_piece_analysis_report = {"SetPieceAnalysisReport": report.get_report(lang)}
         return Response(data=set_piece_analysis_report, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=["GET"])
     def fitness_recovery_suggestion(self, request, user_id: str):
-        player = get_player(user_id)
+        lang = request.query_params.get('lang', 'en')
+        # player = get_player(user_id)
         report = FitnessRecoverySuggestion()
-        fitness_recovery = {"FitnessRecoverySuggestions": report.get_report(player.selected_language)}
+        fitness_recovery = {"FitnessRecoverySuggestions": report.get_report(lang)}
         return Response(data=fitness_recovery, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['GET'])
     def training_recommendation_report(self, request, user_id: str):
-        player = get_player(user_id)
+        lang = request.query_params.get('lang', 'en')
+        # player = get_player(user_id)
         report = TrainingRecommendationReport()
-        recommendation_report = {"TrainingRecommendationsReport": report.get_report(player.selected_language)}
+        recommendation_report = {"TrainingRecommendationsReport": report.get_report(lang)}
         return Response(data=recommendation_report, status=status.HTTP_200_OK)
 
 
@@ -169,7 +176,8 @@ class MatchSummaryView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request, user_id: str):
-        player = get_player(user_id)
+        lang = request.query_params.get('lang', 'en')
+        # player = get_player(user_id)
         report = MatchSummaryReport()
-        summary = report.get_match_summary(player.selected_language)
+        summary = report.get_match_summary(lang)
         return Response(data=summary, status=status.HTTP_200_OK)
