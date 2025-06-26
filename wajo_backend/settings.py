@@ -98,18 +98,12 @@ WSGI_APPLICATION = "wajo_backend.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "mssql",
+        "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("wajo-db-name"),
         "HOST": os.environ.get("wajo-db-host"),
         "PORT": os.environ.get("wajo-db-port"),
         "USER": os.environ.get("wajo-db-user"),
         "PASSWORD": os.environ.get("wajo-db-password"),
-        'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server', 
-            'MARS_Connection': 'True',
-            "extra_params": "Encrypt=yes;TrustServerCertificate=no;"
-        },
-
     }
 }
 
