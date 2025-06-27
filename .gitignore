@@ -17,3 +17,4 @@ wajo_local_db.session.sql
 *.html
 freelancer-work
 *_dev.txt
+pgloader
