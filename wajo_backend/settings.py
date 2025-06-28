@@ -97,7 +97,8 @@ WSGI_APPLICATION = "wajo_backend.wsgi.application"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    "ENGINE": "mssql",
+    "default": {
+        "ENGINE": "mssql",
         "NAME": os.environ.get("wajo-db-name"),
         "HOST": os.environ.get("wajo-db-host"),
         "PORT": os.environ.get("wajo-db-port"),
@@ -107,6 +108,7 @@ DATABASES = {
             'driver': 'ODBC Driver 17 for SQL Server', 
             'MARS_Connection': 'True',
         },
+    }
 }
 
 
