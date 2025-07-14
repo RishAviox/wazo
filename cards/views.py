@@ -965,12 +965,18 @@ class VideoCardJSONAPI(APIView):
 # Training Card JSON data API
 class TrainingCardJSONAPI(ListAPIView):
     permission_classes = [IsAuthenticated]
-    queryset = TrainingCardData.objects.all()
     serializer_class = TrainingCardDataSerializer
+    
+    def get_queryset(self):
+        user_language = getattr(self.request.user, "selected_language", "en")
+        return TrainingCardData.objects.filter(language=user_language)
     
     
 # News Card JSON data API
 class NewsCardJSONAPI(ListAPIView):
     permission_classes = [IsAuthenticated]
-    queryset = NewsCardData.objects.all()
     serializer_class = NewsCardDataSerializer
+    
+    def get_queryset(self):
+        user_language = getattr(self.request.user, "selected_language", "en")
+        return NewsCardData.objects.filter(language=user_language)

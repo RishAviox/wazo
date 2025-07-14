@@ -121,6 +121,7 @@ class GPSFootballAbilities(WajoModel):
 
 
 class TrainingCardData(WajoModel):
+    language = models.CharField(max_length=10, default='en', choices=[('en', 'English'), ('he', 'Hebrew')])
     first_dropdown = models.CharField(max_length=128)
     second_dropdown = models.CharField(max_length=128)
     topic = models.CharField(max_length=128, null=True, blank=True)
@@ -136,6 +137,7 @@ class TrainingCardData(WajoModel):
 
 # news card json data
 class NewsCardData(WajoModel):
+    language = models.CharField(max_length=10, default='en', choices=[('en', 'English'), ('he', 'Hebrew')])
     title = models.CharField(max_length=128)
     data = models.JSONField()
 
