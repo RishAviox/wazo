@@ -12,11 +12,9 @@ from match_data.models.bepro import *
 def process_excel_file(sender, instance, created, **kwargs):
     if created:
         try:
-            with transaction.atomic():
-                file_path = instance.file.path
-                
+            with transaction.atomic():                
                 # Read Excel File
-                df = pd.read_excel(file_path, sheet_name=None)
+                df = pd.read_excel(instance.file, sheet_name=None)
                 
                 for sheet_name, data in df.items():
                     if sheet_name == "LeagueDetails":
