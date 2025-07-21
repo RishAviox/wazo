@@ -24,7 +24,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproLeagueDetail(
-                                    id=uuid4(),
                                     league_id=row['id'] if pd.notna(row['id']) else None,
                                     name=row['name'] if pd.notna(row['name']) else None,
                                     name_en=row['name_en'] if pd.notna(row['name_en']) else None,
@@ -40,7 +39,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproSeason(
-                                    id=uuid4(),
                                     league_id=row['id'] if pd.notna(row['id']) else None,
                                     name=row['name'] if pd.notna(row['name']) else None,
                                     name_en=row['name_en'] if pd.notna(row['name_en']) else None,
@@ -56,7 +54,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproMatchData(
-                                    id=uuid4(),
                                     match_id=row['id'] if pd.notna(row['id']) else None,
                                     season_id=row['season.id'] if pd.notna(row['season.id']) else None,
                                     season_name=row['season.name'] if pd.notna(row['season.name']) else None,
@@ -85,7 +82,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproMatchDetail(
-                                    id=uuid4(),
                                     record_id=row['id'] if pd.notna(row['id']) else None,
                                     match_id=match_data,
                                     team_id=row['team_id'] if pd.notna(row['team_id']) else None,
@@ -115,7 +111,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproFormationData(
-                                    id=uuid4(),
                                     team_id=row['team_id'] if pd.notna(row['team_id']) else None,
                                     event_period=row['event_period'] if pd.notna(row['event_period']) else None,
                                     changed_time=row['changed_time'] if pd.notna(row['changed_time']) else None,
@@ -145,7 +140,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproPhysicalEventData(
-                                    id=uuid4(),
                                     match_id=match_data,
                                     team_id=row['team_id'] if pd.notna(row['team_id']) else None,
                                     player_id=row['player_id'] if pd.notna(row['player_id']) else None,
@@ -174,7 +168,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproLineUp(
-                                    id=uuid4(),
                                     record_id=row['id'] if pd.notna(row['id']) else None,
                                     team_id=row['team_id'] if pd.notna(row['team_id']) else None,
                                     player_id=row['player_id'] if pd.notna(row['player_id']) else None,
@@ -193,7 +186,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproPlayerStat(
-                                    id=uuid4(),
                                     team_id=row['team_id'] if pd.notna(row['team_id']) else None,
                                     player_id=row['player_id'] if pd.notna(row['player_id']) else None,
                                     aerial_clearance=row['aerial_clearance'] if pd.notna(row['aerial_clearance']) else None,
@@ -279,7 +271,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproPlayerStatsExtended(
-                                    id=uuid4(),
                                     match_id=match_data,
                                     season_id=row['season.id'] if pd.notna(row['season.id']) else None,
                                     season_name=row['season.name'] if pd.notna(row['season.name']) else None,
@@ -308,7 +299,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproPlayer(
-                                    id=uuid4(),
                                     record_id=row['id'] if pd.notna(row['id']) else None,
                                     main_position=row['main_position'] if pd.notna(row['main_position']) else None,
                                     back_number=row['back_number'] if pd.notna(row['back_number']) else None,
@@ -326,7 +316,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             details.append(
                                 BeproTeamStat(
-                                    id=uuid4(),
                                     match=match_data,
                                     team_id=row['team_id'] if pd.notna(row['team_id']) else None,
                                     aerial_clearance=row['aerial_clearance'] if pd.notna(row['aerial_clearance']) else None,
@@ -413,7 +402,6 @@ def process_excel_file(sender, instance, created, **kwargs):
                         for _, row in data.iterrows():
                             event_data.append(
                                 BeproEventData(
-                                    id=uuid4(),
                                     match_id=match_data,
                                     event=row['Event'] if pd.notna(row['Event']) else "",
                                     event_sub_event=row['Event Sub-event'] if pd.notna(row['Event Sub-event']) else None,
