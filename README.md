@@ -2,9 +2,13 @@
 
 ## Data Migration from MS-SQL to Postgresql
 ```
-python manage.py dumpdata --database=mssql_legacy --settings=wajo_backend.settings_dev --natural-foreign --natural-primary -e contenttypes -e auth.Permission --indent 4 > wajo_prod_mssql_data_26062025.json
+python manage.py dumpdata --exclude auth.permission --exclude contenttypes --exclude admin.logentry --indent 2 > wajo_prod_mssql_data_19July2025.json
 ```
 
 ```
-python manage.py loaddata wajo_prod_mssql_data_26062025.json --settings=wajo_backend.settings_dev
+python manage.py migrate --run-syncdb
+```
+
+```
+python manage.py loaddata wajo_prod_mssql_data_19July2025.json --verbosity 3
 ```

@@ -18,3 +18,11 @@ wajo_local_db.session.sql
 freelancer-work
 *_dev.txt
 pgloader
+fixtures
+remove_api_logs_mssql.py
+mssql_data_19July2025.json
+news_card_en.json
+training_card_en.json
+wajo_prod_mssql_data_19July2025_without_logs.json
+wajo_prod_mssql_data_19July2025.json
+wajo_prod_mssql_data_19July2025 copy.json
