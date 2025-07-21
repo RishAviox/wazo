@@ -15,3 +15,4 @@ pandas
 openpyxl
 django-storages
 azure-storage-blob
+psycopg2-binary
