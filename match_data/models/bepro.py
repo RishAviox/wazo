@@ -3,7 +3,7 @@ from uuid import uuid4
 
 
 class BeproLeagueDetail(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     league_id = models.PositiveIntegerField(null=True)
     name = models.CharField(max_length=100, null=True)
     name_en = models.CharField(max_length=100, null=True)
@@ -17,7 +17,7 @@ class BeproLeagueDetail(models.Model):
 
 
 class BeproSeason(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     league_id = models.PositiveIntegerField(null=True)
     name = models.CharField(max_length=100, null=True)
     name_en = models.CharField(max_length=100, null=True)
@@ -34,7 +34,7 @@ class BeproMatchData(models.Model):
     """
         Keeps all matches and their higher level details
     """
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     match_id = models.PositiveIntegerField()
     season_id = models.PositiveIntegerField(null=True)
     season_name = models.CharField(max_length=10, null=True)
@@ -70,7 +70,7 @@ class BeproMatchData(models.Model):
 
 
 class BeproMatchDetail(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     record_id = models.PositiveBigIntegerField(null=True)
     match_id = models.ForeignKey(to=BeproMatchData, on_delete=models.CASCADE)
     team_id = models.PositiveIntegerField(null=True)
@@ -121,7 +121,7 @@ class BeproEventData(models.Model):
         return f"{self.event} - {self.event_sub_event} ({self.reference})"
 
 # class BeproEventData(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid4())
+#     id = models.UUIDField(primary_key=True, default=uuid4)
 #     record_id = models.PositiveBigIntegerField(null=True)
 #     match_id = models.ForeignKey(to=BeproMatchData, on_delete=models.CASCADE)
 #     team_id = models.PositiveIntegerField(null=True)
@@ -149,7 +149,7 @@ class BeproEventData(models.Model):
 
 
 class BeproFormationData(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     team_id = models.PositiveIntegerField(null=True)
     event_period = models.CharField(max_length=20, null=True)
     changed_time = models.CharField(max_length=20, null=True)
@@ -162,7 +162,7 @@ class BeproFormationData(models.Model):
 
 
 class BeproSequenceData(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     team_id = models.PositiveIntegerField(null=True)
     event_period = models.CharField(max_length=20, null=True)
     start_time = models.PositiveIntegerField(null=True)
@@ -174,7 +174,7 @@ class BeproSequenceData(models.Model):
 
 
 class BeproPhysicalEventData(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     match_id = models.ForeignKey(to=BeproMatchData, on_delete=models.CASCADE)
     team_id = models.IntegerField(null=True)
     player_id = models.IntegerField(null=True)
@@ -201,7 +201,7 @@ class BeproPhysicalEventData(models.Model):
 
 
 class BeproLineUp(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     record_id = models.IntegerField(null=True)
     team_id = models.PositiveIntegerField(null=True)
     player_id = models.PositiveIntegerField(null=True)
@@ -218,7 +218,7 @@ class BeproLineUp(models.Model):
 
 
 class BeproPlayerStat(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     team_id = models.PositiveIntegerField(null=True)
     player_id = models.PositiveIntegerField(null=True)
     aerial_clearance = models.PositiveIntegerField(null=True)
@@ -301,7 +301,7 @@ class BeproPlayerStat(models.Model):
     
 
 class BeproPlayerStatsExtended(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     match_id = models.ForeignKey(to=BeproMatchData, on_delete=models.CASCADE)
     season_id = models.IntegerField(null=True)
     season_name = models.CharField(max_length=10, null=True)
@@ -329,7 +329,7 @@ class BeproPlayerStatsExtended(models.Model):
 
 class BeproPlayer(models.Model):
     """Stores all player data"""
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     record_id = models.PositiveIntegerField(null=True)
     main_position = models.CharField(max_length=10, null=True)
     back_number = models.PositiveIntegerField(null=True)
@@ -344,7 +344,7 @@ class BeproPlayer(models.Model):
 
 
 class BeproTeamStat(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4())
+    id = models.UUIDField(primary_key=True, default=uuid4)
     match = models.ForeignKey(BeproMatchData, on_delete=models.CASCADE)
     team_id = models.PositiveIntegerField(null=True)
     aerial_clearance = models.PositiveIntegerField(null=True)
