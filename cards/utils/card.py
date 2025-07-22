@@ -89,6 +89,8 @@ def get_events_for_next_5_days(user, start_date):
                     'event_type': event.sub_category,
                     'event': event.category,
                     'date': recurrence_date,
+                    'start_time': event.start_time,
+                    'end_time': event.end_time,
                     'source': "From App"
                 })
 
@@ -118,6 +120,8 @@ def get_events_for_date(user, event_date):
                     'event_type': event.sub_category,
                     'event': event.category,
                     'date': recurrence_date,
+                    'start_time': event.start_time,
+                    'end_time': event.end_time,
                     'source': "From App"
                 })
 
@@ -166,6 +170,8 @@ def get_daily_snapshot(user, event_date):
             'event_type': event.sub_category,
             'event': event.category,
             'date': event.date,
+            'start_time': event.start_time,
+            'end_time': event.end_time,
             'source': "From App",
         }
         for event in one_time_events
