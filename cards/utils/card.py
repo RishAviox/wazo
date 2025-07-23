@@ -122,7 +122,14 @@ def get_events_for_date(user, event_date):
                     'date': recurrence_date,
                     'start_time': event.start_time,
                     'end_time': event.end_time,
-                    'source': "From App"
+                    'source': "From App",
+                    'category': event.category,
+                    'sub_category': event.sub_category,
+                    'title': event.title,
+                    'detail': event.detail,
+                    'location': event.location,
+                    'participants': event.participants,
+                    'notes': event.notes
                 })
 
     return one_time_events, recurring_events
@@ -173,6 +180,13 @@ def get_daily_snapshot(user, event_date):
             'start_time': event.start_time,
             'end_time': event.end_time,
             'source': "From App",
+            'category': event.category,
+            'sub_category': event.sub_category,
+            'title': event.title,
+            'detail': event.detail,
+            'location': event.location,
+            'participants': event.participants,
+            'notes': event.notes
         }
         for event in one_time_events
     ]
