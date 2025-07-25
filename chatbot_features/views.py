@@ -22,7 +22,7 @@ class ChatwellnessAPIView(APIView):
 
         session_id = request.data.get('session_id')
         user_message = request.data.get('message')
-        question_id = request.data.get('questionId')
+        question_id = request.data.get('question_id')
 
         print("[Chat Wellness] => User_id" , user_id)
         print("[Chat Wellness] => user_lang" , selected_language)
