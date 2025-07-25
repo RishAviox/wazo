@@ -19,7 +19,7 @@ class ChatwellnessAPIView(APIView):
     def post(self , request):
         user = request.user
         user_id = user.phone_no
-        selected_language = "he"#user.selected_language
+        selected_language = user.selected_language
 
         session_id = request.data.get('session_id')
         user_message = request.data.get('message')
