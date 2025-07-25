@@ -1,7 +1,6 @@
 from accounts.models import WajoUser
 from teams.models import TeamStats
 import google.generativeai as genai
-from datetime import timedelta , time ,date ,datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
