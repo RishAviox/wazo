@@ -46,7 +46,8 @@ INSTALLED_APPS = [
     "notifications",
     "games",
     "teams",
-    "match_data"
+    "match_data",
+    "chatbot_features",
 ]
 
 MIDDLEWARE = [

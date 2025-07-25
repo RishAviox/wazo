@@ -12,7 +12,8 @@ urlpatterns = [
     path("api/chatbot-admin/", include("chatbot_admin.urls")),
     path("api/cards/", include("cards.urls")),
     path("api/calendar/", include("calendar_entry.urls")),
-    path("api/match/", include("match_data.urls"))
+    path("api/match/", include("match_data.urls")),
+    path("api/chatbot-features/", include("chatbot_features.urls")),
 ]
 
 
