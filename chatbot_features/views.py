@@ -63,7 +63,7 @@ class ChatwellnessAPIView(APIView):
         user_sessions[user_id][session_id] = chat_session
         print("response", response)
         
-        if question_id is not None:
+        if question_id is not None and user_message != "Hey":
             answer_id = get_answer_id(question_id, user_message, daily_wellness_questionnaire)
             print("answer_id" , answer_id)
             update_or_insert_wellness_response(user_id, answer_id)
