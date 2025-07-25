@@ -21,7 +21,7 @@ def get_wellness_prompt(selected_language, questionnaire):
             "language": q.language,
             "title": q.question_to_ask,
             "description": q.description,
-            "data": json.loads(q.response_choices).get("data", []),
+            "data": q.response_choices.get("data", []),
         }
         for q in questionnaire
     ]

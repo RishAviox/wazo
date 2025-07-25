@@ -1,7 +1,6 @@
 from accounts.models import WajoUser
 from teams.models import TeamStats
 import google.generativeai as genai
-from datetime import timedelta , time ,date ,datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -19,7 +18,7 @@ class ChatwellnessAPIView(APIView):
     def post(self , request):
         user = request.user
         user_id = user.phone_no
-        selected_language = "he"#user.selected_language
+        selected_language = user.selected_language
 
         session_id = request.data.get('session_id')
         user_message = request.data.get('message')
