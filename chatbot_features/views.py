@@ -32,11 +32,14 @@ class ChatwellnessAPIView(APIView):
                 "error": "Missing required fields: 'message' and 'session_id'."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        daily_wellness_questionnaire = DailyWellnessQuestionnaire.objects.filter(language=selected_language)
+        daily_wellness_questionnaire = DailyWellnessQuestionnaire.objects.filter(language=selected_language).order_by('created_on', 'id')
         system_instruction = get_wellness_prompt(selected_language, daily_wellness_questionnaire)
-
-        print("system_instruction", system_instruction)
-        
+        print("="*100)
+        print("session_id" , session_id)
+        for i in daily_wellness_questionnaire:
+            print("question" , i.q_id, i.question_to_ask)
+            
+        # print("system_instruction", system_instruction)
         if user_id not in user_sessions:
             user_sessions[user_id] = {}
         if session_id not in user_sessions[user_id]:
@@ -63,7 +66,7 @@ class ChatwellnessAPIView(APIView):
         user_sessions[user_id][session_id] = chat_session
         print("response", response)
         
-        if question_id is not None:
+        if question_id is not None and user_message != "Hey":
             answer_id = get_answer_id(question_id, user_message, daily_wellness_questionnaire)
             print("answer_id" , answer_id)
             update_or_insert_wellness_response(user_id, answer_id)
