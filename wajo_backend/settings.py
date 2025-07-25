@@ -14,14 +14,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("django-secret-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['.hiwajo.com']
-# CSRF_TRUSTED_ORIGINS = [
-#     'https://api.hiwajo.com', 
-#     'https://api2.hiwajo.com',
-#     'https://staging-api.hiwajo.com', 
-# ]
+CSRF_TRUSTED_ORIGINS = [
+    'https://api.hiwajo.com', 
+    'https://api2.hiwajo.com',
+    'https://staging-api.hiwajo.com', 
+]
 
 # Application definition
 

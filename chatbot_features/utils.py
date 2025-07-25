@@ -1,21 +1,20 @@
 import re
 from django.utils import timezone
 from django.utils.timezone import now, datetime
-import json
 
 from questionnaire.models import DailyWellnessUserResponse
 
 def get_answer_id(question_id, user_response, daily_wellness_questionnaire):
     for question in daily_wellness_questionnaire:
         if question.q_id == question_id:
-            for answer in json.loads(question.response_choices)["data"]:
+            for answer in question.response_choices["data"]:
                 if answer["text"] == user_response:
                     return [{"question_id": question_id, "answer_id": answer["id"]}]
     return None
 
 def get_options_by_question_id(question_id, daily_wellness_questionnaire):
         question = next((q for q in daily_wellness_questionnaire if q.q_id == question_id), None)
-        return json.loads(question.response_choices)["data"] if question else []
+        return question.response_choices["data"] if question else []
 
 
 def extract_question_details(response_text, daily_wellness_questionnaire):
