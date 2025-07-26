@@ -14,7 +14,7 @@ user_sessions = {}
 class ChatwellnessAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self , request):
+    def post(self, request):
         user = request.user
         user_id = user.phone_no
         selected_language = user.selected_language
@@ -45,19 +45,18 @@ class ChatwellnessAPIView(APIView):
             print("[Chat Wellness] => No questions found for selected language.")
             return Response({"message": "No questions found for this language."}, status=404)
 
-        # Initialize user_sessions dict safely
-        if user_id not in user_sessions:
-            print(f"[Chat Wellness] => Initializing user_sessions for user_id: {user_id}")
-            user_sessions[user_id] = {}
+        # Cache key format
+        cache_key = f"wellness_session_{user_id}_{session_id}"
 
-        if session_id not in user_sessions[user_id]:
-            print(f"[Chat Wellness] => Initializing session data for session_id: {session_id}")
-            user_sessions[user_id][session_id] = {
-                "asked_questions": set()
-            }
+        # Get or initialize session data from cache
+        session_data = cache.get(cache_key)
+        if session_data is None:
+            print(f"[Chat Wellness] => Initializing session data in cache for session_id: {session_id}")
+            session_data = {"asked_questions": []}
+        else:
+            print(f"[Chat Wellness] => Loaded session data from cache for session_id: {session_id}")
 
-        session_data = user_sessions[user_id][session_id]
-        asked_ids = session_data["asked_questions"]
+        asked_ids = set(session_data.get("asked_questions", []))
         print(f"[Chat Wellness] => Already asked question IDs: {asked_ids}")
 
         # Save previous answer if applicable (and not greeting)
@@ -80,6 +79,11 @@ class ChatwellnessAPIView(APIView):
                 print(f"[Chat Wellness] => Next question selected: {question.q_id}")
                 break
 
+        # Update cache with current session state
+        session_data["asked_questions"] = list(asked_ids)
+        cache.set(cache_key, session_data, timeout=60 * 60 * 24)  # Cache for 24 hours
+        print(f"[Chat Wellness] => Session data updated in cache: {session_data}")
+
         if not next_question:
             print("[Chat Wellness] => All questions completed.")
             return Response({
@@ -93,9 +97,9 @@ class ChatwellnessAPIView(APIView):
         return Response({
             "message": next_question.question_to_ask,
             "question_id": next_question.q_id,
-            "options" : next_question.response_choices or []
+            "options": next_question.response_choices or []
         })
-
-        
+  
+      
 class GameOverviewAPIView(APIView):
     pass
