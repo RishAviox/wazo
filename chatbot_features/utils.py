@@ -2,7 +2,7 @@ import re
 from django.utils import timezone
 from django.utils.timezone import now, datetime
 
-from questionnaire.models import DailyWellnessUserResponse
+from questionnaire.models import DailyWellnessUserResponse, RPEUserResponse
 
 def get_answer_id(question_id, user_response, daily_wellness_questionnaire):
     for question in daily_wellness_questionnaire:
@@ -11,6 +11,16 @@ def get_answer_id(question_id, user_response, daily_wellness_questionnaire):
                 if answer["text"] == user_response:
                     return [{"question_id": question_id, "answer_id": answer["id"]}]
     return None
+
+def get_rpe_answer_id(question_id, user_response, rpe_questionnaire):
+    for question in rpe_questionnaire:
+        if question.q_id == question_id:
+            for answer in question.response_choices["data"]:
+                if answer["text"] == user_response:
+                    return [{"question_id": question_id, "answer_id": answer["id"]}]
+    return None
+
+
 
 def get_options_by_question_id(question_id, daily_wellness_questionnaire):
         question = next((q for q in daily_wellness_questionnaire if q.q_id == question_id), None)
@@ -73,6 +83,43 @@ def update_or_insert_wellness_response(user_id, updated_json):
     else:
         # Create new response
         new_response = DailyWellnessUserResponse(
+            user_id=user_id,
+            response=updated_json
+        )
+        new_response.save()
+        print("New response created.")
+        return "Created"
+    
+    
+def update_or_insert_rpe_response(user_id, updated_json):
+    print("+++update_or_insert_json_async+++")
+    print("upJson:", updated_json)
+
+    today = timezone.make_aware(datetime.combine(now().date(), datetime.min.time()))
+    user_response = RPEUserResponse.objects.filter(user_id=user_id, created_on__gte=today).first()
+        
+    if user_response:
+        print("Found existing response:", user_response, user_response.response)
+        existing_response = user_response.response
+
+        # Merge new data into existing response
+        for new_entry in updated_json:
+            updated = False
+            for existing_entry in existing_response:
+                if existing_entry["question_id"] == new_entry["question_id"]:
+                    existing_entry["answer_id"] = new_entry["answer_id"]
+                    updated = True
+                    break
+            if not updated:
+                existing_response.append(new_entry)
+
+        user_response.response = existing_response
+        user_response.save()
+        print("Response updated.")
+        return "Updated"
+    else:
+        # Create new response
+        new_response = RPEUserResponse(
             user_id=user_id,
             response=updated_json
         )
