@@ -31,78 +31,52 @@ class ChatwellnessAPIView(APIView):
                 "error": "Missing required fields: 'message' and 'session_id'."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        daily_wellness_questionnaire = DailyWellnessQuestionnaire.objects.filter(language=selected_language).order_by('created_on', 'id')
-        system_instruction = get_wellness_prompt(selected_language, daily_wellness_questionnaire)
-        
-        # Initialize user_sessions structure if missing
+        # Get all questions in order
+        all_questions = list(DailyWellnessQuestionnaire.objects.filter(
+            language=selected_language
+        ).order_by('created_on', 'id'))
+
+        if not all_questions:
+            return Response({"message": "No questions found for this language."}, status=404)
+
         if user_id not in user_sessions:
             user_sessions[user_id] = {}
-
+            
+        # Ensure session_id entry exists
         if session_id not in user_sessions[user_id]:
             user_sessions[user_id][session_id] = {
-                "history": [],
-                "asked_questions": set(),
+                "asked_questions": set()
             }
-
+            
         session_data = user_sessions[user_id][session_id]
-
-        generation_config = {
-            "temperature": 1,
-            "top_p": 0.95,
-            "top_k": 40,
-            "max_output_tokens": 8192,
-            "response_mime_type": "text/plain",
-        }
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            generation_config=generation_config,
-            system_instruction=system_instruction,
-        )
-
-        # Append user message to history
-        session_data["history"].append({"role": "user", "parts": [user_message]})
-
-        # Start chat with existing history
-        chat_session = model.start_chat(history=session_data["history"])
-
-        # Send user message
-        response = chat_session.send_message(user_message)
-
-        # Append model response to history
-        session_data["history"].append({"role": "model", "parts": [response.text]})
-
-        # Save user's answer if applicable
-        if question_id and user_message.lower() != "hey":
-            answer_id = get_answer_id(question_id, user_message, daily_wellness_questionnaire)
-            update_or_insert_wellness_response(user_id, answer_id)
-
-        # Extract details from response text
-        main_msg, next_q_id, options = extract_question_details(response.text, daily_wellness_questionnaire)
-
-        # Check for repeated questions
         asked_ids = session_data["asked_questions"]
-        if next_q_id in asked_ids:
-            # Find next unasked question
-            unasked_questions = [q for q in daily_wellness_questionnaire if q.q_id not in asked_ids]
-            if unasked_questions:
-                next_question = unasked_questions[0]
-                main_msg = next_question.question_to_ask
-                next_q_id = next_question.q_id
-                options = getattr(next_question, 'options', [])
-            else:
-                main_msg = "You've completed all wellness questions for today!"
-                next_q_id = None
-                options = []
 
-        # Track asked question
-        if next_q_id:
-            asked_ids.add(next_q_id)
+        # Save previous answer (if not greeting)
+        if question_id and user_message.lower() != "hey":
+            answer_id = get_answer_id(question_id, user_message, all_questions)
+            update_or_insert_wellness_response(user_id, answer_id)
+            asked_ids.add(question_id)
+
+        # Determine next question
+        next_question = None
+        for question in all_questions:
+            print("[Chat Wellness] => Checking question ID:", question.q_id)
+            if question.q_id not in asked_ids:
+                next_question = question
+                break
+
+        if not next_question:
+            return Response({
+                "message": "You've completed all wellness questions for today!",
+                "question_id": None,
+                "options": []
+            })
 
         return Response({
-            "message": main_msg,
-            "question_id": next_q_id,
-            "options": options,
+            "message": next_question.question_to_ask,
+            "question_id": next_question.q_id,
+            "options" : next_question.response_choices or []
         })
-
+        
 class GameOverviewAPIView(APIView):
     pass
