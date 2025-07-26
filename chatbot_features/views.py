@@ -67,6 +67,17 @@ class ChatwellnessAPIView(APIView):
             update_or_insert_wellness_response(user_id, answer_id)
             asked_ids.add(question_id)
             print(f"[Chat Wellness] => Updated asked_ids: {asked_ids}")
+            
+            # ✅ Early termination condition for WQ-7 in English and Hebrew
+            early_termination_responses = {"no pain at all.", "ללא כאב בכלל."}
+            if question_id == "WQ-7" and user_message.strip().lower() in early_termination_responses:
+                print("[Chat Wellness] => Ending session early due to WQ-7 response: No pain at all.")
+                cache.delete(cache_key)
+                return Response({
+                    "message": "You've completed all wellness questions for today!",
+                    "question_id": None,
+                    "options": []
+                })
         else:
             print("[Chat Wellness] => Skipping answer processing (greeting or no question_id)")
 
@@ -100,6 +111,5 @@ class ChatwellnessAPIView(APIView):
             "options": next_question.response_choices or []
         })
   
-      
 class GameOverviewAPIView(APIView):
     pass

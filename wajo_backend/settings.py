@@ -95,8 +95,11 @@ WSGI_APPLICATION = "wajo_backend.wsgi.application"
 
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "wellness-cache"
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://redis-server:6379/1",  # Redis DB 1
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
     }
 }
 
