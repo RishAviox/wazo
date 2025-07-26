@@ -139,7 +139,10 @@ class TrainingCardData(WajoModel):
 class NewsCardData(WajoModel):
     language = models.CharField(max_length=10, default='en', choices=[('en', 'English'), ('he', 'Hebrew')])
     title = models.CharField(max_length=128)
-    data = models.JSONField()
+    data = models.JSONField() # these are dropdown options
+    # these are highlights from Rapid API
+    # updated every 24 hours via NotificationService
+    highlights = models.JSONField(default=dict) 
 
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
