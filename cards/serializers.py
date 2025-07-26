@@ -18,4 +18,4 @@ class TrainingCardDataSerializer(serializers.ModelSerializer):
 class NewsCardDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = NewsCardData
-        fields = ['title', 'data']
+        fields = ['title', 'data', 'highlights']
