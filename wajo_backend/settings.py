@@ -93,6 +93,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "wajo_backend.wsgi.application"
 
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "wellness-cache"
+    }
+}
+
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
