@@ -1,15 +1,23 @@
-import google.generativeai as genai
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import viewsets, mixins
 from django.core.cache import cache
+from django.utils import timezone
+from django.utils.timezone import datetime
+import ast
 
 from questionnaire.models import DailyWellnessQuestionnaire, RPEQuestionnaire
-from .utils import get_answer_id, get_rpe_answer_id, update_or_insert_wellness_response, update_or_insert_rpe_response
-from .prompts import get_wellness_prompt
+from calendar_entry.models import CalendarEventEntry, CalendarGoalEntry
+from calendar_entry.serializers import CalendarEventSerializer, CalendarGoalSerializer
+from .utils import (
+        get_answer_id, 
+        get_rpe_answer_id, 
+        update_or_insert_wellness_response, 
+        update_or_insert_rpe_response,
+    )
 
-user_sessions = {}
 
 class ChatwellnessAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -178,5 +186,90 @@ class RPEChatAPIView(APIView):
             "options": next_question.response_choices or {"data": []}
         })
   
+  
+class CalendarAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+        custom_repeat = request.query_params.getlist("custom_repeat")
+        
+        if not start_date and not end_date:
+            return Response({"error": "Both start_date and end_date are required."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        start_date = datetime.strptime(start_date, '%Y-%m-%d')
+        start_date = timezone.make_aware(start_date, timezone.get_current_timezone())
+        
+        end_date = datetime.strptime(end_date, '%Y-%m-%d')
+        end_date = timezone.make_aware(end_date, timezone.get_current_timezone())
+        
+        today = timezone.now().date()
+        
+        # [Needs Review]: Why can't start_date be in the past?
+        if start_date.date() < today:
+            return Response({"error": "Start date cannot be in the past."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if end_date.date() < today:
+            return Response({"error": "End date cannot be in the past."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if start_date > end_date:
+            return Response({"error": "End date cannot be before start date."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if custom_repeat:
+            try:
+                custom_repeat = ast.literal_eval(custom_repeat) 
+            except Exception:
+                return Response({"error": "Invalid format for custom_repeat."})
+ 
+        filters = {
+            'user': user,
+            'date__gte': start_date,
+            'date__lte': end_date,
+        }
+        
+        if custom_repeat:
+            filters['custom_repeat__days'] = custom_repeat
+
+        # Fetch and serialize events
+        events = CalendarEventEntry.objects.filter(**filters)
+        event_serializer = CalendarEventSerializer(events, many=True).data
+        
+        goals = CalendarGoalEntry.objects.filter(user=user, start_date__gte=start_date, end_date__lte=end_date)
+        goal_serializer = CalendarGoalSerializer(goals, many=True).data
+ 
+        return Response({
+            "events": event_serializer,
+            "goals": goal_serializer
+        }, status=status.HTTP_200_OK)
+
+class CalendarEventAPIViewSet(mixins.CreateModelMixin,
+                           mixins.UpdateModelMixin,
+                           mixins.DestroyModelMixin,
+                           viewsets.GenericViewSet
+                        ):
+    # here GET method is not allowed
+    queryset = CalendarEventEntry.objects.all()
+    serializer_class = CalendarEventSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+class CalendarGoalAPIViewSet(mixins.CreateModelMixin,
+                          mixins.UpdateModelMixin,
+                          mixins.DestroyModelMixin,
+                          viewsets.GenericViewSet
+                        ):
+    # here GET method is not allowed
+    queryset = CalendarGoalEntry.objects.all()
+    serializer_class = CalendarGoalSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+   
 class GameOverviewAPIView(APIView):
     pass
