@@ -1,6 +1,6 @@
 import re
 from django.utils import timezone
-from django.utils.timezone import now, datetime
+from django.utils.timezone import now, datetime, timedelta
 
 from questionnaire.models import DailyWellnessUserResponse, RPEUserResponse
 
@@ -126,3 +126,36 @@ def update_or_insert_rpe_response(user_id, updated_json):
         new_response.save()
         print("New response created.")
         return "Created"
+    
+def calculate_recurrence_dates(event, start_date, end_date):
+    dates = []
+
+    event_datetime = datetime.combine(event.date, datetime.min.time())
+    event_datetime = timezone.make_aware(event_datetime, timezone=timezone.get_current_timezone())
+    current_date = timezone.localtime(event_datetime)
+
+    if event.repeat == 'Daily':
+        while current_date <= end_date:
+            if current_date >= start_date:
+                dates.append(current_date)
+            current_date += timedelta(days=1)
+    
+    elif event.repeat == 'Weekly':
+        while current_date <= end_date:
+            if current_date >= start_date:
+                dates.append(current_date)
+            current_date += timedelta(weeks=1)
+    
+    elif event.repeat == 'Monthly':
+        while current_date <= end_date:
+            if current_date >= start_date:
+                dates.append(current_date)
+            current_date += timedelta(days=30)  # Simple monthly increment, adjust as needed
+    
+    elif event.repeat == 'Yearly':
+        while current_date <= end_date:
+            if current_date >= start_date:
+                dates.append(current_date)
+            current_date += timedelta(days=365)  # Simple monthly increment, adjust as needed
+
+    return dates

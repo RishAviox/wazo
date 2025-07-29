@@ -16,6 +16,7 @@ from .utils import (
         get_rpe_answer_id, 
         update_or_insert_wellness_response, 
         update_or_insert_rpe_response,
+        calculate_recurrence_dates,
     )
 
 
@@ -238,9 +239,41 @@ class CalendarAPIView(APIView):
         
         goals = CalendarGoalEntry.objects.filter(user=user, start_date__gte=start_date, end_date__lte=end_date)
         goal_serializer = CalendarGoalSerializer(goals, many=True).data
+        
+        # Get recurring events (that may start before the given start_date)
+        recurring_events = CalendarEventEntry.objects.filter(
+            user=user,
+            repeat__in=['Daily', 'Weekly', 'Monthly', 'Yearly']
+        )
+
+        expanded_recurring_events = []
+        for event in recurring_events:
+            rec_dates = calculate_recurrence_dates(event, start_date, end_date)
+            for date in rec_dates:
+                # Clone the event with updated date only for serialization (do not save to DB)
+                cloned_event = CalendarEventEntry(
+                    id=event.id,
+                    user=event.user,
+                    category=event.category,
+                    sub_category=event.sub_category,
+                    detail=event.detail,
+                    title=event.title,
+                    date=date.date(),  # Use just the date part
+                    start_time=event.start_time,
+                    end_time=event.end_time,
+                    location=event.location,
+                    repeat=event.repeat,
+                    custom_repeat=event.custom_repeat,
+                    participants=event.participants,
+                    notes=event.notes,
+                )
+                expanded_recurring_events.append(cloned_event)
+
+        expanded_serializer = CalendarEventSerializer(expanded_recurring_events, many=True).data
+        combined_events = event_serializer + expanded_serializer
  
         return Response({
-            "events": event_serializer,
+            "events": combined_events,
             "goals": goal_serializer
         }, status=status.HTTP_200_OK)
 
