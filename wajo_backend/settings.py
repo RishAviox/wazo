@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "teams",
     "match_data",
     "chatbot_features",
+    "tracevision"
 ]
 
 MIDDLEWARE = [
