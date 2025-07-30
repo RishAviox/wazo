@@ -7,6 +7,10 @@ from django.core.cache import cache
 from django.utils import timezone
 from django.utils.timezone import datetime
 import ast
+import re
+import json
+
+import google.generativeai as genai
 
 from questionnaire.models import DailyWellnessQuestionnaire, RPEQuestionnaire
 from calendar_entry.models import CalendarEventEntry, CalendarGoalEntry
@@ -17,9 +21,12 @@ from .utils import (
         update_or_insert_wellness_response, 
         update_or_insert_rpe_response,
         calculate_recurrence_dates,
+        get_latest_welness_responses_for_user,
     )
+from .prompts import get_wellness_overview_prompt
 
 
+# [Mobile App] feature name: update_wellness
 class ChatwellnessAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -119,7 +126,8 @@ class ChatwellnessAPIView(APIView):
             "question_id": next_question.q_id,
             "options": next_question.response_choices or []
         })
-  
+
+# [Mobile App] feature name: log_rpe
 class RPEChatAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -186,6 +194,94 @@ class RPEChatAPIView(APIView):
             "question_id": next_question.q_id,
             "options": next_question.response_choices or {"data": []}
         })
+ 
+# [Mobile App] feature name: how am i doing?
+class WellnessOverviewAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        user = request.user
+        user_id = f"{user.phone_no}"
+        session_id = request.data.get('session_id')
+        user_message = request.data.get('message')
+        selected_language = f"{user.selected_language}"
+
+        if not session_id or not user_message:
+            return Response({"error": "Missing required fields [session_id, message]"}, status=status.HTTP_400_BAD_REQUEST)
+
+        cache_key = f"wellness_overview_{user_id}_{session_id}"
+        chat_history = cache.get(cache_key) or []
+
+        try:
+            if user_message == "Hey":
+                user_message = get_latest_welness_responses_for_user(user)
+
+            # Ensure user_message is string
+            if not isinstance(user_message, str):
+                user_message = json.dumps(user_message)
+
+            all_questions = DailyWellnessQuestionnaire.objects.filter(
+                language=selected_language
+            ).order_by('created_on')
+
+            prompt = get_wellness_overview_prompt(selected_language, all_questions)
+
+            generation_config = {
+                "temperature": 1,
+                "top_p": 0.95,
+                "top_k": 40,
+                "max_output_tokens": 8192,
+                "response_mime_type": "text/plain",
+            }
+
+            model = genai.GenerativeModel(
+                model_name="gemini-1.5-flash",
+                generation_config=generation_config,
+                system_instruction=prompt,
+            )
+
+            # Start chat with history if available
+            chat_session = model.start_chat(history=chat_history)
+
+            # Add user's message
+            chat_session.history.append({
+                "role": "user",
+                "parts": [user_message]
+            })
+
+            # Send message
+            response = chat_session.send_message(user_message)
+
+            # Format model's response
+            response_message = response.text.strip()
+            follow_up_questions = []
+
+            # Extract options from response text
+            match = re.search(r'\[(.*?)\]', response_message)
+            if match:
+                options = [option.strip() for option in match.group(1).split(',')]
+                follow_up_questions = [
+                    {"id": f"option_{i+1}", "text": option, "emoji": "👉"}
+                    for i, option in enumerate(options)
+                ]
+                response_message = response_message.replace(match.group(0), '').strip()
+
+            # Add model's response to history
+            chat_session.history.append({
+                "role": "model",
+                "parts": [response_message]
+            })
+
+            # Cache only the chat history
+            cache.set(cache_key, chat_session.history, timeout=60 * 60 * 24)
+
+            return Response({
+                'message': response_message,
+                'options': follow_up_questions
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
   
   
 class CalendarAPIView(APIView):

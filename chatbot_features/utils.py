@@ -1,4 +1,5 @@
 import re
+import json
 from django.utils import timezone
 from django.utils.timezone import now, datetime, timedelta
 
@@ -159,3 +160,17 @@ def calculate_recurrence_dates(event, start_date, end_date):
             current_date += timedelta(days=365)  # Simple monthly increment, adjust as needed
 
     return dates
+
+
+def get_latest_welness_responses_for_user(user):
+    entries = []
+    response = DailyWellnessUserResponse.objects.filter(user=user).order_by('-updated_on').first()
+    if response:
+        entries.append({
+            'Id': response.id,
+            'Response': response.response,
+            'CreatedOn': response.created_on.isoformat(),
+            'UpdatedOn': response.updated_on.isoformat(),
+            'UserId': response.user.phone_no
+        })
+    return json.dumps(entries, indent=4)

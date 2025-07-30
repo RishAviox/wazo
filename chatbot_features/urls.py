@@ -2,8 +2,13 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
+    # update_wellness
     path("chat-wellness" , ChatwellnessAPIView.as_view() , name="chat-wellness"),
+    # log_rpe
     path("chat-rpe" , RPEChatAPIView.as_view() , name="chat-rpe"),
+    # how am i doing?
+    path("wellness-overview" , WellnessOverviewAPIView.as_view() , name="wellness-overview"),
+    
     # get all the events and goals
     path("calendar" , CalendarAPIView.as_view() , name="calendar"),
     
@@ -22,5 +27,6 @@ urlpatterns = [
         'patch': 'partial_update',
         'delete': 'destroy'
     }), name="calendar-goal-entry"),
+    
     path("game-overview" , GameOverviewAPIView.as_view() , name="game-overview"),
 ]
