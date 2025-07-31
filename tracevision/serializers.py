@@ -1,21 +1,10 @@
 import json
 from rest_framework import serializers
-from .models import MatchDataTracevision
+from .models import TraceSession
 
 
-class MatchDataTracevisionSerializer(serializers.ModelSerializer):
-    user = serializers.ReadOnlyField(source='user.id')
-    data = serializers.JSONField()
-
+class TraceVisionProcessesSerializer(serializers.ModelSerializer):
     class Meta:
-        model = MatchDataTracevision
-        fields = ['id', 'user', 'data', 'video']
+        model = TraceSession
+        fields = "__all__"
         read_only_fields = ['id', 'user']
-
-    def validate_data(self, value):
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError as e:
-                raise serializers.ValidationError("Invalid JSON format.") from e
-        return value

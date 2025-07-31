@@ -5,10 +5,13 @@ import json
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
+from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework.permissions import IsAuthenticated
 
 from django.conf import settings
 
 from .models import TraceSession, TracePlayer
+from .serializers import TraceVisionProcessesSerializer
 
 logger = logging.getLogger()
 
@@ -17,13 +20,29 @@ API_KEY = settings.TRACEVISION_API_KEY
 GRAPHQL_URL = settings.TRACEVISION_GRAPHQL_URL
 
 
+class TraceVisionProcessesList(ListAPIView):
+    serializer_class = TraceVisionProcessesSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return TraceSession.objects.filter(user=self.request.user)
+
+
+class TraceVisionProcessDetail(RetrieveAPIView):
+    serializer_class = TraceVisionProcessesSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return TraceSession.objects.filter(user=self.request.user)
+
+
 class TraceVisionProcessView(APIView):
     """
     API endpoint to trigger TraceVision session creation and video upload
     for a given MatchDataTracevision instance.
     """
 
-    def post(self, request, *args, **kwargs):
+    def post(self, request):
         try:
             trace_data = json.loads(request.data.get('data'))
 
