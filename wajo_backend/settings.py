@@ -48,7 +48,8 @@ INSTALLED_APPS = [
     "teams",
     "match_data",
     "chatbot_features",
-    "tracevision"
+    "tracevision",
+    "django_apscheduler"
 ]
 
 MIDDLEWARE = [
@@ -198,3 +199,4 @@ MEDIA_URL = f"https://{AZURE_CUSTOM_DOMAIN}/media/"
 TRACEVISION_CUSTOMER_ID = os.environ.get("TRACEVISION_CUSTOMER_ID")
 TRACEVISION_API_KEY = os.environ.get("TRACEVISION_API_KEY")
 TRACEVISION_GRAPHQL_URL = os.environ.get("TRACEVISION_GRAPHQL_URL")
+SCHEDULER_AUTOSTART = os.environ.get("SCHEDULER_AUTOSTART", "False") 

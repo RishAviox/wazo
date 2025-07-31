@@ -17,3 +17,4 @@ django-storages
 azure-storage-blob
 psycopg2-binary
 django-redis
+django-apscheduler
