@@ -180,5 +180,5 @@ class TraceVisionProcessView(APIView):
             return Response({"success": True, "session_id": session_id}, status=http_status.HTTP_201_CREATED)
 
         except Exception as e:
-            logger.exception("Error while processing TraceVision request")
+            logger.exception(f"Error while processing TraceVision request: {str(e)}")
             return Response({"error": "Internal server error"}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
