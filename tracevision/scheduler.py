@@ -10,7 +10,7 @@ from tracevision.models import TraceSession
 logger = logging.getLogger(__name__)
 
 def process_trace_sessions():
-    CUSTOMER_ID = settings.TRACEVISION_CUSTOMER_ID
+    CUSTOMER_ID = int(settings.TRACEVISION_CUSTOMER_ID)
     API_KEY = settings.TRACEVISION_API_KEY
     GRAPHQL_URL = settings.TRACEVISION_GRAPHQL_URL
 
@@ -32,7 +32,7 @@ def process_trace_sessions():
                 """,
                 "variables": {
                     "token": {"customer_id": CUSTOMER_ID, "token": API_KEY},
-                    "session_id": session.session_id,
+                    "session_id": int(session.session_id),
                 },
             }
 
@@ -59,7 +59,7 @@ def process_trace_sessions():
                     """,
                     "variables": {
                         "token": {"customer_id": CUSTOMER_ID, "token": API_KEY},
-                        "session_id": session.session_id,
+                        "session_id": int(session.session_id),
                     },
                 }
 

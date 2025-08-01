@@ -15,7 +15,7 @@ from .serializers import TraceVisionProcessesSerializer
 
 logger = logging.getLogger()
 
-CUSTOMER_ID = settings.TRACEVISION_CUSTOMER_ID
+CUSTOMER_ID = int(settings.TRACEVISION_CUSTOMER_ID)
 API_KEY = settings.TRACEVISION_API_KEY
 GRAPHQL_URL = settings.TRACEVISION_GRAPHQL_URL
 
@@ -78,7 +78,7 @@ class TraceVisionProcessView(APIView):
                 """,
                 "variables": {
                     "token": {
-                        "customer_id": int(CUSTOMER_ID),
+                        "customer_id": CUSTOMER_ID,
                         "token": API_KEY
                     },
                     "sessionData": {
@@ -124,7 +124,7 @@ class TraceVisionProcessView(APIView):
                 """,
                 "variables": {
                     "token": {
-                        "customer_id": int(CUSTOMER_ID),
+                        "customer_id": CUSTOMER_ID,
                         "token": API_KEY
                     },
                     "session_id": session_id,

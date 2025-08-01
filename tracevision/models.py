@@ -12,7 +12,7 @@ class TraceSession(models.Model):
     home_score = models.PositiveSmallIntegerField()
     away_score = models.PositiveSmallIntegerField()
     video_url = models.URLField()
-    result = models.JSONField()
+    result = models.JSONField(default=dict)
 
     status = models.CharField(
         max_length=20,
