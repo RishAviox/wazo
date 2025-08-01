@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     "teams",
     "match_data",
     "chatbot_features",
+    "tracevision",
+    "django_apscheduler"
 ]
 
 MIDDLEWARE = [
@@ -193,3 +195,8 @@ DEFAULT_FILE_STORAGE = 'core.azure_storages.AzureMediaStorage'
 # Set URLs to serve static and media files
 STATIC_URL = f"https://{AZURE_CUSTOM_DOMAIN}/static/"
 MEDIA_URL = f"https://{AZURE_CUSTOM_DOMAIN}/media/"
+
+TRACEVISION_CUSTOMER_ID = os.environ.get("tracevision-customer-id")
+TRACEVISION_API_KEY = os.environ.get("tracevision-api-key")
+TRACEVISION_GRAPHQL_URL = os.environ.get("tracevision-graphql-url")
+SCHEDULER_AUTOSTART = os.environ.get("scheduler-autostart", "False") 

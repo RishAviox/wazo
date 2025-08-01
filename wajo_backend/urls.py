@@ -14,6 +14,7 @@ urlpatterns = [
     path("api/calendar/", include("calendar_entry.urls")),
     path("api/match/", include("match_data.urls")),
     path("api/chatbot-features/", include("chatbot_features.urls")),
+    path("api/vision/", include("tracevision.urls"))
 ]
 
 
