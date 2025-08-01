@@ -196,7 +196,7 @@ DEFAULT_FILE_STORAGE = 'core.azure_storages.AzureMediaStorage'
 STATIC_URL = f"https://{AZURE_CUSTOM_DOMAIN}/static/"
 MEDIA_URL = f"https://{AZURE_CUSTOM_DOMAIN}/media/"
 
-TRACEVISION_CUSTOMER_ID = os.environ.get("TRACEVISION_CUSTOMER_ID")
-TRACEVISION_API_KEY = os.environ.get("TRACEVISION_API_KEY")
-TRACEVISION_GRAPHQL_URL = os.environ.get("TRACEVISION_GRAPHQL_URL")
-SCHEDULER_AUTOSTART = os.environ.get("SCHEDULER_AUTOSTART", "False") 
+TRACEVISION_CUSTOMER_ID = os.environ.get("tracevision-customer-id")
+TRACEVISION_API_KEY = os.environ.get("tracevision-api-key")
+TRACEVISION_GRAPHQL_URL = os.environ.get("tracevision-graphql-url")
+SCHEDULER_AUTOSTART = os.environ.get("scheduler-autostart", "False") 
