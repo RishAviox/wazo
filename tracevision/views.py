@@ -1,6 +1,7 @@
 import logging
 import requests
 import json
+from datetime import datetime
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -10,8 +11,9 @@ from rest_framework.permissions import IsAuthenticated
 
 from django.conf import settings
 
-from .models import TraceSession, TracePlayer
-from .serializers import TraceVisionProcessesSerializer
+from tracevision.models import TraceSession, TracePlayer
+from tracevision.serializers import TraceVisionProcessesSerializer
+from tracevision.services import TraceVisionService
 
 logger = logging.getLogger()
 
@@ -39,7 +41,7 @@ class TraceVisionProcessDetail(RetrieveAPIView):
 class TraceVisionProcessView(APIView):
     """
     API endpoint to trigger TraceVision session creation and video upload
-    for a given MatchDataTracevision instance.
+    for a given TraceSession instance.
     """
 
     def post(self, request):
@@ -177,8 +179,92 @@ class TraceVisionProcessView(APIView):
                 for player in players
             ])
 
-            return Response({"success": True, "session_id": session_id}, status=http_status.HTTP_201_CREATED)
+            return Response({"success": True, "session_id": session_id, "trace_session_id": session.id}, status=http_status.HTTP_201_CREATED)
 
         except Exception as e:
             logger.exception(f"Error while processing TraceVision request: {str(e)}")
+            return Response({"error": "Internal server error"}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class TraceVisionProcessResultView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            session = TraceSession.objects.get(id=pk, user=request.user)
+            return Response(session.result, status=http_status.HTTP_200_OK)
+        except TraceSession.DoesNotExist:
+            return Response({"error": "Session not found"}, status=http_status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception(f"Error while fetching TraceVision result: {str(e)}")
+            return Response({"error": "Internal server error"}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TraceVisionPollStatusView(APIView):
+    """
+    API endpoint to actively poll TraceVision API for latest session status and data.
+    This is used when user refreshes the app to get real-time updates.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            # Get the session for the authenticated user
+            session = TraceSession.objects.get(id=pk, user=request.user)
+            
+            # Check if user wants to force refresh cache
+            force_refresh = request.query_params.get('force_refresh', 'false').lower() == 'true'
+            
+            # Initialize service
+            tracevision_service = TraceVisionService()
+            
+            # Get status data (with caching)
+            status_data = tracevision_service.get_session_status(session, force_refresh=force_refresh)
+            
+            if not status_data:
+                return Response({
+                    "error": "Failed to retrieve status from TraceVision API",
+                    "session_id": session.session_id
+                }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            new_status = status_data.get("status")
+            previous_status = session.status
+            
+            # Update session status if it has changed
+            if new_status and new_status != previous_status:
+                session.status = new_status
+                session.save()
+                logger.info(f"Updated session {session.session_id} status from {previous_status} to {new_status}")
+                
+                # If status changed to completed, fetch and save result data
+                if new_status == "completed":
+                    result_data = tracevision_service.get_session_result(session)
+                    if result_data:
+                        session.result = result_data
+                        session.save()
+                        logger.info(f"Updated result data for completed session {session.session_id}")
+            
+            # Prepare response data
+            response_data = {
+                "success": True,
+                "session_id": session.session_id,
+                "status": session.status,
+                "previous_status": previous_status,
+                "status_updated": new_status != previous_status if new_status else False,
+                "result": session.result,
+                "match_date": session.match_date,
+                "home_team": session.home_team,
+                "away_team": session.away_team,
+                "home_score": session.home_score,
+                "away_score": session.away_score,
+                "video_url": session.video_url,
+                "cached": status_data.get('cached', False),
+                "cache_timestamp": datetime.now().isoformat()
+            }
+            
+            return Response(response_data, status=http_status.HTTP_200_OK)
+            
+        except TraceSession.DoesNotExist:
+            return Response({"error": "Session not found"}, status=http_status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception(f"Error while polling TraceVision status: {str(e)}")
             return Response({"error": "Internal server error"}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)

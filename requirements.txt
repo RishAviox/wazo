@@ -17,4 +17,6 @@ django-storages
 azure-storage-blob
 psycopg2-binary
 django-redis
-django-apscheduler
+django-apscheduler==0.7.0
+pyfcm>=2.0.0
+google-auth>=2.0.0
