@@ -199,4 +199,8 @@ MEDIA_URL = f"https://{AZURE_CUSTOM_DOMAIN}/media/"
 TRACEVISION_CUSTOMER_ID = os.environ.get("tracevision-customer-id")
 TRACEVISION_API_KEY = os.environ.get("tracevision-api-key")
 TRACEVISION_GRAPHQL_URL = os.environ.get("tracevision-graphql-url")
-SCHEDULER_AUTOSTART = os.environ.get("scheduler-autostart", "False") 
+SCHEDULER_AUTOSTART = os.environ.get("scheduler-autostart", "False")
+
+# TraceVision Cache Configuration
+TRACEVISION_STATUS_CACHE_TIMEOUT = int(os.environ.get("tracevision-status-cache-timeout", "300"))  # 5 minutes
+TRACEVISION_RESULT_CACHE_TIMEOUT = int(os.environ.get("tracevision-result-cache-timeout", "1800"))  # 30 minutes 

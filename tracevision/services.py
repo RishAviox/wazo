@@ -143,8 +143,27 @@ class TraceVisionService:
             res = requests.post(self.graphql_url, headers={"Content-Type": "application/json"}, json=status_payload)
             
             if res.status_code != 200:
-                logger.error(f"Failed to retrieve status for session {session.session_id}: {res.status_code}")
+                logger.info(f"Failed to retrieve status for session {session.session_id}: {res.status_code}")
                 return None
+            
+            # logger.info(f"Status data: {res.json()}")
+            # Save the res.json() response to a file in the root directory with the session_response_id
+            # import os
+            # import json
+
+            # --------------------Use only for local testing --------------
+            # try:
+            #     response_json = res.json()
+            #     session_response_id = session.session_id
+            #     filename = f"tracevision_session_{session_response_id}.json"
+            #     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            #     file_path = os.path.join(root_dir, filename)
+            #     with open(file_path, "w", encoding="utf-8") as f:
+            #         json.dump(response_json, f, ensure_ascii=False, indent=2)
+            #     logger.info(f"Saved TraceVision session response to {file_path}")
+            # except Exception as e:
+            #     logger.exception(f"Failed to save TraceVision session response for session {session.session_id}: {e}")
+            # --------------------Use only for local testing--------------
                 
             data = res.json().get("data", {}).get("session", {})
             
