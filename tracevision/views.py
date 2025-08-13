@@ -233,8 +233,8 @@ class TraceVisionProcessView(APIView):
 
             return Response({
                 "success": True,
-                "session_id": session_id,
-                "trace_session_id": session.id,
+                "id": session.id,
+                "session_id": session.session_id,
                 "message": "TraceVision session created and video processing started successfully",
                 "video_source": "link" if video_link else "file_upload"
             }, status=http_status.HTTP_201_CREATED)
@@ -284,7 +284,7 @@ class TraceVisionPollStatusView(APIView):
 
             # Get status data (with caching)
             status_data = tracevision_service.get_session_status(
-                session, force_refresh=True)
+                session, force_refresh=force_refresh)
 
             if not status_data:
                 return Response({
@@ -315,6 +315,7 @@ class TraceVisionPollStatusView(APIView):
             # Prepare response data
             response_data = {
                 "success": True,
+                "id": session.id,
                 "session_id": session.session_id,
                 "status": session.status,
                 "previous_status": previous_status,
@@ -326,8 +327,8 @@ class TraceVisionPollStatusView(APIView):
                 "home_score": session.home_score,
                 "away_score": session.away_score,
                 "video_url": session.video_url,
-                "cached": status_data.get('cached', False),
-                "cache_timestamp": datetime.now().isoformat()
+                # "cached": status_data.get('cached', False),
+                # "cache_timestamp": datetime.now().isoformat()
             }
 
             return Response(response_data, status=http_status.HTTP_200_OK)
