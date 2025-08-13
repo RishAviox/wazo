@@ -97,22 +97,25 @@ def process_trace_sessions():
             logger.info(
                 f"Updated session {session.session_id} status from {previous_status} to {new_status}")
 
-            # If status changed to completed, create silent notification and fetch results
-            if new_status == "completed" and previous_status != "completed":
+            # Handle final status changes (processed or process_error)
+            if new_status in ["processed", "process_error"] and previous_status != new_status:
+                status_description = "processed" if new_status == "processed" else "encountered process error"
                 logger.info(
-                    f"Session {session.session_id} completed. Creating silent notification.")
+                    f"Session {session.session_id} {status_description}. Creating silent notification.")
+                
+                # Create silent notification for both statuses
                 create_silent_notification(session)
 
-                # Fetch and save the complete result data using service
+                # Fetch and save result data for both statuses (may contain error details for process_error)
                 result_data = tracevision_service.get_session_result(session)
                 if result_data:
                     session.result = result_data
                     session.save()
                     logger.info(
-                        f"Saved result data for completed session {session.session_id}")
+                        f"Saved result data for {new_status} session {session.session_id}")
                 else:
                     logger.error(
-                        f"Failed to fetch result for session {session.session_id}")
+                        f"Failed to fetch result for {new_status} session {session.session_id}")
 
         except Exception as e:
             logger.exception(

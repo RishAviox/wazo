@@ -31,13 +31,35 @@ class NotificationService:
             Notification: Created notification instance or None if failed
         """
         try:
-            # Create a silent notification (no title/body, just data in postback)
+            # Create a silent notification with compact postback and detailed body
+            # Postback format: "tv:{session_id}:{status_code}" (max 24 chars)
+            status_code = "ok" if session_data.get('status') == "processed" else "err"
+            compact_postback = f"tv:{session_data.get('session_id')}:{status_code}"
+            
+            # Ensure postback doesn't exceed 24 characters
+            if len(compact_postback) > 24:
+                # Truncate session_id if needed, keeping format intact
+                max_session_id_length = 24 - len("tv::") - len(status_code)
+                truncated_session_id = str(session_data.get('session_id'))[:max_session_id_length]
+                compact_postback = f"tv:{truncated_session_id}:{status_code}"
+            
+            # Create detailed body with session information (max 255 chars)
+            body_text = f"Session {session_data.get('session_id')} {status_code.upper()}"
+            if session_data.get('home_team') and session_data.get('away_team'):
+                body_text += f" - {session_data.get('home_team')} vs {session_data.get('away_team')}"
+            if session_data.get('match_date'):
+                body_text += f" ({session_data.get('match_date')})"
+            
+            # Ensure body doesn't exceed 255 characters
+            if len(body_text) > 255:
+                body_text = body_text[:252] + "..."
+            
             notification = Notification.objects.create(
                 user=user,
                 device=device,
                 title="",  # Empty title for silent notification
-                body="",   # Empty body for silent notification
-                postback=f"session_completed:{session_data.get('session_id')}:{session_data.get('status')}:{session_data.get('match_date')}:{session_data.get('home_team')}:{session_data.get('away_team')}:{session_data.get('home_score')}:{session_data.get('away_score')}"
+                body=body_text,  # Detailed session information
+                postback=compact_postback
             )
             
             logger.info(f"Silent notification created for device {device.fcm_token} for session {session_data.get('session_id')}")

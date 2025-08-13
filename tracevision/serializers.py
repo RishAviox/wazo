@@ -1,6 +1,6 @@
-import json
 from rest_framework import serializers
-from tracevision.models import TraceSession, TracePlayer
+from tracevision.models import TraceSession
+from tracevision.utils import get_hex_from_color_name
 
 
 class TraceVisionProcessesSerializer(serializers.ModelSerializer):
@@ -61,14 +61,12 @@ class TraceVisionProcessSerializer(serializers.Serializer):
 
     def validate_video_file(self, value):
         """Validate video file field."""
-        print(f"Validating video_file: {value}")
         if value is None:
             return None
         return value
 
     def validate_video_link(self, value):
         """Validate video link field."""
-        print(f"Validating video_link: {value}")
         if value is None or value == "":
             return None
         return value
@@ -90,26 +88,30 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             video_link = None
 
         if not video_link and not video_file:
-            print("ERROR: Neither video_link nor video_file found!")
             raise serializers.ValidationError(
                 "Either video_link or video_file must be provided")
 
         if video_link and video_file:
-            print("ERROR: Both video_link and video_file found!")
             raise serializers.ValidationError(
                 "Cannot provide both video_link and video_file. Choose one option.")
         return data
 
     def validate_home_team_jersey_color(self, value):
         """Validate hex color format."""
-        print(f"Validating home_team_jersey_color: {value}")
-        if not value.startswith('#') or len(value) != 7:
+
+        hex_color = get_hex_from_color_name(value)
+        if not hex_color:
+            raise serializers.ValidationError(
+                f"Invalid color name: {value}"
+            )
+
+        if not hex_color.startswith('#') or len(hex_color) != 7:
             raise serializers.ValidationError(
                 "Home team jersey color must be a valid hex color (e.g., #FF0000)")
 
         # Check if the hex value is valid
         try:
-            int(value[1:], 16)
+            int(hex_color[1:], 16)
         except ValueError:
             raise serializers.ValidationError(
                 "Home team jersey color must be a valid hex color")
@@ -118,14 +120,18 @@ class TraceVisionProcessSerializer(serializers.Serializer):
 
     def validate_away_team_jersey_color(self, value):
         """Validate hex color format."""
-        print(f"Validating away_team_jersey_color: {value}")
-        if not value.startswith('#') or len(value) != 7:
+        hex_color = get_hex_from_color_name(value)
+        if not hex_color:
+            raise serializers.ValidationError(
+                f"Invalid color name: {value}"
+            )
+        if not hex_color.startswith('#') or len(hex_color) != 7:
             raise serializers.ValidationError(
                 "Away team jersey color must be a valid hex color (e.g., #0000FF)")
 
         # Check if the hex value is valid
         try:
-            int(value[1:], 16)
+            int(hex_color[1:], 16)
         except ValueError:
             raise serializers.ValidationError(
                 "Away team jersey color must be a valid hex color")
