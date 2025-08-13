@@ -20,3 +20,4 @@ django-redis
 django-apscheduler==0.7.0
 pyfcm>=2.0.0
 google-auth>=2.0.0
+webcolors==24.11.1
