@@ -111,7 +111,7 @@ class NotificationService:
             list: List of created notification instances
         """
         try:
-            user_devices = user.wajouserdevice_set.all()
+            user_devices = user.devices.all()
             notifications = []
             
             for device in user_devices:
@@ -140,7 +140,7 @@ class NotificationService:
             list: List of created notification instances
         """
         try:
-            user_devices = user.wajouserdevice_set.all()
+            user_devices = user.devices.all()
             notifications = []
             
             for device in user_devices:
