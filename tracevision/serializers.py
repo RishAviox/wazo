@@ -10,6 +10,16 @@ class TraceVisionProcessesSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'user']
 
 
+class TraceSessionListSerializer(serializers.ModelSerializer):
+    """
+    Serializer for TraceSession list view with essential information
+    """
+    class Meta:
+        model = TraceSession
+        fields = ['id', 'session_id', 'status', 'user', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'session_id', 'status', 'user', 'created_at', 'updated_at']
+
+
 class TraceVisionProcessSerializer(serializers.Serializer):
     """
     Serializer for TraceVision process API with validation according to Figma requirements.

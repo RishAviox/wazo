@@ -7,11 +7,10 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
-
 from django.conf import settings
 
 from tracevision.models import TraceSession, TracePlayer
-from tracevision.serializers import TraceVisionProcessesSerializer, TraceVisionProcessSerializer
+from tracevision.serializers import TraceVisionProcessesSerializer, TraceVisionProcessSerializer, TraceSessionListSerializer
 from tracevision.services import TraceVisionService
 
 logger = logging.getLogger()
@@ -22,11 +21,19 @@ GRAPHQL_URL = settings.TRACEVISION_GRAPHQL_URL
 
 
 class TraceVisionProcessesList(ListAPIView):
-    serializer_class = TraceVisionProcessesSerializer
+    serializer_class = TraceSessionListSerializer
     permission_classes = [IsAuthenticated]
-
+    
     def get_queryset(self):
-        return TraceSession.objects.filter(user=self.request.user)
+        return TraceSession.objects.filter(user=self.request.user).order_by('-updated_at', '-created_at')
+    
+    def get_paginated_response(self, data):
+        """
+        Override to add custom response format
+        """
+        response = super().get_paginated_response(data)
+        response.data['success'] = True
+        return response
 
 
 class TraceVisionProcessDetail(RetrieveAPIView):

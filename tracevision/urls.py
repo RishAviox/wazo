@@ -1,6 +1,12 @@
 from django.urls import path
 
-from .views import TraceVisionProcessView, TraceVisionProcessesList, TraceVisionProcessDetail, TraceVisionPollStatusView, TraceVisionSchedulerStatusView
+from .views import (
+    TraceVisionProcessView, 
+    TraceVisionProcessesList, 
+    TraceVisionProcessDetail, 
+    TraceVisionPollStatusView, 
+    TraceVisionSchedulerStatusView
+)
 
 urlpatterns = [
     path('process/create/', TraceVisionProcessView.as_view(), name='match-data-create'),

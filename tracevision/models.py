@@ -19,6 +19,13 @@ class TraceSession(models.Model):
         default="waiting_for_data",
         help_text="Status of the session processing"
     )
+    
+    # Timestamp fields
+    created_at = models.DateTimeField(auto_now_add=True, help_text="When the session was created")
+    updated_at = models.DateTimeField(auto_now=True, help_text="When the session was last updated")
+
+    class Meta:
+        ordering = ['-updated_at', '-created_at']  # Latest updated first, then latest created
 
     def __str__(self):
         return f"{self.match_date} | {self.home_team} vs {self.away_team} | Status: {self.status}"
