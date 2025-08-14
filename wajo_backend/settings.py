@@ -69,7 +69,7 @@ REST_FRAMEWORK = {
         'core.middlewares.JWTAuthentication',
         'chatbot_admin.middlewares.ChatbotAdminJWTAuthentication',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'wajo_backend.custom_pagination.CustomPageNumberPagination',
     'PAGE_SIZE': 10,
 }
 
