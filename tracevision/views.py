@@ -80,8 +80,11 @@ class TraceVisionProcessView(APIView):
             away_team = serializer.validated_data['away_team_name']
             home_color = serializer.validated_data['home_team_jersey_color']
             away_color = serializer.validated_data['away_team_jersey_color']
-            final_score = serializer.validated_data.get('final_score', 0)
+            final_score_str = serializer.validated_data['final_score']
             start_time = serializer.validated_data.get('start_time')
+            
+            # Parse the final score to get individual team scores
+            home_score, away_score = map(int, final_score_str.split('-'))
 
             # Step 1: Create TraceVision session
             logger.info("Creating TraceVision session...")
@@ -105,12 +108,12 @@ class TraceVisionProcessView(APIView):
                         "game_info": {
                             "home_team": {
                                 "name": home_team,
-                                "score": final_score,
+                                "score": home_score,
                                 "color": home_color
                             },
                             "away_team": {
                                 "name": away_team,
-                                "score": final_score,
+                                "score": away_score,
                                 "color": away_color
                             }
                         },
@@ -232,8 +235,8 @@ class TraceVisionProcessView(APIView):
                 match_date=datetime.now().date(),
                 home_team=home_team,
                 away_team=away_team,
-                home_score=final_score,
-                away_score=final_score,
+                home_score=home_score,
+                away_score=away_score,
                 video_url=video_url_for_db,
                 status="waiting_for_data"  # Set initial status
             )

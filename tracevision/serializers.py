@@ -59,10 +59,9 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         required=True,
         help_text="Hex color code for away team jersey (e.g., #0000FF)"
     )
-    final_score = serializers.IntegerField(
-        required=False,
-        min_value=0,
-        help_text="Final score of the match (optional)"
+    final_score = serializers.CharField(
+        required=True,
+        help_text="Final score of the match in format 'home_score-away_score' (e.g., '2-1', '0-0'). Use '0-0' for no score."
     )
     start_time = serializers.DateTimeField(
         required=False,
@@ -159,3 +158,38 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         if not value.strip():
             raise serializers.ValidationError("Away team name cannot be empty")
         return value.strip()
+
+    def validate_final_score(self, value):
+        """Validate final score format (home_score-away_score)."""
+        if not value or value.strip() == "":
+            raise serializers.ValidationError(
+                "Final score is required. Use '0-0' if there is no score."
+            )
+        
+        value = value.strip()
+        
+        # Check if it contains exactly one dash
+        if value.count('-') != 1:
+            raise serializers.ValidationError(
+                "Final score must be in format 'home_score-away_score' (e.g., '2-1', '0-0')"
+            )
+        
+        # Split and validate both parts
+        try:
+            home_score_str, away_score_str = value.split('-')
+            
+            # Validate both scores are non-negative integers
+            home_score = int(home_score_str)
+            away_score = int(away_score_str)
+            
+            if home_score < 0 or away_score < 0:
+                raise serializers.ValidationError(
+                    "Both home and away scores must be non-negative integers"
+                )
+                
+        except ValueError:
+            raise serializers.ValidationError(
+                "Final score must contain valid integers in format 'home_score-away_score' (e.g., '2-1', '0-0')"
+            )
+        
+        return value
