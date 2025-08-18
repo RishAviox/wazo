@@ -133,42 +133,43 @@ def start_scheduler():
     Production: Every 2 hours
     """
     try:
+        pass
         # Check if we're in development or production
-        is_development = settings.DEBUG == True
+        # is_development = settings.DEBUG == True
 
-        if is_development:
-            # Development: Run every minute for testing
-            trigger = CronTrigger(minute="*")  # Every minute
-            interval_description = "every minute"
-            logger.info("Starting scheduler in DEVELOPMENT mode")
-        else:
-            # Production: Run every 2 hours
-            trigger = CronTrigger(hour="*/2")  # Every 2 hours
-            interval_description = "every 2 hours"
-            logger.info("Starting scheduler in PRODUCTION mode")
+        # if is_development:
+        #     # Development: Run every minute for testing
+        #     trigger = CronTrigger(minute="*")  # Every minute
+        #     interval_description = "every minute"
+        #     logger.info("Starting scheduler in DEVELOPMENT mode")
+        # else:
+        #     # Production: Run every 2 hours
+        #     trigger = CronTrigger(hour="*/2")  # Every 2 hours
+        #     interval_description = "every 2 hours"
+        #     logger.info("Starting scheduler in PRODUCTION mode")
 
-        scheduler.add_jobstore(DjangoJobStore(), "default")
+        # scheduler.add_jobstore(DjangoJobStore(), "default")
 
-        # Add the job with appropriate trigger
-        scheduler.add_job(
-            process_trace_sessions,
-            trigger=trigger,
-            id='trace_session_processor',
-            max_instances=1,
-            replace_existing=True
-        )
+        # # Add the job with appropriate trigger
+        # scheduler.add_job(
+        #     process_trace_sessions,
+        #     trigger=trigger,
+        #     id='trace_session_processor',
+        #     max_instances=1,
+        #     replace_existing=True
+        # )
 
-        register_events(scheduler)
-        scheduler.start()
+        # register_events(scheduler)
+        # scheduler.start()
 
-        logger.info(
-            f"✅ TraceVision scheduler started successfully - running {interval_description}")
-        logger.info(f"📋 Total jobs in scheduler: {len(scheduler.get_jobs())}")
+        # logger.info(
+        #     f"✅ TraceVision scheduler started successfully - running {interval_description}")
+        # logger.info(f"📋 Total jobs in scheduler: {len(scheduler.get_jobs())}")
 
-        # Log next run time
-        job = scheduler.get_job('trace_session_processor')
-        if job:
-            logger.info(f"⏰ Next run time: {job.next_run_time}")
+        # # Log next run time
+        # job = scheduler.get_job('trace_session_processor')
+        # if job:
+        #     logger.info(f"⏰ Next run time: {job.next_run_time}")
 
     except Exception as e:
         logger.error(f"❌ Failed to start scheduler: {e}")

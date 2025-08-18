@@ -54,7 +54,7 @@ class TracePlayer(models.Model):
     team = models.CharField(max_length=100)
     position = models.CharField(max_length=100)
     session = models.ForeignKey(to=TraceSession, on_delete=models.CASCADE)
-    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='trace_players', help_text="User who owns this player data")
+    # user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='trace_players', help_text="User who owns this player data")
 
 
 class TraceHighlight(models.Model):
@@ -99,8 +99,8 @@ class TraceObject(models.Model):
     tracking_url = models.URLField(help_text="URL to fetch tracking data")
     role = models.CharField(max_length=50, null=True, blank=True, help_text="Role of the object")
     
-    session = models.ForeignKey(TraceSession, on_delete=models.CASCADE, related_name='objects')
-    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='trace_objects', help_text="User who owns this object")
+    session = models.ForeignKey(TraceSession, on_delete=models.CASCADE, related_name='trace_objects')
+    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='user_trace_objects', help_text="User who owns this object")
     
     # For storing parsed tracking data instead of making separate requests
     tracking_data = models.JSONField(default=list, help_text="Parsed tracking data points (time_off, x, y, w, h)")

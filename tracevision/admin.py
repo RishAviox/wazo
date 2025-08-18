@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import TraceSession, TracePlayer
+from .models import TraceSession, TracePlayer, TraceHighlight, TraceObject, TraceHighlightObject, TrackingData
 from core.admin import admin_site
 
 
@@ -24,3 +24,8 @@ class TracePlayerAdmin(admin.ModelAdmin):
 #  Register models to custom admin_site
 admin_site.register(TraceSession, TraceSessionAdmin)
 admin_site.register(TracePlayer, TracePlayerAdmin)
+
+admin_site.register(TraceHighlight)
+admin_site.register(TraceObject)
+admin_site.register(TraceHighlightObject)
+admin_site.register(TrackingData)
