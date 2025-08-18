@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "match_data",
     "chatbot_features",
     "tracevision",
+    "django_celery_beat",
     "django_apscheduler"
 ]
 
@@ -141,6 +142,16 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+
+# Celery configuration
+PROJECT_NAME = os.getenv("project-name", 'wajo_backend')
+CELERY_TIMEZONE = 'UTC'
+CELERY_RESULT_BACKEND = 'django-db'
+DJANGO_SETTINGS_MODULE = os.getenv("django-settings-module", "wajo_backend.settings")
+
+# Celery Beat Configuration (only needed for production settings)
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BEAT_SYNC_EVERY = 1  # Sync schedule every 1 minute
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i18n/

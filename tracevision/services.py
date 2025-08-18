@@ -7,16 +7,19 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+
 class TraceVisionService:
     """
     Service layer for TraceVision API operations and caching.
     Handles all external API calls and caching logic.
     """
 
+
     def __init__(self):
         self.customer_id = int(settings.TRACEVISION_CUSTOMER_ID)
         self.api_key = settings.TRACEVISION_API_KEY
         self.graphql_url = settings.TRACEVISION_GRAPHQL_URL
+
 
         # Cache timeouts
         self.status_cache_timeout = getattr(
@@ -194,6 +197,33 @@ class TraceVisionService:
 
     def _fetch_session_result(self, session):
         """Fetch session result data from TraceVision API."""
+
+        """
+            query GetFullSessionResult($sessionId: ID!) {  
+                sessionResult(session_id: $sessionId) {  
+                    highlights {  
+                    highlight_id  
+                    video_id  
+                    start_offset  
+                    duration  
+                    side  
+                    tags  
+                    objects {  
+                        object_id  
+                        type  
+                        side  
+                    }  
+                    video_stream  
+                    }  
+                    objects {  
+                    object_id  
+                    type  
+                    side  
+                    tracking_url  
+                    }  
+                }  
+            } 
+        """
         try:
             result_payload = {
                 "query": """
@@ -270,7 +300,7 @@ class TraceVisionService:
                 return result_data
             else:
                 logger.error(
-                    f"Failed to fetch result for session {session.session_id}, Due to the {result_response.json()}")
+                    f"Failed to fetch result for session {session.session_id}")
                 return None
 
         except Exception as e:
