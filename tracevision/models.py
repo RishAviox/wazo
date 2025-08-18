@@ -11,6 +11,23 @@ class TraceSession(models.Model):
     away_team = models.CharField(max_length=100)
     home_score = models.PositiveSmallIntegerField()
     away_score = models.PositiveSmallIntegerField()
+    home_team_jersey_color = models.CharField(
+        max_length=7, 
+        help_text="Hex color code for home team jersey (e.g., #FF0000)"
+    )
+    away_team_jersey_color = models.CharField(
+        max_length=7, 
+        help_text="Hex color code for away team jersey (e.g., #0000FF)"
+    )
+    final_score = models.CharField(
+        max_length=10,
+        help_text="Final score in format 'home_score-away_score' (e.g., '2-1')"
+    )
+    start_time = models.DateTimeField(
+        null=True, 
+        blank=True,
+        help_text="Start time of the video, if known"
+    )
     video_url = models.URLField()
     result = models.JSONField(default=dict)
 

@@ -176,7 +176,6 @@ class TraceVisionProcessView(APIView):
                     }, status=http_status.HTTP_400_BAD_REQUEST)
 
                 video_url_for_db = video_link
-
             else:
                 logger.info("Processing video file upload...")
                 # Get upload URL for file
@@ -237,6 +236,10 @@ class TraceVisionProcessView(APIView):
                 away_team=away_team,
                 home_score=home_score,
                 away_score=away_score,
+                home_team_jersey_color=home_color,
+                away_team_jersey_color=away_color,
+                final_score=final_score_str,
+                start_time=start_time,
                 video_url=video_url_for_db,
                 status="waiting_for_data"  # Set initial status
             )
@@ -336,6 +339,10 @@ class TraceVisionPollStatusView(APIView):
                 "away_team": session.away_team,
                 "home_score": session.home_score,
                 "away_score": session.away_score,
+                "home_team_jersey_color": session.home_team_jersey_color,
+                "away_team_jersey_color": session.away_team_jersey_color,
+                "final_score": session.final_score,
+                "start_time": session.start_time,
                 "video_url": session.video_url,
                 # "cached": status_data.get('cached', False),
                 # "cache_timestamp": datetime.now().isoformat()
@@ -388,6 +395,67 @@ class TraceVisionSchedulerStatusView(APIView):
         except Exception as e:
             logger.exception(
                 f"Error while checking scheduler status: {str(e)}")
+            return Response({
+                "error": "Internal server error",
+                "details": str(e)
+            }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TraceVisionSessionResultView(APIView):
+    """
+    API endpoint to get TraceVision session result using GraphQL query.
+    This is a testing endpoint that will be converted to a Celery task in the future.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            # Get the session for the authenticated user
+            session = TraceSession.objects.get(id=pk, user=request.user)
+
+            # Initialize service
+            tracevision_service = TraceVisionService()
+
+            # Get session result data
+            result_data = tracevision_service.get_session_result(session)
+
+            if not result_data:
+                return Response({
+                    "error": "Failed to retrieve session result from TraceVision API",
+                    "session_id": session.session_id,
+                    "details": "No result data available. Session may not be completed yet."
+                }, status=http_status.HTTP_404_NOT_FOUND)
+
+            # Prepare response data
+            response_data = {
+                "success": True,
+                "session_id": session.session_id,
+                "session_status": session.status,
+                "result": result_data,
+                "metadata": {
+                    "home_team": session.home_team,
+                    "away_team": session.away_team,
+                    "home_score": session.home_score,
+                    "away_score": session.away_score,
+                    "home_team_jersey_color": session.home_team_jersey_color,
+                    "away_team_jersey_color": session.away_team_jersey_color,
+                    "final_score": session.final_score,
+                    "start_time": session.start_time,
+                    "match_date": session.match_date,
+                    "video_url": session.video_url,
+                    "fetched_at": datetime.now().isoformat()
+                }
+            }
+
+            return Response(response_data, status=http_status.HTTP_200_OK)
+
+        except TraceSession.DoesNotExist:
+            return Response({
+                "error": "Session not found",
+                "details": "No TraceVision session found with the given ID for this user"
+            }, status=http_status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception(f"Error while fetching TraceVision session result: {str(e)}")
             return Response({
                 "error": "Internal server error",
                 "details": str(e)

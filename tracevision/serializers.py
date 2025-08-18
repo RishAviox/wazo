@@ -16,8 +16,16 @@ class TraceSessionListSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = TraceSession
-        fields = ['id', 'session_id', 'status', 'user', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'session_id', 'status', 'user', 'created_at', 'updated_at']
+        fields = [
+            'id', 'session_id', 'status', 'user', 'match_date', 'home_team', 'away_team',
+            'home_score', 'away_score', 'home_team_jersey_color', 'away_team_jersey_color',
+            'final_score', 'start_time', 'video_url', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'session_id', 'status', 'user', 'match_date', 'home_team', 'away_team',
+            'home_score', 'away_score', 'home_team_jersey_color', 'away_team_jersey_color',
+            'final_score', 'start_time', 'video_url', 'created_at', 'updated_at'
+        ]
 
 
 class TraceVisionProcessSerializer(serializers.Serializer):
@@ -125,7 +133,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Home team jersey color must be a valid hex color")
 
-        return value
+        return hex_color
 
     def validate_away_team_jersey_color(self, value):
         """Validate hex color format."""
@@ -134,6 +142,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f"Invalid color name: {value}"
             )
+        
         if not hex_color.startswith('#') or len(hex_color) != 7:
             raise serializers.ValidationError(
                 "Away team jersey color must be a valid hex color (e.g., #0000FF)")
@@ -145,7 +154,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Away team jersey color must be a valid hex color")
 
-        return value
+        return hex_color
 
     def validate_home_team_name(self, value):
         """Validate home team name is not empty."""
