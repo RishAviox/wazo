@@ -316,7 +316,7 @@ class TraceVisionPollStatusView(APIView):
                     f"Updated session {session.session_id} status from {previous_status} to {new_status}")
 
                 # If status changed to completed, fetch and save result data
-                if new_status == "completed":
+                if new_status == "processed":
                     result_data = tracevision_service.get_session_result(
                         session)
                     if result_data:

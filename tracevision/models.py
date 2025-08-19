@@ -45,7 +45,7 @@ class TraceSession(models.Model):
         ordering = ['-updated_at', '-created_at']  # Latest updated first, then latest created
 
     def __str__(self):
-        return f"{self.match_date} | {self.home_team} vs {self.away_team} | Status: {self.status}"
+        return f"{self.id} | {self.match_date} | {self.home_team} vs {self.away_team} | Status: {self.status}"
 
 
 class TracePlayer(models.Model):
