@@ -1,19 +1,26 @@
 from django.urls import path
-
 from .views import (
-    TraceVisionProcessView, 
     TraceVisionProcessesList, 
     TraceVisionProcessDetail, 
+    TraceVisionProcessView, 
+    TraceVisionProcessResultView, 
     TraceVisionPollStatusView, 
     TraceVisionSchedulerStatusView,
-    TraceVisionSessionResultView
+    TraceVisionSessionResultView,
+    TraceVisionPlayerStatsView,
+    TraceVisionPlayerStatsDetailView
 )
 
 urlpatterns = [
-    path('process/create/', TraceVisionProcessView.as_view(), name='match-data-create'),
-    path("process/list/", TraceVisionProcessesList.as_view(), name="tracevision-list"),
-    path("process/detail/<int:pk>/", TraceVisionProcessDetail.as_view(), name="tracevision-detail"),
-    path("process/poll-status/<int:pk>/", TraceVisionPollStatusView.as_view(), name="tracevision-poll-status"),
+    path("processes/", TraceVisionProcessesList.as_view(), name="tracevision-processes-list"),
+    path("processes/<int:pk>/", TraceVisionProcessDetail.as_view(), name="tracevision-processes-detail"),
+    path("process/", TraceVisionProcessView.as_view(), name="tracevision-process"),
+    path("process/result/<int:pk>/", TraceVisionProcessResultView.as_view(), name="tracevision-process-result"),
+    path("process/poll/<int:pk>/", TraceVisionPollStatusView.as_view(), name="tracevision-poll-status"),
     path("session/result/<int:pk>/", TraceVisionSessionResultView.as_view(), name="tracevision-session-result"), # TODO: Remove this on prod
     path("scheduler/status/", TraceVisionSchedulerStatusView.as_view(), name="tracevision-scheduler-status"),
+    
+    # Player stats endpoints
+    path('sessions/<int:pk>/stats/', TraceVisionPlayerStatsView.as_view(), name='player-stats'),
+    path('sessions/<int:pk>/stats/<int:player_id>/', TraceVisionPlayerStatsDetailView.as_view(), name='player-stats-detail'),
 ]

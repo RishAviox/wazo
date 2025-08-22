@@ -17,3 +17,16 @@ app.autodiscover_tasks()
 
 # Optional: Configure timezone for scheduled tasks
 app.conf.timezone = 'UTC'
+
+# Periodic schedules
+app.conf.beat_schedule = getattr(settings, 'CELERY_BEAT_SCHEDULE', {
+    # 'tracevision-aggregate-reconcile-every-15m': {
+    #     'task': 'tracevision.reconcile_aggregates_for_processed_sessions',
+    #     'schedule': 15 * 60,  # seconds
+    # },
+    # Testing: poll and process TraceVision sessions every 10 minutes
+    'tracevision-process-sessions-every-10m': {
+        'task': 'tracevision.process_trace_sessions',
+        'schedule': 1 * 60,  # seconds
+    },
+})

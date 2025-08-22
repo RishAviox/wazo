@@ -28,7 +28,12 @@ def fetch_tracking_data_from_url(tracking_url, timeout=30):
         response.raise_for_status()
         
         tracking_data = response.json()
-        logger.info(f"Successfully fetched {len(tracking_data)} tracking points")
+        # Log basic shape safely (TraceVision returns an object with 'spotlights')
+        try:
+            count = len(tracking_data.get('spotlights', [])) if isinstance(tracking_data, dict) else len(tracking_data)
+            logger.info(f"Successfully fetched tracking payload, points={count}")
+        except Exception:
+            logger.info("Successfully fetched tracking payload")
         return tracking_data
         
     except requests.exceptions.RequestException as e:
@@ -61,7 +66,6 @@ def parse_and_store_session_data(session, result_data):
             # Parse and create objects first
             objects_data = result_data.get('objects', [])
             trace_objects = []
-            tracking_data_bulk = []
             
             logger.info(f"Processing {len(objects_data)} objects")
             
@@ -80,22 +84,7 @@ def parse_and_store_session_data(session, result_data):
                     tracking_data=[]  # Will be populated below
                 )
                 
-                # Fetch tracking data for this object
-                if obj_data.get('tracking_url'):
-                    tracking_points = fetch_tracking_data_from_url(obj_data['tracking_url'])
-                    trace_object.tracking_data = tracking_points  # Store in JSON field for durability
-                    
-                    # Prepare individual tracking data records
-                    for point in tracking_points:
-                        tracking_data_bulk.append(TrackingData(
-                            trace_object=trace_object,  # Will be set after object is saved
-                            user=session.user,
-                            time_off=point.get('time_off', 0.0),
-                            x=point.get('x', 0.0),
-                            y=point.get('y', 0.0),
-                            w=point.get('w', 0.0),
-                            h=point.get('h', 0.0)
-                        ))
+                # Do not fetch or persist per-point tracking here. We keep tracking_url for on-demand use.
                 
                 trace_objects.append(trace_object)
             
@@ -104,18 +93,8 @@ def parse_and_store_session_data(session, result_data):
                 created_objects = TraceObject.objects.bulk_create(trace_objects)
                 logger.info(f"Created {len(created_objects)} trace objects")
                 
-                # Update tracking data with actual object references and bulk create
+                # Build object map for linking highlights to objects
                 object_map = {obj.object_id: obj for obj in created_objects}
-                for tracking_point in tracking_data_bulk:
-                    # Find the corresponding object by object_id
-                    for obj in created_objects:
-                        if obj.object_id == tracking_point.trace_object.object_id:
-                            tracking_point.trace_object = obj
-                            break
-                
-                if tracking_data_bulk:
-                    TrackingData.objects.bulk_create(tracking_data_bulk)
-                    logger.info(f"Created {len(tracking_data_bulk)} tracking data points")
             
             # Parse and create highlights
             highlights_data = result_data.get('highlights', [])
@@ -281,6 +260,14 @@ def process_trace_sessions_task(self):
                                 # Only save session and create notification if parsing was successful
                                 session.save()
                                 create_silent_notification(session)
+
+                                # Enqueue aggregates computation (idempotent)
+                                try:
+                                    from tracevision.tasks import compute_aggregates_task
+                                    compute_aggregates_task.delay(session.session_id)
+                                    logger.info(f"Queued aggregates computation for session {session.session_id}")
+                                except Exception as e:
+                                    logger.exception(f"Failed to enqueue aggregates for session {session.session_id}: {e}")
                             else:
                                 logger.error(f"Failed to parse structured data for session {session.session_id}. Not updating session status.")
                                 # Don't update the session status if parsing failed
@@ -291,7 +278,7 @@ def process_trace_sessions_task(self):
                             # For process_error, just save the result data
                             session.save()
                             create_silent_notification(session)
-                            
+                        
                         logger.info(f"Saved result data for {new_status} session {session.session_id}")
                     else:
                         logger.error(f"Failed to fetch result for {new_status} session {session.session_id}")
@@ -500,3 +487,194 @@ def test_single_session_parsing_task(self, session_id):
         error_msg = f"Error testing session {session_id}: {str(e)}"
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}
+
+
+@shared_task(bind=True, name='tracevision.calculate_player_stats')
+def calculate_player_stats_task(self, session_id):
+    """
+    Celery task to calculate comprehensive player performance statistics from TraceVision data.
+    This task runs after session processing is completed and generates all performance metrics.
+    
+    Args:
+        session_id (str): Session ID to calculate stats for
+        
+    Returns:
+        dict: Task results with success status and details
+    """
+    try:
+        from tracevision.services import TraceVisionStatsService
+        
+        # Get the session
+        try:
+            session = TraceSession.objects.get(session_id=session_id)
+        except TraceSession.DoesNotExist:
+            error_msg = f"Session with ID {session_id} not found"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+        
+        logger.info(f"Starting player stats calculation for session: {session_id}")
+        
+        # Check if session is processed
+        if session.status != "processed":
+            error_msg = f"Session {session_id} is not processed yet. Current status: {session.status}"
+            logger.warning(error_msg)
+            return {"success": False, "error": error_msg}
+        
+        # Check if session has trace objects
+        if not session.trace_objects.exists():
+            error_msg = f"Session {session_id} has no trace objects. Run data parsing first."
+            logger.warning(error_msg)
+            return {"success": False, "error": error_msg}
+        
+        # Initialize stats service
+        stats_service = TraceVisionStatsService()
+        
+        # Calculate all statistics
+        result = stats_service.calculate_session_stats(session)
+        
+        if result['success']:
+            logger.info(f"Successfully calculated stats for session {session_id}: "
+                       f"{result['player_stats_count']} players processed")
+            
+            # Create success notification
+            create_silent_notification(session)
+            
+            return {
+                "success": True,
+                "session_id": session_id,
+                "player_stats_count": result['player_stats_count'],
+                "team_stats": result['team_stats'],
+                "session_stats": result['session_stats'],
+                "message": f"Stats calculation completed for {result['player_stats_count']} players"
+            }
+        else:
+            error_msg = f"Stats calculation failed for session {session_id}: {result.get('error', 'Unknown error')}"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+            
+    except Exception as e:
+        error_msg = f"Error in calculate_player_stats_task for session {session_id}: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "error": error_msg}
+
+
+@shared_task(bind=True, name='tracevision.recalculate_player_stats')
+def recalculate_player_stats_task(self, session_id, force_recalculate=False):
+    """
+    Celery task to recalculate player statistics for an existing session.
+    Useful for testing new calculation algorithms or fixing data issues.
+    
+    Args:
+        session_id (str): Session ID to recalculate stats for
+        force_recalculate (bool): If True, recalculate even if stats already exist
+        
+    Returns:
+        dict: Task results with success status and details
+    """
+    try:
+        from tracevision.services import TraceVisionStatsService
+        from tracevision.models import TraceVisionPlayerStats
+        
+        # Get the session
+        try:
+            session = TraceSession.objects.get(session_id=session_id)
+        except TraceSession.DoesNotExist:
+            error_msg = f"Session with ID {session_id} not found"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+        
+        logger.info(f"Starting player stats recalculation for session: {session_id}")
+        
+        # Check if stats already exist (unless force_recalculate is True)
+        if not force_recalculate and TraceVisionPlayerStats.objects.filter(session=session).exists():
+            existing_stats_count = TraceVisionPlayerStats.objects.filter(session=session).count()
+            logger.info(f"Session {session_id} already has {existing_stats_count} player stats. "
+                       f"Use force_recalculate=True to override.")
+            return {
+                "success": False,
+                "error": f"Stats already exist for {existing_stats_count} players. Use force_recalculate=True to override.",
+                "existing_stats_count": existing_stats_count
+            }
+        
+        # Clear existing stats if force_recalculate is True
+        if force_recalculate:
+            deleted_count = TraceVisionPlayerStats.objects.filter(session=session).delete()[0]
+            logger.info(f"Deleted {deleted_count} existing player stats for session {session_id}")
+        
+        # Initialize stats service
+        stats_service = TraceVisionStatsService()
+        
+        # Calculate all statistics
+        result = stats_service.calculate_session_stats(session)
+        
+        if result['success']:
+            logger.info(f"Successfully recalculated stats for session {session_id}: "
+                       f"{result['player_stats_count']} players processed")
+            
+            return {
+                "success": True,
+                "session_id": session_id,
+                "player_stats_count": result['player_stats_count'],
+                "team_stats": result['team_stats'],
+                "session_stats": result['session_stats'],
+                "message": f"Stats recalculation completed for {result['player_stats_count']} players",
+                "force_recalculated": force_recalculate
+            }
+        else:
+            error_msg = f"Stats recalculation failed for session {session_id}: {result.get('error', 'Unknown error')}"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+            
+    except Exception as e:
+        error_msg = f"Error in recalculate_player_stats_task for session {session_id}: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "error": error_msg}
+
+
+@shared_task(bind=True, name='tracevision.compute_aggregates')
+def compute_aggregates_task(self, session_id):
+    """Compute CSV-equivalent aggregates in background and store them in DB."""
+    try:
+        from tracevision.services import TraceVisionAggregationService
+        # Get the session
+        try:
+            session = TraceSession.objects.get(session_id=session_id)
+        except TraceSession.DoesNotExist:
+            error_msg = f"Session with ID {session_id} not found"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+        
+        if session.status != 'processed':
+            msg = f"Session {session_id} not processed yet"
+            logger.warning(msg)
+            return {"success": False, "error": msg}
+        
+        agg = TraceVisionAggregationService()
+        result = agg.compute_all(session)
+        logger.info(f"Computed aggregates for session {session_id}")
+        return {"success": True, "details": {k: True for k in result.keys()}}
+    except Exception as e:
+        logger.exception(f"Error computing aggregates for session {session_id}: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@shared_task(bind=True, name='tracevision.reconcile_aggregates_for_processed_sessions')
+def reconcile_aggregates_for_processed_sessions(self, lookback_hours=24, batch_limit=50):
+    """Scan recently processed sessions and ensure aggregates exist; enqueue if missing."""
+    try:
+        from django.utils import timezone
+        from datetime import timedelta
+        from tracevision.models import TraceCoachReportTeam
+
+        cutoff = timezone.now() - timedelta(hours=lookback_hours)
+        qs = TraceSession.objects.filter(status='processed', updated_at__gte=cutoff).order_by('-updated_at')[:batch_limit]
+        enqueued = 0
+        for session in qs:
+            # If no coach report rows exist, assume aggregates missing and enqueue
+            if not TraceCoachReportTeam.objects.filter(session=session).exists():
+                compute_aggregates_task.delay(session.session_id)
+                enqueued += 1
+        return {"success": True, "checked": qs.count(), "enqueued": enqueued}
+    except Exception as e:
+        logger.exception(f"Error reconciling aggregates: {e}")
+        return {"success": False, "error": str(e)}

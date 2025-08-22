@@ -171,3 +171,228 @@ class TrackingData(models.Model):
 
     def __str__(self):
         return f"{self.trace_object.object_id} at {self.time_off}s"
+
+
+class TraceVisionPlayerStats(models.Model):
+    """
+    Calculated performance statistics for individual players in a session
+    Generated from tracking data and highlights analysis
+    """
+    session = models.ForeignKey(TraceSession, on_delete=models.CASCADE, related_name='player_stats')
+    object_id = models.CharField(max_length=50, help_text="TraceVision object ID (e.g., home_1, away_15)")
+    side = models.CharField(max_length=10, help_text="home or away team")
+    
+    # Movement and physical stats
+    total_distance_meters = models.FloatField(default=0.0, help_text="Total distance covered in meters")
+    avg_speed_mps = models.FloatField(default=0.0, help_text="Average speed in meters per second")
+    max_speed_mps = models.FloatField(default=0.0, help_text="Maximum speed reached")
+    total_time_seconds = models.FloatField(default=0.0, help_text="Total time tracked in seconds")
+    
+    # Sprint analysis
+    sprint_count = models.PositiveIntegerField(default=0, help_text="Number of sprints detected")
+    sprint_distance_meters = models.FloatField(default=0.0, help_text="Total distance covered in sprints")
+    sprint_time_seconds = models.FloatField(default=0.0, help_text="Total time spent sprinting")
+    
+    # Position and tactical stats
+    avg_position_x = models.FloatField(default=0.0, help_text="Average X position (0-1000 scale)")
+    avg_position_y = models.FloatField(default=0.0, help_text="Average Y position (0-1000 scale)")
+    position_variance = models.FloatField(default=0.0, help_text="Position variance (movement range)")
+    
+    # Heatmap data (stored as JSON for flexibility)
+    heatmap_data = models.JSONField(default=dict, help_text="Heatmap grid data for visualization")
+    
+    # Performance metrics
+    performance_score = models.FloatField(default=0.0, help_text="Overall performance score 0-100")
+    stamina_rating = models.FloatField(default=0.0, help_text="Stamina rating based on movement patterns")
+    work_rate = models.FloatField(default=0.0, help_text="Work rate based on distance and speed")
+    
+    # Calculation metadata
+    calculation_method = models.CharField(max_length=100, default="standard", help_text="Method used for calculations")
+    calculation_version = models.CharField(max_length=20, default="1.0", help_text="Calculation algorithm version")
+    last_calculated = models.DateTimeField(auto_now=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['session', 'object_id']
+        indexes = [
+            models.Index(fields=['session', 'object_id']),
+            models.Index(fields=['side', 'performance_score']),
+            models.Index(fields=['performance_score', 'last_calculated']),
+        ]
+        verbose_name = "TraceVision Player Stats"
+        verbose_name_plural = "TraceVision Player Stats"
+
+    def __str__(self):
+        return f"{self.object_id} - {self.session.session_id} - Score: {self.performance_score}"
+
+    @property
+    def distance_per_minute(self):
+        """Calculate distance covered per minute"""
+        if self.total_time_seconds > 0:
+            return (self.total_distance_meters / self.total_time_seconds) * 60
+        return 0.0
+
+    @property
+    def sprint_percentage(self):
+        """Calculate percentage of time spent sprinting"""
+        if self.total_time_seconds > 0:
+            return (self.sprint_time_seconds / self.total_time_seconds) * 100
+        return 0.0
+
+
+class TraceVisionSessionStats(models.Model):
+    """
+    Aggregated statistics for entire session (team-level insights)
+    """
+    session = models.ForeignKey(TraceSession, on_delete=models.CASCADE, related_name='session_stats')
+    
+    # Team performance metrics
+    home_team_stats = models.JSONField(default=dict, help_text="Home team aggregated stats")
+    away_team_stats = models.JSONField(default=dict, help_text="Away team aggregated stats")
+    
+    # Match analysis
+    possession_data = models.JSONField(default=dict, help_text="Possession percentages and patterns")
+    tactical_analysis = models.JSONField(default=dict, help_text="Formation and tactical insights")
+    
+    # Data quality metrics
+    total_tracking_points = models.PositiveIntegerField(default=0, help_text="Total tracking data points")
+    data_coverage_percentage = models.FloatField(default=0.0, help_text="Percentage of video with tracking data")
+    quality_score = models.FloatField(default=0.0, help_text="Overall data quality score")
+    
+    # Processing metadata
+    processing_status = models.CharField(max_length=20, default="pending", help_text="Stats processing status")
+    processing_errors = models.JSONField(default=list, help_text="Any errors during processing")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['session']
+        indexes = [
+            models.Index(fields=['session']),
+            models.Index(fields=['processing_status', 'created_at']),
+        ]
+        verbose_name = "TraceVision Session Stats"
+        verbose_name_plural = "TraceVision Session Stats"
+
+    def __str__(self):
+        return f"Session Stats - {self.session.session_id} - Quality: {self.quality_score}%"
+
+
+class TraceCoachReportTeam(models.Model):
+    session = models.ForeignKey(TraceSession, on_delete=models.CASCADE, related_name='coach_report_team')
+    side = models.CharField(max_length=10)
+    goals = models.IntegerField(default=0)
+    shots = models.IntegerField(default=0)
+    passes = models.IntegerField(default=0)
+    possession_time_s = models.FloatField(default=0.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['session', 'side']
+        indexes = [
+            models.Index(fields=['session', 'side']),
+        ]
+        verbose_name = 'Coach Report Team'
+        verbose_name_plural = 'Coach Report Team'
+
+
+class TraceTouchLeaderboard(models.Model):
+    session = models.ForeignKey(TraceSession, on_delete=models.CASCADE, related_name='touch_leaderboard')
+    object_id = models.CharField(max_length=50)
+    object_side = models.CharField(max_length=10)
+    touches = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['session', 'object_id']
+        indexes = [
+            models.Index(fields=['session']),
+            models.Index(fields=['object_side', 'touches']),
+        ]
+        verbose_name = 'Touch Leaderboard Entry'
+        verbose_name_plural = 'Touch Leaderboard Entries'
+
+
+class TracePossessionSegment(models.Model):
+    session = models.ForeignKey(TraceSession, on_delete=models.CASCADE, related_name='possession_segments')
+    side = models.CharField(max_length=10)
+    start_ms = models.IntegerField()
+    end_ms = models.IntegerField()
+    count = models.IntegerField(default=0)
+    start_clock = models.CharField(max_length=20, blank=True)
+    end_clock = models.CharField(max_length=20, blank=True)
+    duration_s = models.FloatField(default=0.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['session', 'side']),
+            models.Index(fields=['session', 'start_ms']),
+        ]
+        verbose_name = 'Possession Segment'
+        verbose_name_plural = 'Possession Segments'
+
+
+class TraceClipReel(models.Model):
+    session = models.ForeignKey(TraceSession, on_delete=models.CASCADE, related_name='clip_reels')
+    event_id = models.CharField(max_length=100)
+    video_id = models.IntegerField()
+    event_type = models.CharField(max_length=50)
+    side = models.CharField(max_length=10)
+    start_ms = models.IntegerField()
+    duration_ms = models.IntegerField()
+    start_clock = models.CharField(max_length=20, blank=True)
+    end_clock = models.CharField(max_length=20, blank=True)
+    object_id = models.CharField(max_length=50, blank=True, null=True)
+    label = models.CharField(max_length=100, blank=True)
+    tags = models.JSONField(default=list)
+    video_stream = models.URLField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['session', 'side']),
+            models.Index(fields=['session', 'event_id']),
+            models.Index(fields=['session', 'object_id']),
+        ]
+        unique_together = ['session', 'event_id', 'object_id']
+        verbose_name = 'Clip Reel Item'
+        verbose_name_plural = 'Clip Reel Items'
+
+
+class TracePass(models.Model):
+    session = models.ForeignKey(TraceSession, on_delete=models.CASCADE, related_name='passes')
+    side = models.CharField(max_length=10)
+    from_object_id = models.CharField(max_length=50)
+    to_object_id = models.CharField(max_length=50)
+    start_ms = models.IntegerField()
+    duration_ms = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['session', 'side']),
+            models.Index(fields=['session', 'from_object_id', 'to_object_id']),
+        ]
+        verbose_name = 'Pass'
+        verbose_name_plural = 'Passes'
+
+
+class TracePassingNetwork(models.Model):
+    session = models.ForeignKey(TraceSession, on_delete=models.CASCADE, related_name='passing_network')
+    side = models.CharField(max_length=10)
+    from_object_id = models.CharField(max_length=50)
+    to_object_id = models.CharField(max_length=50)
+    passes_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['session', 'side', 'from_object_id', 'to_object_id']
+        indexes = [
+            models.Index(fields=['session', 'side']),
+            models.Index(fields=['passes_count']),
+        ]
+        verbose_name = 'Passing Network Edge'
+        verbose_name_plural = 'Passing Network Edges'

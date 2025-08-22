@@ -460,3 +460,262 @@ class TraceVisionSessionResultView(APIView):
                 "error": "Internal server error",
                 "details": str(e)
             }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TraceVisionPlayerStatsView(APIView):
+    """
+    API endpoint to manage and retrieve player performance statistics.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        """
+        Trigger player stats calculation for a session
+        """
+        try:
+            # Get the session for the authenticated user
+            session = TraceSession.objects.get(id=pk, user=request.user)
+            
+            # Check if session is processed
+            if session.status != "processed":
+                return Response({
+                    "error": "Session is not processed yet",
+                    "details": f"Current status: {session.status}. Wait for processing to complete."
+                }, status=http_status.HTTP_400_BAD_REQUEST)
+            
+            # Check if session has trace objects
+            if not session.trace_objects.exists():
+                return Response({
+                    "error": "No trace objects found",
+                    "details": "Session must have trace objects before calculating stats."
+                }, status=http_status.HTTP_400_BAD_REQUEST)
+            
+            # Trigger async stats calculation
+            from tracevision.tasks import calculate_player_stats_task
+            task = calculate_player_stats_task.delay(session.session_id)
+            
+            return Response({
+                "success": True,
+                "message": "Player stats calculation started",
+                "task_id": task.id,
+                "session_id": session.session_id,
+                "status": "processing"
+            }, status=http_status.HTTP_202_ACCEPTED)
+                
+        except TraceSession.DoesNotExist:
+            return Response({
+                "error": "Session not found",
+                "details": "No TraceVision session found with the given ID for this user"
+            }, status=http_status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception(f"Error starting stats calculation for session {pk}: {str(e)}")
+            return Response({
+                "error": "Internal server error",
+                "details": str(e)
+            }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def get(self, request, pk):
+        """
+        Get player performance statistics for a session
+        """
+        try:
+            # Get the session for the authenticated user
+            session = TraceSession.objects.get(id=pk, user=request.user)
+            
+            # Get player stats
+            from tracevision.models import TraceVisionPlayerStats
+            player_stats = TraceVisionPlayerStats.objects.filter(
+                session=session
+            ).order_by('-performance_score')
+            
+            if not player_stats.exists():
+                return Response({
+                    "success": False,
+                    "error": "No player stats found",
+                    "details": "Player statistics have not been calculated yet. Use POST to trigger calculation."
+                }, status=http_status.HTTP_404_NOT_FOUND)
+            
+            # Get session stats
+            from tracevision.models import TraceVisionSessionStats
+            session_stats = TraceVisionSessionStats.objects.filter(session=session).first()
+            
+            # Format player stats for response
+            stats_data = []
+            for stats in player_stats:
+                stats_data.append({
+                    'object_id': stats.object_id,
+                    'side': stats.side,
+                    
+                    # Movement stats
+                    'total_distance_meters': stats.total_distance_meters,
+                    'avg_speed_mps': stats.avg_speed_mps,
+                    'max_speed_mps': stats.max_speed_mps,
+                    'total_time_seconds': stats.total_time_seconds,
+                    'distance_per_minute': stats.distance_per_minute,
+                    
+                    # Sprint stats
+                    'sprint_count': stats.sprint_count,
+                    'sprint_distance_meters': stats.sprint_distance_meters,
+                    'sprint_time_seconds': stats.sprint_time_seconds,
+                    'sprint_percentage': stats.sprint_percentage,
+                    
+                    # Position stats
+                    'avg_position_x': stats.avg_position_x,
+                    'avg_position_y': stats.avg_position_y,
+                    'position_variance': stats.position_variance,
+                    
+                    # Performance metrics
+                    'performance_score': stats.performance_score,
+                    'stamina_rating': stats.stamina_rating,
+                    'work_rate': stats.work_rate,
+                    
+                    # Metadata
+                    'calculation_method': stats.calculation_method,
+                    'calculation_version': stats.calculation_version,
+                    'last_calculated': stats.last_calculated.isoformat() if stats.last_calculated else None
+                })
+            
+            # Format session stats
+            session_stats_data = None
+            if session_stats:
+                session_stats_data = {
+                    'total_tracking_points': session_stats.total_tracking_points,
+                    'data_coverage_percentage': session_stats.data_coverage_percentage,
+                    'quality_score': session_stats.quality_score,
+                    'processing_status': session_stats.processing_status,
+                    'home_team_stats': session_stats.home_team_stats,
+                    'away_team_stats': session_stats.away_team_stats
+                }
+            
+            return Response({
+                "success": True,
+                "session_id": session.session_id,
+                "player_stats_count": len(stats_data),
+                "player_stats": stats_data,
+                "session_stats": session_stats_data,
+                "fetched_at": datetime.now().isoformat()
+            }, status=http_status.HTTP_200_OK)
+                
+        except TraceSession.DoesNotExist:
+            return Response({
+                "error": "Session not found",
+                "details": "No TraceVision session found with the given ID for this user"
+            }, status=http_status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception(f"Error getting player stats for session {pk}: {str(e)}")
+            return Response({
+                "error": "Internal server error",
+                "details": str(e)
+            }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TraceVisionPlayerStatsDetailView(APIView):
+    """
+    API endpoint to get detailed statistics for a specific player in a session.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, player_id):
+        """
+        Get detailed performance statistics for a specific player
+        """
+        try:
+            # Get the session for the authenticated user
+            session = TraceSession.objects.get(id=pk, user=request.user)
+            
+            # Get player stats
+            from tracevision.models import TraceVisionPlayerStats
+            try:
+                player_stats = TraceVisionPlayerStats.objects.get(
+                    session=session,
+                    player_id=player_id
+                )
+            except TraceVisionPlayerStats.DoesNotExist:
+                return Response({
+                    "error": "Player stats not found",
+                    "details": f"No statistics found for player {player_id} in session {session.session_id}"
+                }, status=http_status.HTTP_404_NOT_FOUND)
+            
+            # Get heatmap data
+            heatmap_data = player_stats.heatmap_data
+            
+            # Format detailed response
+            detailed_stats = {
+                'player_id': player_stats.player.id,
+                'player_name': player_stats.player.name,
+                'team_id': player_stats.team.id,
+                'team_name': player_stats.team.name,
+                'jersey_number': player_stats.player_mapping.jersey_number,
+                'side': player_stats.player_mapping.side,
+                
+                # Comprehensive movement analysis
+                'movement_analysis': {
+                    'total_distance_meters': player_stats.total_distance_meters,
+                    'total_time_seconds': player_stats.total_time_seconds,
+                    'distance_per_minute': player_stats.distance_per_minute,
+                    'avg_speed_mps': player_stats.avg_speed_mps,
+                    'max_speed_mps': player_stats.max_speed_mps,
+                    'speed_analysis': {
+                        'avg_speed': player_stats.avg_speed_mps,
+                        'max_speed': player_stats.max_speed_mps,
+                        'speed_efficiency': (player_stats.avg_speed_mps / player_stats.max_speed_mps * 100) if player_stats.max_speed_mps > 0 else 0
+                    }
+                },
+                
+                # Sprint analysis
+                'sprint_analysis': {
+                    'sprint_count': player_stats.sprint_count,
+                    'sprint_distance_meters': player_stats.sprint_distance_meters,
+                    'sprint_time_seconds': player_stats.sprint_time_seconds,
+                    'sprint_percentage': player_stats.sprint_percentage,
+                    'avg_sprint_distance': player_stats.sprint_distance_meters / player_stats.sprint_count if player_stats.sprint_count > 0 else 0,
+                    'avg_sprint_duration': player_stats.sprint_time_seconds / player_stats.sprint_count if player_stats.sprint_count > 0 else 0
+                },
+                
+                # Position and tactical analysis
+                'position_analysis': {
+                    'avg_position_x': player_stats.avg_position_x,
+                    'avg_position_y': player_stats.avg_position_y,
+                    'position_variance': player_stats.position_variance,
+                    'movement_range': {
+                        'x_range': player_stats.position_variance * 2,  # Approximate range
+                        'y_range': player_stats.position_variance * 2
+                    }
+                },
+                
+                # Performance metrics
+                'performance_metrics': {
+                    'overall_score': player_stats.performance_score,
+                    'stamina_rating': player_stats.stamina_rating,
+                    'work_rate': player_stats.work_rate,
+                    'fitness_index': (player_stats.stamina_rating + player_stats.work_rate) / 2
+                },
+                
+                # Heatmap visualization data
+                'heatmap_data': heatmap_data,
+                
+                # Metadata
+                'calculation_info': {
+                    'method': player_stats.calculation_method,
+                    'version': player_stats.calculation_version,
+                    'last_calculated': player_stats.last_calculated.isoformat() if player_stats.last_calculated else None
+                }
+            }
+            
+            return Response({
+                "success": True,
+                "session_id": session.session_id,
+                "player_stats": detailed_stats
+            }, status=http_status.HTTP_200_OK)
+                
+        except TraceSession.DoesNotExist:
+            return Response({
+                "error": "Session not found",
+                "details": "No TraceVision session found with the given ID for this user"
+            }, status=http_status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception(f"Error getting detailed player stats for session {pk}, player {player_id}: {str(e)}")
+            return Response({
+                "error": "Internal server error",
+                "details": str(e)
+            }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)

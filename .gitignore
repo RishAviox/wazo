@@ -30,3 +30,4 @@ wajo_prod_mssql_backup_19July2025.zip
 wajo_prod_postgres_data_23July2025_without_logs.json
 wajo_prod_postgres_data_23July2025.json
 chatbot_features/system_instructions/*
+celerybeat-*
