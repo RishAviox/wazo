@@ -6,6 +6,7 @@ from rest_framework import viewsets, mixins
 from django.core.cache import cache
 from django.utils import timezone
 from django.utils.timezone import datetime
+from datetime import datetime as std_datetime
 import ast
 import re
 import json
@@ -402,3 +403,184 @@ class CalendarGoalAPIViewSet(mixins.CreateModelMixin,
    
 class GameOverviewAPIView(APIView):
     pass
+
+
+class PlayerPostMatchIntelligenceAPIView(APIView):
+    """
+    API endpoint for OpenAI function calling with player_postmatch_intelligence.
+    Generates performance analysis, tactical insights, and coaching recommendations.
+    Integrates with TraceVision data for comprehensive player analysis.
+    
+    OpenAI automatically determines the analysis type based on the context and user input.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """
+        Process post-match intelligence requests with OpenAI function calling.
+        OpenAI automatically decides what type of analysis to perform based on the context.
+        
+        Expected payload:
+        {
+            "playerId": "player_123",
+            "matchId": "match_789",
+            "userRole": "Coach",
+            "notes": "Player showed good work rate but faded after 70 minutes",
+            "language": "auto",
+            "timezone": "UTC"
+        }
+        """
+        try:
+            from .conversation_runner import run_conversation_sync
+            
+            # Extract required parameters
+            player_id = request.data.get('playerId')
+            match_id = request.data.get('matchId')
+            user_role = request.data.get('userRole')
+            notes = request.data.get('notes', '')
+            language = request.data.get('language', 'auto')
+            timezone = request.data.get('timezone', 'UTC')
+            
+            # Validate required fields
+            if not all([player_id, match_id, user_role]):
+                return Response({
+                    'error': 'Missing required fields: playerId, matchId, and userRole are required.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validate user role - now supports all 16 roles
+            valid_roles = [
+                "athlete_player", "coach", "assistant_coach", "personal_coach", 
+                "skills_coach", "technical_director", "data_analyst", "video_analyst",
+                "sports_psychologist", "strength_conditioning_coach", "fitness_trainer",
+                "nutritionist_dietitian", "rehab_recovery_specialist", "medical_staff",
+                "scout_talent_identification", "team_manager"
+            ]
+            if user_role.lower() not in [role.lower() for role in valid_roles]:
+                return Response({
+                    'error': f'Invalid userRole. Must be one of: {", ".join(valid_roles)}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Handle language auto-detection
+            if language == "auto":
+                user = request.user
+                language = getattr(user, 'selected_language', 'en') or 'en'
+            
+            print(f"[Post-Match Intelligence] => Processing request for player: {player_id}, match: {match_id}, role: {user_role}")
+            
+            # Construct intelligent prompt for OpenAI function calling
+            prompt = self._construct_analysis_prompt(
+                player_id=player_id,
+                match_id=match_id,
+                user_role=user_role,
+                notes=notes,
+                language=language,
+                timezone=timezone
+            )
+            
+            print(f"[Post-Match Intelligence] => Constructed prompt for OpenAI analysis")
+            
+            # Process with OpenAI conversation runner (includes TraceVision data)
+            try:
+                response_text = run_conversation_sync(prompt)
+                
+                if not response_text:
+                    return Response({
+                        'error': 'Failed to generate AI response'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+                print(f"[Post-Match Intelligence] => OpenAI response generated successfully")
+                
+                # Try to parse the response as JSON
+                try:
+                    parsed_response = json.loads(response_text)
+                    return Response({
+                        'success': True,
+                        'data': parsed_response,
+                        'raw_response': response_text,
+                        'metadata': {
+                            'playerId': player_id,
+                            'matchId': match_id,
+                            'userRole': user_role,
+                            'language': language,
+                            'analysis_type': 'ai_determined',
+                            'generated_at': std_datetime.now().isoformat()
+                        }
+                    })
+                except json.JSONDecodeError:
+                    # If response is not valid JSON, return it as text
+                    return Response({
+                        'success': True,
+                        'data': {
+                            'summary': 'AI analysis completed',
+                            'raw_analysis': response_text
+                        },
+                        'raw_response': response_text,
+                        'metadata': {
+                            'playerId': player_id,
+                            'matchId': match_id,
+                            'userRole': user_role,
+                            'language': language,
+                            'analysis_type': 'ai_determined',
+                            'generated_at': std_datetime.now().isoformat(),
+                            'note': 'Response was not in expected JSON format'
+                        }
+                    })
+                    
+            except Exception as e:
+                print(f"[Post-Match Intelligence] => Error in OpenAI processing: {e}")
+                return Response({
+                    'error': f'Error generating AI analysis: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            print(f"Error in PlayerPostMatchIntelligenceAPIView: {e}")
+            return Response({
+                'error': 'Internal server error',
+                'detail': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _construct_analysis_prompt(self, player_id, match_id, user_role, notes, language, timezone):
+        """
+        Construct an intelligent prompt for OpenAI function calling.
+        The LLM will decide which function to call based on the user's intent.
+        """
+
+        base = (
+            f"Generate a post-match report using the `player_postmatch_intelligence` function.\n\n"
+            f"Details:\n"
+            f"- Player ID: {player_id}\n"
+            f"- Match ID: {match_id}\n"
+            f"- Task: summarize_performance\n"
+            f"- User Role: {user_role}\n"
+            f"- Language: {language}\n"
+            f"- Notes: {notes.strip() if notes.strip() else 'None'}"
+            f"Respond in {language} if specified, otherwise use English."
+        )
+        return base
+        
+        # Base prompt for function calling
+        prompt = f"""
+        You are an AI assistant for football performance analysis. A {user_role} is requesting analysis for player {player_id} from match {match_id}.
+        
+        User Context:
+        - Role: {user_role}
+        - Notes: {notes if notes else 'None provided'}
+        - Language: {language}
+        - Timezone: {timezone}
+        
+        Available Functions:
+        - player_postmatch_intelligence: Generate post-match intelligence with role-specific insights
+        
+        Instructions:
+        Based on the user's request and role, determine the appropriate function to call and parameters.
+        Focus on providing role-appropriate analysis and actionable insights.
+        
+        Use the player_postmatch_intelligence function with appropriate parameters to generate the analysis.
+        The function will automatically fetch all necessary performance data including TraceVision statistics.
+        
+        Respond in {language} if specified, otherwise use English.
+        """
+        
+        return prompt
+
+

@@ -29,4 +29,7 @@ urlpatterns = [
     }), name="calendar-goal-entry"),
     
     path("game-overview" , GameOverviewAPIView.as_view() , name="game-overview"),
+    
+    # Player Post-Match Intelligence Function Calling
+    path("player-postmatch-intelligence", PlayerPostMatchIntelligenceAPIView.as_view(), name="player-postmatch-intelligence"),
 ]

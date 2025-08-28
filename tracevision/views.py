@@ -12,6 +12,7 @@ from django.conf import settings
 from tracevision.models import TraceSession, TracePlayer
 from tracevision.serializers import TraceVisionProcessesSerializer, TraceVisionProcessSerializer, TraceSessionListSerializer
 from tracevision.services import TraceVisionService
+from teams.models import Team
 
 logger = logging.getLogger()
 
@@ -82,11 +83,48 @@ class TraceVisionProcessView(APIView):
             away_color = serializer.validated_data['away_team_jersey_color']
             final_score_str = serializer.validated_data['final_score']
             start_time = serializer.validated_data.get('start_time')
+            # Get age_group with SENIOR as fallback
+            age_group = serializer.validated_data.get('age_group') or 'SENIOR'
+            
+            # Handle custom pitch dimensions
+            pitch_length = serializer.validated_data.get('pitch_length')
+            pitch_width = serializer.validated_data.get('pitch_width')
+            
+            # Set pitch size (custom or default based on age group)
+            if pitch_length and pitch_width:
+                pitch_size = {'length': pitch_length, 'width': pitch_width}
+            else:
+                # Use default pitch size for the age group
+                from tracevision.models import TraceSession
+                pitch_size = TraceSession.DEFAULT_PITCH_SIZES.get(age_group, TraceSession.DEFAULT_PITCH_SIZES['SENIOR'])
             
             # Parse the final score to get individual team scores
             home_score, away_score = map(int, final_score_str.split('-'))
 
-            # Step 1: Create TraceVision session
+            # Step 1: Get or create Team objects
+            logger.info("Getting or creating Team objects...")
+            
+            # Get or create home team using name and jersey color as unique identifier
+            home_team_obj, _ = Team.objects.get_or_create(
+                name=home_team,
+                jersey_color=home_color,
+                defaults={
+                    'name': home_team,
+                    'jersey_color': home_color
+                }
+            )
+            
+            # Get or create team
+            away_team_obj, _ = Team.objects.get_or_create(
+                name=away_team,
+                jersey_color=away_color,
+                defaults={
+                    'name': away_team,
+                    'jersey_color': away_color
+                }
+            )
+
+            # Step 2: Create TraceVision session
             logger.info("Creating TraceVision session...")
             session_payload = {
                 "query": """
@@ -232,12 +270,12 @@ class TraceVisionProcessView(APIView):
                 user=request.user,
                 session_id=session_id,
                 match_date=datetime.now().date(),
-                home_team=home_team,
-                away_team=away_team,
+                home_team=home_team_obj,
+                away_team=away_team_obj,
                 home_score=home_score,
                 away_score=away_score,
-                home_team_jersey_color=home_color,
-                away_team_jersey_color=away_color,
+                age_group=age_group,
+                pitch_size=pitch_size,
                 final_score=final_score_str,
                 start_time=start_time,
                 video_url=video_url_for_db,
@@ -248,6 +286,9 @@ class TraceVisionProcessView(APIView):
                 "success": True,
                 "id": session.id,
                 "session_id": session.session_id,
+                "age_group": session.age_group,
+                "pitch_size": session.pitch_size,
+                "pitch_dimensions": session.get_pitch_dimensions(),
                 "message": "TraceVision session created and video processing started successfully",
                 "video_source": "link" if video_link else "file_upload"
             }, status=http_status.HTTP_201_CREATED)
@@ -335,17 +376,18 @@ class TraceVisionPollStatusView(APIView):
                 "status_updated": new_status != previous_status if new_status else False,
                 "result": session.result,
                 "match_date": session.match_date,
-                "home_team": session.home_team,
-                "away_team": session.away_team,
+                "home_team": session.home_team.name if session.home_team else None,
+                "away_team": session.away_team.name if session.away_team else None,
                 "home_score": session.home_score,
                 "away_score": session.away_score,
-                "home_team_jersey_color": session.home_team_jersey_color,
-                "away_team_jersey_color": session.away_team_jersey_color,
+                "home_team_jersey_color": session.home_team.jersey_color if session.home_team else None,
+                "away_team_jersey_color": session.away_team.jersey_color if session.away_team else None,
+                "age_group": session.age_group,
+                "pitch_size": session.pitch_size,
+                "pitch_dimensions": session.get_pitch_dimensions(),
                 "final_score": session.final_score,
                 "start_time": session.start_time,
                 "video_url": session.video_url,
-                # "cached": status_data.get('cached', False),
-                # "cache_timestamp": datetime.now().isoformat()
             }
 
             return Response(response_data, status=http_status.HTTP_200_OK)
@@ -433,12 +475,15 @@ class TraceVisionSessionResultView(APIView):
                 "session_status": session.status,
                 "result": result_data,
                 "metadata": {
-                    "home_team": session.home_team,
-                    "away_team": session.away_team,
+                    "home_team": session.home_team.name if session.home_team else None,
+                    "away_team": session.away_team.name if session.away_team else None,
                     "home_score": session.home_score,
                     "away_score": session.away_score,
-                    "home_team_jersey_color": session.home_team_jersey_color,
-                    "away_team_jersey_color": session.away_team_jersey_color,
+                    "home_team_jersey_color": session.home_team.jersey_color if session.home_team else None,
+                    "away_team_jersey_color": session.away_team.jersey_color if session.away_team else None,
+                    "age_group": session.age_group,
+                    "pitch_size": session.pitch_size,
+                    "pitch_dimensions": session.get_pitch_dimensions(),
                     "final_score": session.final_score,
                     "start_time": session.start_time,
                     "match_date": session.match_date,

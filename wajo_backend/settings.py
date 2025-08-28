@@ -217,3 +217,6 @@ SCHEDULER_AUTOSTART = os.environ.get("scheduler-autostart", "False")
 # TraceVision Cache Configuration
 TRACEVISION_STATUS_CACHE_TIMEOUT = int(os.environ.get("tracevision-status-cache-timeout", "300"))  # 5 minutes
 TRACEVISION_RESULT_CACHE_TIMEOUT = int(os.environ.get("tracevision-result-cache-timeout", "1800"))  # 30 minutes 
+
+# OpenAI Configuration
+OPENAI_API_KEY = os.environ.get("openai-api-key")

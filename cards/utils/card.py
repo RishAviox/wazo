@@ -8,6 +8,7 @@ from django.utils.timezone import datetime
 
 
 from ..models import *
+from cards.models import GPSAthleticSkills, GPSFootballAbilities
 # from events.models import OneTimeEvents, RecurringEvents
 from calendar_entry.models import CalendarEventEntry
 from .status_metrics_calculations import *
@@ -58,6 +59,26 @@ def get_videocard_defensive_metrics(user):
 def get_videocard_distributions_metrics(user):
     try:
         metrics = VideoCardDistributions.objects.filter(user=user).latest('updated_on')
+        return metrics.metrics
+    
+    except:
+        return {}
+
+
+# for gps athletic skills from tracevision
+def get_gps_athletic_skills_from_tracevision(user):
+    try:
+        metrics = GPSAthleticSkills.objects.filter(user=user).latest('updated_on')
+        return metrics.metrics
+    
+    except:
+        return {}
+
+
+# for gps football abilities from tracevision
+def get_gps_football_abilities_from_tracevision(user):
+    try:
+        metrics = GPSFootballAbilities.objects.filter(user=user).latest('updated_on')
         return metrics.metrics
     
     except:
@@ -842,7 +863,12 @@ def get_prompt_for_insight(user, card):
         if user.role == 'Coach':
             player_data = []
             for player in user.players.all():
-                player_data.append(get_gps_athletic_skills_metrics(player))
+                # Try TraceVision data first, fallback to traditional GPS data
+                tracevision_data = get_gps_athletic_skills_from_tracevision(player)
+                if tracevision_data:
+                    player_data.append(tracevision_data)
+                else:
+                    player_data.append(get_gps_athletic_skills_metrics(player))
 
             user_data = {
                 'team-gps-athletic-skills-metrics': player_data
@@ -852,9 +878,13 @@ def get_prompt_for_insight(user, card):
             return prompt
         
         else:
-            user_data = {
-                'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(user)
-            }
+            # Try TraceVision data first, fallback to traditional GPS data
+            tracevision_data = get_gps_athletic_skills_from_tracevision(user)
+            if tracevision_data:
+                user_data = {'gps-athletic-skills-metrics': tracevision_data}
+            else:
+                user_data = {'gps-athletic-skills-metrics': get_gps_athletic_skills_metrics(user)}
+                
             prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided GPS athletic performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the player. Data provided:{user_data}. Example: 'Your top speed and distance covered are impressive, but work on improving acceleration and recovery during transitions. Focus on agility drills, quick sprints, and endurance.Dont translate but think and respond in Hebrew. While you get the overall data, always focus on athletic skill for the player. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
 
@@ -862,7 +892,12 @@ def get_prompt_for_insight(user, card):
         if user.role == 'Coach':
             player_data = []
             for player in user.players.all():
-                player_data.append(get_gps_football_abilities_metrics(player))
+                # Try TraceVision data first, fallback to traditional GPS data
+                tracevision_data = get_gps_football_abilities_from_tracevision(player)
+                if tracevision_data:
+                    player_data.append(tracevision_data)
+                else:
+                    player_data.append(get_gps_football_abilities_metrics(player))
 
             user_data = {
                 'team-gps-football-abilities-metrics': player_data
@@ -872,9 +907,13 @@ def get_prompt_for_insight(user, card):
             return prompt
         
         else:
-            user_data = {
-                'gps-football-abilities-metrics': get_gps_football_abilities_metrics(user)
-            }
+            # Try TraceVision data first, fallback to traditional GPS data
+            tracevision_data = get_gps_football_abilities_from_tracevision(user)
+            if tracevision_data:
+                user_data = {'gps-football-abilities-metrics': tracevision_data}
+            else:
+                user_data = {'gps-football-abilities-metrics': get_gps_football_abilities_metrics(user)}
+                
             prompt = f"Generate a concise expert analysis for athletes only in {language} language based on the provided GPS football performance metrics, highlighting key strengths, areas for improvement, and suggesting targeted drills. Keep it under 40 words and avoid mentioning the data passed to you or athletes and coaches. Make sure the sentence can be directly sent to the player. Data provided:{user_data}. Example: 'You have strong high-speed runs and cover good distance, but work on improving your recovery speed and positioning in transitions. Focus on drills for endurance, agility, and quick direction changes.' While you get the overall data, always focus on Football abilities for the player. {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}"
             return prompt
     
