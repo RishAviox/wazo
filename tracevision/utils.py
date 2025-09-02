@@ -11,12 +11,14 @@ def get_hex_from_color_name(color_name):
         return None  # or return a default like "#000000"
 
 
-def calculate_metrics_from_spotlight_file(file_path: str) -> Tuple[Dict[str, str], Dict[str, str]]:
+def calculate_metrics_from_spotlight_file(file_path: str, field_length_m: float = 105.0, field_width_m: float = 68.0) -> Tuple[Dict[str, str], Dict[str, str]]:
     """
     Calculate GPS Athletic Skills and GPS Football Abilities from a spotlight JSON file
     
     Args:
         file_path: Path to the spotlight JSON file (e.g., "11.json")
+        field_length_m: Field length in meters (default: 105.0 - FIFA standard)
+        field_width_m: Field width in meters (default: 68.0 - FIFA standard)
         
     Returns:
         Tuple of (athletic_metrics, football_metrics)
@@ -25,11 +27,14 @@ def calculate_metrics_from_spotlight_file(file_path: str) -> Tuple[Dict[str, str
         athletic, football = calculate_metrics_from_spotlight_file("c:/path/to/11.json")
         print("Athletic Skills:", athletic)
         print("Football Abilities:", football)
+        
+        # With custom field dimensions
+        athletic, football = calculate_metrics_from_spotlight_file("c:/path/to/11.json", 91.0, 55.0)
     """
     try:
         from .spotlight_metrics_calculator import SpotlightMetricsCalculator
         
-        calculator = SpotlightMetricsCalculator()
+        calculator = SpotlightMetricsCalculator(field_length_m=field_length_m, field_width_m=field_width_m)
         spotlights = calculator.load_spotlight_data(file_path)
         
         if not spotlights:
@@ -47,7 +52,7 @@ def calculate_metrics_from_spotlight_file(file_path: str) -> Tuple[Dict[str, str
         logger.exception(f"Error calculating metrics from {file_path}: {e}")
         # Return empty metrics on error
         from .spotlight_metrics_calculator import SpotlightMetricsCalculator
-        calculator = SpotlightMetricsCalculator()
+        calculator = SpotlightMetricsCalculator(field_length_m=field_length_m, field_width_m=field_width_m)
         return calculator._get_empty_athletic_metrics(), calculator._get_empty_football_metrics()
 
 

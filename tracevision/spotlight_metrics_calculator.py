@@ -1,32 +1,58 @@
-"""
-TraceVision Spotlight Metrics Calculator
-
-This module calculates GPS Athletic Skills and GPS Football Abilities metrics
-from TraceVision spotlight tracking data (11.json format).
-
-The spotlight data format is: [time_off, x, y, w, h]
-- time_off: time offset in milliseconds
-- x, y: center coordinates (0-1000 scale)
-- w, h: bounding box dimensions (0-1000 scale)
-"""
-
+import os
 import json
 import math
 import logging
 from typing import Dict, List, Any
+from django.core.files.storage import default_storage
+from django.core.cache import cache
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+
+def clear_spotlight_data_cache(object_id: str, session_id: str) -> bool:
+    """
+    Clear cached spotlight data for a specific object.
+    
+    Args:
+        object_id: TraceObject object_id
+        session_id: TraceSession session_id
+        
+    Returns:
+        bool: True if cache was cleared, False otherwise
+    """
+    try:
+        cache_key = f"spotlight_data_{session_id}_{object_id}"
+        cache.delete(cache_key)
+        logger.info(f"Cleared spotlight data cache for {object_id} in session {session_id}")
+        return True
+    except Exception as e:
+        logger.exception(f"Error clearing spotlight cache for {object_id}: {e}")
+        return False
 
 
 class SpotlightMetricsCalculator:
     """
     Calculate performance metrics from TraceVision spotlight tracking data
+    
+    This class now supports dynamic field dimensions from TraceSession objects.
+    Field dimensions are used to calculate accurate distance measurements and scaling factors.
+    
+    Examples:
+        # Using default FIFA standard dimensions (105m x 68m)
+        calculator = SpotlightMetricsCalculator()
+        
+        # Using custom dimensions
+        calculator = SpotlightMetricsCalculator(field_length_m=91.0, field_width_m=55.0)
+        
+        # Using dimensions from a TraceSession
+        calculator = SpotlightMetricsCalculator.from_trace_session(trace_session)
     """
 
-    def __init__(self):
-        # Field dimensions (standard football pitch)
-        self.FIELD_LENGTH_M = 105.0  # meters
-        self.FIELD_WIDTH_M = 68.0    # meters
+    def __init__(self, field_length_m: float = 105.0, field_width_m: float = 68.0):
+        # Field dimensions from TraceSession (default to standard FIFA pitch size)
+        self.FIELD_LENGTH_M = field_length_m
+        self.FIELD_WIDTH_M = field_width_m
 
         # Using average of length and width for more balanced scaling
         self.SCALE_FACTOR = (self.FIELD_LENGTH_M +
@@ -43,13 +69,54 @@ class SpotlightMetricsCalculator:
         self.HIGH_INTENSITY_THRESHOLD = 6.5  # > 6.5 m/s
 
         # Acceleration thresholds (m/s²)
-        self.HIGH_ACCEL_THRESHOLD = 2.5   # High acceleration
-        self.MAX_ACCEL_THRESHOLD = 4.0    # Maximum acceleration
+        self.HIGH_ACCEL_THRESHOLD = 2.5
+        self.MAX_ACCEL_THRESHOLD = 4.0
 
         # Football-specific thresholds
-        self.KICK_POWER_THRESHOLD = 8.0   # m/s for power kicks
-        self.DRIBBLE_MIN_DURATION = 3.0   # seconds
-        self.DRIBBLE_MAX_SPEED = 4.0      # m/s
+        self.KICK_POWER_THRESHOLD = 8.0
+        self.DRIBBLE_MIN_DURATION = 3.0
+        self.DRIBBLE_MAX_SPEED = 4.0
+
+    @classmethod
+    def from_trace_session(cls, trace_session):
+        """
+        Create a SpotlightMetricsCalculator instance from a TraceSession object
+        
+        Args:
+            trace_session: TraceSession instance with pitch_size field
+            
+        Returns:
+            SpotlightMetricsCalculator instance with field dimensions from the session
+            
+        Example:
+            # Get calculator with field dimensions from session
+            session = TraceSession.objects.get(id=session_id)
+            calculator = SpotlightMetricsCalculator.from_trace_session(session)
+            
+            # The calculator will now use the correct field dimensions for accurate calculations
+        """
+        if hasattr(trace_session, 'pitch_size') and trace_session.pitch_size:
+            field_length = trace_session.pitch_size.get('length', 105.0)
+            field_width = trace_session.pitch_size.get('width', 68.0)
+        else:
+            # Fallback to default FIFA standard dimensions
+            field_length = 105.0
+            field_width = 68.0
+            
+        return cls(field_length_m=field_length, field_width_m=field_width)
+
+    def get_field_dimensions(self) -> Dict[str, float]:
+        """
+        Get the current field dimensions being used by this calculator
+        
+        Returns:
+            dict: Field dimensions with 'length' and 'width' keys in meters
+        """
+        return {
+            'length': self.FIELD_LENGTH_M,
+            'width': self.FIELD_WIDTH_M,
+            'scale_factor': self.SCALE_FACTOR
+        }
 
     def load_spotlight_data(self, file_path: str) -> List[List[float]]:
         """
@@ -74,6 +141,92 @@ class SpotlightMetricsCalculator:
         except Exception as e:
             logger.exception(
                 f"Error loading spotlight data from {file_path}: {e}")
+            return []
+
+    def load_spotlight_data_from_azure_blob(self, blob_url: str, cache_key: str = None) -> List[List[float]]:
+        """
+        Load spotlight tracking data from Azure blob URL with caching support
+
+        Args:
+            blob_url: Azure blob URL to the tracking data JSON file (or local file path in dev)
+            cache_key: Optional cache key for caching the data
+
+        Returns:
+            List of tracking points [time_off, x, y, w, h]
+        """
+        try:
+            # Check cache first if cache_key is provided
+            if cache_key:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.debug(f"Retrieved spotlight data from cache for key: {cache_key}")
+                    return cached_data
+
+            # Check if we're in development mode (local file storage)
+            if settings.DEBUG and not hasattr(settings, 'AZURE_CUSTOM_DOMAIN'):
+                logger.info(f"Development mode detected - reading from local file: {blob_url}")
+                
+                # Convert blob URL to local file path
+                if blob_url.startswith('/media/'):
+                    local_file_path = os.path.join(settings.MEDIA_ROOT, blob_url[7:])  # Remove '/media/'
+                else:
+                    local_file_path = blob_url
+                
+                if os.path.exists(local_file_path):
+                    with open(local_file_path, 'r') as f:
+                        data = json.load(f)
+                    
+                    # Extract spotlights data
+                    if isinstance(data, dict) and 'spotlights' in data:
+                        spotlights = data['spotlights']
+                    elif isinstance(data, list):
+                        spotlights = data
+                    else:
+                        logger.warning(f"Unexpected data format in local file {local_file_path}")
+                        return []
+                    
+                    # Cache the data if cache_key is provided
+                    if cache_key and spotlights:
+                        cache.set(cache_key, spotlights, timeout=3600)  # Cache for 1 hour
+                        logger.debug(f"Cached spotlight data with key: {cache_key}")
+                    
+                    logger.info(f"Successfully loaded {len(spotlights)} spotlight tracking points from local file")
+                    return spotlights
+                else:
+                    logger.warning(f"Local file not found: {local_file_path}")
+                    return []
+            
+            # Production mode - download from Azure blob storage
+            logger.info(f"Loading spotlight data from Azure blob: {blob_url}")
+            
+            # Use Django's default storage to download the file
+            if default_storage.exists(blob_url):
+                # Read the file content
+                with default_storage.open(blob_url, 'r') as f:
+                    data = json.load(f)
+                
+                # Extract spotlights data
+                if isinstance(data, dict) and 'spotlights' in data:
+                    spotlights = data['spotlights']
+                elif isinstance(data, list):
+                    spotlights = data
+                else:
+                    logger.warning(f"Unexpected data format in blob {blob_url}")
+                    return []
+                
+                # Cache the data if cache_key is provided
+                if cache_key and spotlights:
+                    cache.set(cache_key, spotlights, timeout=3600)  # Cache for 1 hour
+                    logger.debug(f"Cached spotlight data with key: {cache_key}")
+                
+                logger.info(f"Successfully loaded {len(spotlights)} spotlight tracking points from Azure blob")
+                return spotlights
+            else:
+                logger.error(f"Blob file not found: {blob_url}")
+                return []
+                
+        except Exception as e:
+            logger.exception(f"Error loading spotlight data from {blob_url}: {e}")
             return []
 
     def calculate_gps_athletic_skills(self, spotlights: List[List[float]]) -> Dict[str, str]:

@@ -1,6 +1,9 @@
+import os
 import json
 import logging
 import requests
+import mimetypes
+import tempfile
 from celery import shared_task
 from django.db import transaction
 from django.core.files.storage import default_storage
@@ -9,8 +12,32 @@ from django.core.files.base import ContentFile
 from tracevision.models import TraceSession, TraceObject, TraceHighlight, TraceHighlightObject
 from tracevision.services import TraceVisionService
 from tracevision.notification_service import NotificationService
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+
+def get_full_azure_blob_url(file_path: str) -> str:
+    """
+    Generate full Azure blob URL for a given file path.
+
+    Args:
+        file_path: The file path in Azure blob storage
+
+    Returns:
+        str: Full Azure blob URL
+    """
+    try:
+        if hasattr(settings, 'AZURE_CUSTOM_DOMAIN') and settings.AZURE_CUSTOM_DOMAIN:
+            return f"https://{settings.AZURE_CUSTOM_DOMAIN}/media/{file_path}"
+        else:
+            logger.warning(
+                "AZURE_CUSTOM_DOMAIN not configured, using default_storage.url()")
+            return default_storage.url(file_path)
+    except Exception as e:
+        logger.exception(
+            f"Error generating Azure blob URL for {file_path}: {e}")
+        return default_storage.url(file_path)
 
 
 def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
@@ -27,7 +54,7 @@ def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
     """
     try:
         # Check if already downloaded to prevent duplicates
-        if trace_object.tracking_downloaded and trace_object.tracking_blob_url:
+        if trace_object.tracking_blob_url:
             logger.info(
                 f"Tracking data already downloaded for object {trace_object.object_id}")
             return {
@@ -58,8 +85,8 @@ def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
         saved_path = default_storage.save(file_path, file_content)
 
         # Generate the full URL for the blob
+        # blob_url = get_full_azure_blob_url(saved_path)
         blob_url = default_storage.url(saved_path)
-
         # Update the TraceObject with the data and URL
         trace_object.tracking_blob_url = blob_url
         trace_object.save()
@@ -98,6 +125,190 @@ def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
             'data': [],
             'blob_url': None,
             'error': f"Processing error: {str(e)}"
+        }
+
+
+@shared_task
+def download_video_and_save_to_azure_blob(session_id, timeout=300):
+    """
+    Download video from TraceSession's video_url, upload to Azure Blob Storage,
+    and save the blob URL back to the TraceSession.
+
+    Args:
+        session_id (int): TraceSession ID
+        timeout (int): Request timeout in seconds (default 5 minutes for video)
+
+    Returns:
+        dict: Result containing success status, blob_url, and message
+    """
+    try:
+        # Get the session from the database
+        session = TraceSession.objects.get(id=session_id)
+
+        # Check if already downloaded to prevent duplicates
+        if session.blob_video_url:
+            logger.info(
+                f"Video already downloaded for session {session.session_id}")
+            return {
+                'success': True,
+                'blob_url': session.blob_video_url,
+                'message': 'Already downloaded'
+            }
+
+        logger.info(
+            f"Downloading video for session {session.session_id} from: {session.video_url}")
+
+        # Download video with streaming to handle large files
+        response = requests.get(
+            session.video_url, timeout=timeout, stream=True)
+        response.raise_for_status()
+
+        # Get content type and file extension
+        content_type = response.headers.get('content-type', '')
+        file_extension = mimetypes.guess_extension(content_type) or '.mp4'
+
+        # Create proper file path structure for Azure blob storage
+        file_name = f"{session.session_id}_video{file_extension}"
+        file_path = f"videos/{session.session_id}/{file_name}"
+
+        # Save to Azure Blob Storage with streaming
+        logger.info(f"Uploading video to Azure blob: {file_path}")
+
+        # Create a temporary file to store the video
+        temp_file_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
+                temp_file_path = temp_file.name
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        temp_file.write(chunk)
+                temp_file.flush()
+
+            # Read the temporary file and upload to blob storage
+            with open(temp_file_path, 'rb') as video_file:
+                file_content = ContentFile(video_file.read())
+                saved_path = default_storage.save(file_path, file_content)
+
+        finally:
+            # Clean up temporary file with proper error handling
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except (OSError, PermissionError) as e:
+                    logger.warning(
+                        f"Could not delete temporary file {temp_file_path}: {e}")
+                    # On Windows, sometimes files are still locked, try again after a short delay
+                    import time
+                    time.sleep(0.1)
+                    try:
+                        os.unlink(temp_file_path)
+                    except (OSError, PermissionError):
+                        logger.warning(
+                            f"Failed to delete temporary file {temp_file_path} after retry")
+
+        # Generate the full URL for the blob
+        blob_url = default_storage.url(saved_path)
+
+        # Update the TraceSession with the blob URL
+        session.blob_video_url = blob_url
+        session.save()
+
+        # Log success with file size
+        file_size_mb = os.path.getsize(
+            saved_path) / (1024 * 1024) if os.path.exists(saved_path) else 0
+        logger.info(
+            f"Successfully downloaded video for session {session.session_id}: "
+            f"Size: {file_size_mb:.2f} MB, saved to {blob_url}")
+
+        return {
+            'success': True,
+            'blob_url': blob_url,
+            'message': 'Downloaded and uploaded successfully',
+            'file_size_mb': file_size_mb
+        }
+
+    except requests.exceptions.RequestException as e:
+        logger.error(
+            f"Failed to download video for session {session.session_id} from {session.video_url}: {e}")
+        return {
+            'success': False,
+            'blob_url': None,
+            'error': f"Network error: {str(e)}"
+        }
+    except Exception as e:
+        logger.error(
+            f"Error processing video for session {session.session_id}: {e}")
+        return {
+            'success': False,
+            'blob_url': None,
+            'error': f"Processing error: {str(e)}"
+        }
+
+
+def upload_result_data_to_azure_blob(session, result_data):
+    """
+    Upload session result data JSON to Azure Blob Storage and save the blob URL.
+
+    Args:
+        session (TraceSession): The session instance
+        result_data (dict): Result data from TraceVision API
+
+    Returns:
+        dict: Result containing success status, blob_url, and message
+    """
+    try:
+        # Check if already uploaded to prevent duplicates
+        if session.result_blob_url:
+            logger.info(
+                f"Result data already uploaded for session {session.session_id}")
+            return {
+                'success': True,
+                'blob_url': session.result_blob_url,
+                'message': 'Already uploaded'
+            }
+
+        logger.info(
+            f"Uploading result data for session {session.session_id} to Azure blob")
+
+        # Create proper file path structure for Azure blob storage
+        file_name = f"{session.session_id}_result_data.json"
+        file_path = f"session_results/{session.session_id}/{file_name}"
+
+        # Create ContentFile with the JSON data
+        json_content = json.dumps(result_data, indent=2, ensure_ascii=False)
+        file_content = ContentFile(json_content.encode('utf-8'))
+
+        # Save to Azure Blob Storage
+        logger.info(f"Uploading result data to Azure blob: {file_path}")
+        saved_path = default_storage.save(file_path, file_content)
+
+        # Generate the full URL for the blob
+        blob_url = default_storage.url(saved_path)
+
+        # Update the TraceSession with the blob URL
+        session.result_blob_url = blob_url
+        session.save()
+
+        # Log success with data size
+        data_size_kb = len(json_content) / 1024
+        logger.info(
+            f"Successfully uploaded result data for session {session.session_id}: "
+            f"Size: {data_size_kb:.2f} KB, saved to {blob_url}")
+
+        return {
+            'success': True,
+            'blob_url': blob_url,
+            'message': 'Uploaded successfully',
+            'data_size_kb': data_size_kb
+        }
+
+    except Exception as e:
+        logger.error(
+            f"Error uploading result data for session {session.session_id}: {e}")
+        return {
+            'success': False,
+            'blob_url': None,
+            'error': f"Upload error: {str(e)}"
         }
 
 
@@ -284,8 +495,8 @@ def create_silent_notification(session):
             f"Error in create_silent_notification for session {session.session_id}: {e}")
 
 
-@shared_task(bind=True, name='tracevision.process_trace_sessions')
-def process_trace_sessions_task(self):
+@shared_task
+def process_trace_sessions_task():
     """
     Celery task to process all TraceSession objects and update their status from TraceVision API.
     Create database notifications when status changes to "completed".
@@ -294,6 +505,7 @@ def process_trace_sessions_task(self):
         # Query all sessions that are not already processed or in error state
         sessions = TraceSession.objects.exclude(
             status__in=["processed", "process_error"])
+        # sessions = TraceSession.objects.filter(id=trace_session_id)
 
         if not sessions.exists():
             logger.info(
@@ -339,7 +551,16 @@ def process_trace_sessions_task(self):
                     result_data = tracevision_service.get_session_result(
                         session)
                     if result_data:
-                        session.result = result_data
+                        # Upload result data to Azure blob instead of storing in database
+                        upload_result = upload_result_data_to_azure_blob(
+                            session, result_data)
+
+                        if upload_result['success']:
+                            logger.info(
+                                f"Result data uploaded successfully for session {session.session_id}")
+                        else:
+                            logger.error(
+                                f"Failed to upload result data for session {session.session_id}: {upload_result.get('error')}")
 
                         # For processed sessions, parse and store structured data
                         if new_status == "processed":
@@ -392,6 +613,7 @@ def process_trace_sessions_task(self):
                     else:
                         logger.error(
                             f"Failed to fetch result for {new_status} session {session.session_id}")
+                        
                         # Don't update status if we couldn't fetch result data
                         session.status = previous_status
                         session.save()
@@ -411,8 +633,8 @@ def process_trace_sessions_task(self):
         raise
 
 
-@shared_task(bind=True, name='tracevision.calculate_player_stats')
-def calculate_player_stats_task(self, session_id):
+@shared_task
+def calculate_player_stats_task(session_id):
     """
     Celery task to calculate comprehensive player performance statistics from TraceVision data.
     This task runs after session processing is completed and generates all performance metrics.
@@ -481,8 +703,8 @@ def calculate_player_stats_task(self, session_id):
         return {"success": False, "error": error_msg}
 
 
-@shared_task(bind=True, name='tracevision.compute_aggregates')
-def compute_aggregates_task(self, session_id):
+@shared_task
+def compute_aggregates_task(session_id):
     """Compute CSV-equivalent aggregates in background and store them in DB."""
     try:
         from tracevision.services import TraceVisionAggregationService
@@ -509,8 +731,8 @@ def compute_aggregates_task(self, session_id):
         return {"success": False, "error": str(e)}
 
 
-@shared_task(bind=True, name='tracevision.reconcile_aggregates_for_processed_sessions')
-def reconcile_aggregates_for_processed_sessions(self, lookback_hours=24, batch_limit=50):
+@shared_task
+def reconcile_aggregates_for_processed_sessions(lookback_hours=24, batch_limit=50):
     """Scan recently processed sessions and ensure aggregates exist; enqueue if missing."""
     try:
         from django.utils import timezone
@@ -532,8 +754,8 @@ def reconcile_aggregates_for_processed_sessions(self, lookback_hours=24, batch_l
         return {"success": False, "error": str(e)}
 
 
-@shared_task(bind=True, name='tracevision.calculate_card_metrics')
-def calculate_card_metrics_task(self, session_id, user_mapping=None):
+@shared_task
+def calculate_card_metrics_task(session_id, user_mapping=None):
     """
     Calculate card metrics (GPS Athletic/Football, Attacking, Defensive, RPE) 
     from TraceVision session data and update card models.
@@ -604,21 +826,20 @@ def calculate_card_metrics_task(self, session_id, user_mapping=None):
                     user = session.user
 
                 # Create/find associated game instance
+                # Generate a unique game ID based on session info
+                game_id = f"TV_{session.session_id}"
                 game, _ = Game.objects.get_or_create(
-                    user=user,
-                    match_date=session.match_date,
+                    id=game_id,
                     defaults={
-                        'home_team': session.home_team,
-                        'away_team': session.away_team,
-                        'home_score': session.home_score,
-                        'away_score': session.away_score,
-                        'tracevision_session_id': session.session_id
+                        'type': 'match',
+                        'name': f"TraceVision Session {session.session_id}",
+                        'date': session.match_date,
                     }
                 )
 
                 # Save Attacking Skills metrics
                 if 'attacking_skills' in metrics:
-                    attacking_skills, created = AttackingSkills.objects.update_or_create(
+                    AttackingSkills.objects.update_or_create(
                         user=user,
                         game=game,
                         defaults={
@@ -630,7 +851,7 @@ def calculate_card_metrics_task(self, session_id, user_mapping=None):
 
                 # Save Defensive Skills metrics
                 if 'defensive_skills' in metrics:
-                    defensive_skills, created = VideoCardDefensive.objects.update_or_create(
+                    VideoCardDefensive.objects.update_or_create(
                         user=user,
                         game=game,
                         defaults={
@@ -642,7 +863,7 @@ def calculate_card_metrics_task(self, session_id, user_mapping=None):
 
                 # Save GPS Athletic Skills metrics
                 if 'gps_athletic_skills' in metrics:
-                    gps_athletic, created = GPSAthleticSkills.objects.update_or_create(
+                    GPSAthleticSkills.objects.update_or_create(
                         user=user,
                         game=game,
                         defaults={
@@ -654,7 +875,7 @@ def calculate_card_metrics_task(self, session_id, user_mapping=None):
 
                 # Save GPS Football Abilities metrics
                 if 'gps_football_abilities' in metrics:
-                    gps_football, created = GPSFootballAbilities.objects.update_or_create(
+                    GPSFootballAbilities.objects.update_or_create(
                         user=user,
                         game=game,
                         defaults={
@@ -666,7 +887,7 @@ def calculate_card_metrics_task(self, session_id, user_mapping=None):
                         f"GPSFootballAbilities for {object_id}")
 
                 logger.info(
-                    f"Saved metrics for player {object_id} (user: {user.id})")
+                    f"Saved metrics for player {object_id} (user: {user.phone_no})")
 
             except Exception as e:
                 error_msg = f"Error saving metrics for {object_id}: {str(e)}"
@@ -702,8 +923,8 @@ def calculate_card_metrics_task(self, session_id, user_mapping=None):
         return {"success": False, "error": error_msg}
 
 
-@shared_task(bind=True, name='tracevision.bulk_calculate_card_metrics')
-def bulk_calculate_card_metrics_task(self, session_ids=None, lookback_days=7):
+@shared_task
+def bulk_calculate_card_metrics_task(session_ids=None, lookback_days=7):
     """
     Bulk calculate card metrics for multiple sessions.
     Useful for backfilling metrics or processing multiple sessions at once.

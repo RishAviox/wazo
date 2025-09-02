@@ -62,9 +62,19 @@ class TraceSession(models.Model):
         null=True,
         blank=True,
         help_text="Start time of the video, if known"
-    )
+    ) 
     video_url = models.URLField()
+    blob_video_url = models.URLField(
+        blank=True, 
+        null=True, 
+        help_text="Azure blob URL for downloaded video file"
+    )
     result = models.JSONField(default=dict)
+    result_blob_url = models.URLField(
+        blank=True, 
+        null=True, 
+        help_text="Azure blob URL for session result data JSON"
+    )
 
     status = models.CharField(
         max_length=20,

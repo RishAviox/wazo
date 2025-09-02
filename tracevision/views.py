@@ -13,6 +13,7 @@ from tracevision.models import TraceSession, TracePlayer
 from tracevision.serializers import TraceVisionProcessesSerializer, TraceVisionProcessSerializer, TraceSessionListSerializer
 from tracevision.services import TraceVisionService
 from teams.models import Team
+from tracevision.tasks import download_video_and_save_to_azure_blob
 
 logger = logging.getLogger()
 
@@ -101,7 +102,7 @@ class TraceVisionProcessView(APIView):
             # Parse the final score to get individual team scores
             home_score, away_score = map(int, final_score_str.split('-'))
 
-            # Step 1: Get or create Team objects
+            # Get or create Team objects
             logger.info("Getting or creating Team objects...")
             
             # Get or create home team using name and jersey color as unique identifier
@@ -124,7 +125,7 @@ class TraceVisionProcessView(APIView):
                 }
             )
 
-            # Step 2: Create TraceVision session
+            # Create TraceVision session
             logger.info("Creating TraceVision session...")
             session_payload = {
                 "query": """
@@ -282,6 +283,8 @@ class TraceVisionProcessView(APIView):
                 status="waiting_for_data"  # Set initial status
             )
 
+            download_video_and_save_to_azure_blob.delay(session.id)
+
             return Response({
                 "success": True,
                 "id": session.id,
@@ -356,15 +359,8 @@ class TraceVisionPollStatusView(APIView):
                 logger.info(
                     f"Updated session {session.session_id} status from {previous_status} to {new_status}")
 
-                # If status changed to completed, fetch and save result data
-                if new_status == "processed":
-                    result_data = tracevision_service.get_session_result(
-                        session)
-                    if result_data:
-                        session.result = result_data
-                        session.save()
-                        logger.info(
-                            f"Updated result data for completed session {session.session_id}")
+            result_data = tracevision_service.get_session_result(
+                session)
 
             # Prepare response data
             response_data = {
@@ -374,7 +370,7 @@ class TraceVisionPollStatusView(APIView):
                 "status": session.status,
                 "previous_status": previous_status,
                 "status_updated": new_status != previous_status if new_status else False,
-                "result": session.result,
+                "result": result_data,
                 "match_date": session.match_date,
                 "home_team": session.home_team.name if session.home_team else None,
                 "away_team": session.away_team.name if session.away_team else None,
