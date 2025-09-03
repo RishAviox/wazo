@@ -9,7 +9,7 @@ from django.db import transaction
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 
-from tracevision.models import TraceSession, TraceObject, TraceHighlight, TraceHighlightObject
+from tracevision.models import TraceSession, TraceObject, TraceHighlight, TraceHighlightObject, TracePlayer
 from tracevision.services import TraceVisionService
 from tracevision.notification_service import NotificationService
 from django.conf import settings
@@ -315,6 +315,13 @@ def upload_result_data_to_azure_blob(session, result_data):
 def parse_and_store_session_data(session, result_data):
     """
     Parse session result data and store in structured models using atomic transactions.
+    Gets or creates TracePlayer objects (avoids duplicates across all sessions), then creates all other data based on players.
+
+    Team mapping logic:
+    - Parses object_id patterns: away_<jersey_number> or home_<jersey_number>
+    - Maps away_* to session.away_team, home_* to session.home_team
+    - Extracts jersey number from object_id for accurate player matching
+    - Checks for existing players by object_id and team across ALL sessions to avoid duplicates
 
     Args:
         session (TraceSession): The session instance
@@ -328,46 +335,121 @@ def parse_and_store_session_data(session, result_data):
             logger.info(
                 f"Starting to parse session data for session {session.session_id}")
 
-            # Clear existing data to avoid duplicates
             session.trace_objects.all().delete()
             session.highlights.all().delete()
 
-            # Parse and create objects first
+            # Get or create TracePlayer objects
             objects_data = result_data.get('objects', [])
-            trace_objects = []
+            player_map = {}
 
-            logger.info(f"Processing {len(objects_data)} objects")
+            logger.info(
+                f"Processing {len(objects_data)} objects to get/create players")
 
             for obj_data in objects_data:
-                # Create TraceObject
-                trace_object = TraceObject(
-                    object_id=obj_data.get('object_id'),
-                    type=obj_data.get('type', ''),
-                    side=obj_data.get('side', ''),
-                    appearance_fv=obj_data.get('appearance_fv'),
-                    color_fv=obj_data.get('color_fv'),
-                    tracking_url=obj_data.get('tracking_url', ''),
-                    role=obj_data.get('role'),
-                    session=session,
-                    user=session.user,
-                )
+                object_id = obj_data.get('object_id')
+                side = obj_data.get('side', '')
+                team = None
+                jersey_number = 0
 
-                trace_objects.append(trace_object)
+                if object_id:
+                    # Parse object_id to extract team and jersey number
+                    if object_id.startswith('away_'):
+                        team = session.away_team
+                        try:
+                            jersey_number = int(object_id.split('_')[1])
+                        except (ValueError, IndexError):
+                            jersey_number = 0
+                    elif object_id.startswith('home_'):
+                        team = session.home_team
+                        try:
+                            jersey_number = int(object_id.split('_')[1])
+                        except (ValueError, IndexError):
+                            jersey_number = 0
+                    else:
+                        # Fallback to side field if object_id doesn't match expected pattern
+                        team = session.home_team if side.lower() == 'home' else session.away_team
+                        jersey_number = obj_data.get('jersey_number', 0)
 
-            # Bulk create objects first
+                # Extract player information from object data
+                player_name = obj_data.get('name', f'Player {object_id}')
+                position = obj_data.get('position', 'Unknown')
+
+                # Validate that we have a team assigned
+                if not team:
+                    logger.warning(
+                        f"Could not determine team for object_id: {object_id}, skipping player")
+                    continue
+
+                # Check if player already exists for this object_id and team (across all sessions)
+                existing_player = TracePlayer.objects.filter(
+                    object_id=object_id,
+                    team=team
+                ).first()
+
+                if existing_player:
+                    # Use existing player from any session
+                    trace_player = existing_player
+                    logger.info(
+                        f"Using existing player {object_id} (jersey: {jersey_number}, team: {team.name}) from session {existing_player.session.session_id}")
+                else:
+                    # Create new player
+                    team_name = team.name if hasattr(
+                        team, 'name') else str(team)
+                    logger.info(
+                        f"Creating new player {object_id} for team {team_name} with jersey number {jersey_number}")
+
+                    trace_player = TracePlayer.objects.create(
+                        object_id=object_id,
+                        name=player_name,
+                        jersey_number=jersey_number,
+                        position=position,
+                        session=session,
+                        team=team,
+                        user=None  # Will be mapped later via Celery task
+                    )
+
+                player_map[object_id] = trace_player
+
+            logger.info(
+                f"Processed {len(player_map)} players (existing + new)")
+
+            # Step 2: Create TraceObject objects linked to players
+            trace_objects = []
+            logger.info(
+                f"Creating trace objects for {len(objects_data)} objects")
+
+            for obj_data in objects_data:
+                object_id = obj_data.get('object_id')
+                player = player_map.get(object_id)
+
+                if player:
+                    # Create TraceObject linked to the player
+                    trace_object = TraceObject(
+                        object_id=object_id,
+                        type=obj_data.get('type', ''),
+                        side=obj_data.get('side', ''),
+                        appearance_fv=obj_data.get('appearance_fv'),
+                        color_fv=obj_data.get('color_fv'),
+                        tracking_url=obj_data.get('tracking_url', ''),
+                        role=obj_data.get('role'),
+                        session=session,
+                        player=player,  # Link to TracePlayer instead of user
+                    )
+                    trace_objects.append(trace_object)
+
+            # Bulk create objects
             if trace_objects:
                 created_objects = TraceObject.objects.bulk_create(
                     trace_objects)
                 logger.info(f"Created {len(created_objects)} trace objects")
 
-                # Now download tracking data for each object and update with blob URLs
+                # Download tracking data for each object
                 logger.info(
                     f"Downloading tracking data for {len(created_objects)} objects")
                 updated_objects = []
 
                 for trace_object in created_objects:
                     try:
-                        # Download tracking data and get blob URL
                         if trace_object.tracking_url:
                             result = fetch_tracking_data_and_save_to_azure_blob(
                                 trace_object)
@@ -388,10 +470,7 @@ def parse_and_store_session_data(session, result_data):
                 logger.info(
                     f"Successfully downloaded tracking data for {len(updated_objects)}/{len(created_objects)} objects")
 
-                # Build object map for linking highlights to objects
-                object_map = {obj.object_id: obj for obj in created_objects}
-
-            # Parse and create highlights
+            # Step 3: Create TraceHighlight objects linked to players
             highlights_data = result_data.get('highlights', [])
             trace_highlights = []
             highlight_objects_bulk = []
@@ -399,7 +478,16 @@ def parse_and_store_session_data(session, result_data):
             logger.info(f"Processing {len(highlights_data)} highlights")
 
             for highlight_data in highlights_data:
-                # Create TraceHighlight
+                # Try to find the primary player involved in this highlight
+                highlight_objects = highlight_data.get('objects', [])
+                primary_player = None
+
+                # Get the first player from the highlight objects
+                if highlight_objects:
+                    first_object_id = highlight_objects[0].get('object_id')
+                    primary_player = player_map.get(first_object_id)
+
+                # Create TraceHighlight linked to player
                 trace_highlight = TraceHighlight(
                     highlight_id=highlight_data.get('highlight_id'),
                     video_id=highlight_data.get('video_id', 0),
@@ -408,7 +496,7 @@ def parse_and_store_session_data(session, result_data):
                     tags=highlight_data.get('tags', []),
                     video_stream=highlight_data.get('video_stream', ''),
                     session=session,
-                    user=session.user
+                    player=primary_player  # Link to TracePlayer instead of user
                 )
                 trace_highlights.append(trace_highlight)
 
@@ -419,20 +507,27 @@ def parse_and_store_session_data(session, result_data):
                 logger.info(
                     f"Created {len(created_highlights)} trace highlights")
 
-                # # Create highlight-object relationships
-                # highlight_map = {h.highlight_id: h for h in created_highlights}
-
+                # Create highlight-object relationships
                 for i, highlight_data in enumerate(highlights_data):
                     highlight_objects = highlight_data.get('objects', [])
                     created_highlight = created_highlights[i]
 
                     for obj_data in highlight_objects:
                         object_id = obj_data.get('object_id')
-                        if object_id in object_map:
-                            highlight_objects_bulk.append(TraceHighlightObject(
-                                highlight=created_highlight,
-                                trace_object=object_map[object_id]
-                            ))
+                        if object_id in player_map:
+                            player = player_map[object_id]
+                            # Find the corresponding trace object
+                            trace_object = TraceObject.objects.filter(
+                                session=session,
+                                object_id=object_id
+                            ).first()
+
+                            if trace_object:
+                                highlight_objects_bulk.append(TraceHighlightObject(
+                                    highlight=created_highlight,
+                                    trace_object=trace_object,
+                                    player=player  # Link to TracePlayer
+                                ))
 
                 if highlight_objects_bulk:
                     TraceHighlightObject.objects.bulk_create(
@@ -496,16 +591,16 @@ def create_silent_notification(session):
 
 
 @shared_task
-def process_trace_sessions_task():
+def process_trace_sessions_task(trace_session_id):
     """
     Celery task to process all TraceSession objects and update their status from TraceVision API.
     Create database notifications when status changes to "completed".
     """
     try:
         # Query all sessions that are not already processed or in error state
-        sessions = TraceSession.objects.exclude(
-            status__in=["processed", "process_error"])
-        # sessions = TraceSession.objects.filter(id=trace_session_id)
+        # sessions = TraceSession.objects.exclude(
+        #     status__in=["processed", "process_error"])
+        sessions = TraceSession.objects.filter(id=trace_session_id)
 
         if not sessions.exists():
             logger.info(
@@ -576,6 +671,17 @@ def process_trace_sessions_task():
                                 session.save()
                                 create_silent_notification(session)
 
+                                # Enqueue player-to-user mapping task
+                                try:
+                                    from tracevision.tasks import map_players_to_users_task
+                                    map_players_to_users_task.delay(
+                                        session.session_id)
+                                    logger.info(
+                                        f"Queued player-to-user mapping for session {session.session_id}")
+                                except Exception as e:
+                                    logger.exception(
+                                        f"Failed to enqueue player mapping for session {session.session_id}: {e}")
+
                                 # Enqueue aggregates computation (idempotent)
                                 try:
                                     from tracevision.tasks import compute_aggregates_task
@@ -613,7 +719,7 @@ def process_trace_sessions_task():
                     else:
                         logger.error(
                             f"Failed to fetch result for {new_status} session {session.session_id}")
-                        
+
                         # Don't update status if we couldn't fetch result data
                         session.status = previous_status
                         session.save()
@@ -665,9 +771,9 @@ def calculate_player_stats_task(session_id):
             logger.warning(error_msg)
             return {"success": False, "error": error_msg}
 
-        # Check if session has trace objects
-        if not session.trace_objects.exists():
-            error_msg = f"Session {session_id} has no trace objects. Run data parsing first."
+        # Check if session has trace players
+        if not session.trace_players.exists():
+            error_msg = f"Session {session_id} has no trace players. Run data parsing first."
             logger.warning(error_msg)
             return {"success": False, "error": error_msg}
 
@@ -772,7 +878,7 @@ def calculate_card_metrics_task(session_id, user_mapping=None):
         from tracevision.metrics_calculator import TraceVisionMetricsCalculator
         from tracevision.models import TraceSession
         from accounts.models import WajoUser
-        from cards.models import AttackingSkills, VideoCardDefensive, RPEMetrics, GPSAthleticSkills, GPSFootballAbilities
+        from cards.models import AttackingSkills, VideoCardDefensive, GPSAthleticSkills, GPSFootballAbilities
         from games.models import Game
         from django.utils import timezone
 
@@ -804,9 +910,10 @@ def calculate_card_metrics_task(session_id, user_mapping=None):
                 f"Failed to calculate metrics for session {session_id}")
             return {"success": False, "error": "Metrics calculation failed", "details": metrics_result}
 
-        # Save metrics to card models
+        # Save metrics to card models - only for mapped users
         saved_metrics = []
         errors = []
+        skipped_unmapped = []
 
         for player_metrics in metrics_result['metrics_calculated']:
             try:
@@ -814,19 +921,34 @@ def calculate_card_metrics_task(session_id, user_mapping=None):
                 side = player_metrics['side']
                 metrics = player_metrics['metrics']
 
-                # Determine user - either from mapping or session user (for single player)
-                if user_mapping and object_id in user_mapping:
-                    try:
-                        user = WajoUser.objects.get(id=user_mapping[object_id])
-                    except WajoUser.DoesNotExist:
-                        logger.warning(
-                            f"User not found for object_id {object_id}, using session user")
-                        user = session.user
-                else:
-                    user = session.user
+                # Find the trace player to check if they're mapped to a user
+                try:
+                    trace_player = session.trace_players.get(
+                        object_id=object_id)
+                    user = trace_player.user
 
-                # Create/find associated game instance
-                # Generate a unique game ID based on session info
+                    # Skip if player is not mapped to a user
+                    if not user:
+                        skipped_unmapped.append({
+                            'object_id': object_id,
+                            'player_name': trace_player.name,
+                            'jersey_number': trace_player.jersey_number,
+                            'reason': 'Player not mapped to user'
+                        })
+                        logger.info(
+                            f"Skipping metrics calculation for unmapped player {object_id} ({trace_player.name})")
+                        continue
+
+                except TracePlayer.DoesNotExist:
+                    # If trace player doesn't exist, skip this player
+                    logger.warning(
+                        f"TracePlayer not found for object_id {object_id}, skipping")
+                    skipped_unmapped.append({
+                        'object_id': object_id,
+                        'reason': 'TracePlayer not found'
+                    })
+                    continue
+
                 game_id = f"TV_{session.session_id}"
                 game, _ = Game.objects.get_or_create(
                     id=game_id,
@@ -847,7 +969,8 @@ def calculate_card_metrics_task(session_id, user_mapping=None):
                             'updated_on': timezone.now()
                         }
                     )
-                    saved_metrics.append(f"AttackingSkills for {object_id}")
+                    saved_metrics.append(
+                        f"AttackingSkills for {object_id} ({trace_player.name})")
 
                 # Save Defensive Skills metrics
                 if 'defensive_skills' in metrics:
@@ -859,7 +982,8 @@ def calculate_card_metrics_task(session_id, user_mapping=None):
                             'updated_on': timezone.now()
                         }
                     )
-                    saved_metrics.append(f"VideoCardDefensive for {object_id}")
+                    saved_metrics.append(
+                        f"VideoCardDefensive for {object_id} ({trace_player.name})")
 
                 # Save GPS Athletic Skills metrics
                 if 'gps_athletic_skills' in metrics:
@@ -871,7 +995,8 @@ def calculate_card_metrics_task(session_id, user_mapping=None):
                             'updated_on': timezone.now()
                         }
                     )
-                    saved_metrics.append(f"GPSAthleticSkills for {object_id}")
+                    saved_metrics.append(
+                        f"GPSAthleticSkills for {object_id} ({trace_player.name})")
 
                 # Save GPS Football Abilities metrics
                 if 'gps_football_abilities' in metrics:
@@ -884,10 +1009,10 @@ def calculate_card_metrics_task(session_id, user_mapping=None):
                         }
                     )
                     saved_metrics.append(
-                        f"GPSFootballAbilities for {object_id}")
+                        f"GPSFootballAbilities for {object_id} ({trace_player.name})")
 
                 logger.info(
-                    f"Saved metrics for player {object_id} (user: {user.phone_no})")
+                    f"Saved metrics for player {object_id} ({trace_player.name}) -> user: {user.phone_no}")
 
             except Exception as e:
                 error_msg = f"Error saving metrics for {object_id}: {str(e)}"
@@ -905,15 +1030,20 @@ def calculate_card_metrics_task(session_id, user_mapping=None):
         result = {
             "success": True,
             "session_id": session_id,
-            "players_processed": len(metrics_result['metrics_calculated']),
+            "total_players": len(metrics_result['metrics_calculated']),
+            "mapped_players_processed": len(saved_metrics),
+            "unmapped_players_skipped": len(skipped_unmapped),
             "metrics_saved": saved_metrics,
+            "skipped_unmapped": skipped_unmapped,
             "errors": errors,
             "calculation_details": metrics_result
         }
 
         logger.info(f"Card metrics calculation completed for session {session_id}. "
-                    f"Processed {len(metrics_result['metrics_calculated'])} players, "
-                    f"saved {len(saved_metrics)} metric sets")
+                    f"Total players: {len(metrics_result['metrics_calculated'])}, "
+                    f"Mapped players processed: {len(saved_metrics)}, "
+                    f"Unmapped players skipped: {len(skipped_unmapped)}, "
+                    f"Errors: {len(errors)}")
 
         return result
 
@@ -996,5 +1126,236 @@ def bulk_calculate_card_metrics_task(session_ids=None, lookback_days=7):
 
     except Exception as e:
         error_msg = f"Error in bulk_calculate_card_metrics_task: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "error": error_msg}
+
+
+@shared_task
+def map_players_to_users_task(session_id):
+    """
+    Map TracePlayer objects to WajoUser objects based on jersey numbers, names, etc.
+    This task runs after session processing to link players to actual users.
+
+    Args:
+        session_id (str): Session ID to process
+
+    Returns:
+        dict: Task results with success status and mapping details
+    """
+    try:
+        from accounts.models import WajoUser
+        from teams.models import Team
+
+        # Get the session
+        try:
+            session = TraceSession.objects.get(session_id=session_id)
+        except TraceSession.DoesNotExist:
+            error_msg = f"Session with ID {session_id} not found"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+
+        logger.info(
+            f"Starting player-to-user mapping for session: {session_id}")
+
+        # Get all unmapped players in this session
+        unmapped_players = session.trace_players.filter(user__isnull=True)
+
+        if not unmapped_players.exists():
+            logger.info(f"No unmapped players found for session {session_id}")
+            return {"success": True, "message": "No unmapped players found", "mapped_count": 0}
+
+        logger.info(
+            f"Found {unmapped_players.count()} unmapped players to process")
+
+        mapped_count = 0
+        mapping_details = []
+
+        for player in unmapped_players:
+            try:
+                # Log player details for debugging
+                team_name = player.team.name if hasattr(
+                    player.team, 'name') else str(player.team)
+                logger.info(
+                    f"Attempting to map player: {player.object_id} (jersey: {player.jersey_number}, team: {team_name})")
+
+                # Strategy 1: Try to match by jersey number and team
+                if player.jersey_number and player.team:
+                    matching_user = WajoUser.objects.filter(
+                        jersey_number=player.jersey_number,
+                        team=player.team
+                    ).first()
+
+                    if matching_user:
+                        player.user = matching_user
+                        player.save()
+                        mapped_count += 1
+                        mapping_details.append({
+                            'player_id': player.object_id,
+                            'player_name': player.name,
+                            'jersey_number': player.jersey_number,
+                            'mapped_to_user': matching_user.phone_no,
+                            'method': 'jersey_number_and_team'
+                        })
+                        logger.info(
+                            f"Mapped player {player.name} ({player.jersey_number}) to user {matching_user.phone_no}")
+                        continue
+
+                # Strategy 2: Try to match by name and team (fuzzy matching)
+                if player.name and player.team:
+                    # Simple name matching - you can enhance this with fuzzy matching
+                    matching_user = WajoUser.objects.filter(
+                        name__icontains=player.name.split()[0],  # First name
+                        team=player.team
+                    ).first()
+
+                    if matching_user:
+                        player.user = matching_user
+                        player.save()
+                        mapped_count += 1
+                        mapping_details.append({
+                            'player_id': player.object_id,
+                            'player_name': player.name,
+                            'jersey_number': player.jersey_number,
+                            'mapped_to_user': matching_user.phone_no,
+                            'method': 'name_and_team'
+                        })
+                        logger.info(
+                            f"Mapped player {player.name} to user {matching_user.phone_no} by name")
+                        continue
+
+                # Strategy 3: If session has only one user, map all unmapped players to that user
+                if session.user and not player.user:
+                    # Check if this is a single-player session
+                    total_players = session.trace_players.count()
+                    if total_players == 1:
+                        player.user = session.user
+                        player.save()
+                        mapped_count += 1
+                        mapping_details.append({
+                            'player_id': player.object_id,
+                            'player_name': player.name,
+                            'jersey_number': player.jersey_number,
+                            'mapped_to_user': session.user.phone_no,
+                            'method': 'single_player_session'
+                        })
+                        logger.info(
+                            f"Mapped single player {player.name} to session user {session.user.phone_no}")
+
+            except Exception as e:
+                logger.exception(
+                    f"Error mapping player {player.object_id}: {e}")
+
+        logger.info(
+            f"Successfully mapped {mapped_count}/{unmapped_players.count()} players to users")
+
+        # Trigger card metrics calculation for newly mapped players
+        if mapped_count > 0:
+            try:
+                calculate_card_metrics_task.delay(session_id)
+                logger.info(
+                    f"Queued card metrics calculation for session {session_id} after mapping {mapped_count} players")
+            except Exception as e:
+                logger.exception(
+                    f"Failed to enqueue card metrics calculation for session {session_id}: {e}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "total_players": unmapped_players.count(),
+            "mapped_count": mapped_count,
+            "unmapped_count": unmapped_players.count() - mapped_count,
+            "mapping_details": mapping_details,
+            "message": f"Mapped {mapped_count} players to users"
+        }
+
+    except Exception as e:
+        error_msg = f"Error in map_players_to_users_task for session {session_id}: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "error": error_msg}
+
+
+@shared_task
+def calculate_metrics_for_unmapped_players_task(session_id=None, lookback_days=7):
+    """
+    Calculate card metrics for players that were previously unmapped but are now mapped.
+    This task can be run periodically or triggered when new player mappings are created.
+
+    Args:
+        session_id (str, optional): Specific session ID to process
+        lookback_days (int): Days to look back for sessions with unmapped players
+
+    Returns:
+        dict: Task results with success status and details
+    """
+    try:
+        from django.utils import timezone
+        from datetime import timedelta
+        from tracevision.models import TraceSession, TracePlayer
+
+        if session_id:
+            # Process specific session
+            sessions = TraceSession.objects.filter(
+                session_id=session_id, status='processed')
+            logger.info(
+                f"Processing specific session {session_id} for unmapped player metrics")
+        else:
+            # Find recent sessions with unmapped players
+            cutoff = timezone.now() - timedelta(days=lookback_days)
+            sessions = TraceSession.objects.filter(
+                status='processed',
+                updated_at__gte=cutoff
+            ).order_by('-updated_at')
+            logger.info(
+                f"Processing sessions from last {lookback_days} days for unmapped player metrics")
+
+        if not sessions.exists():
+            return {"success": True, "message": "No sessions found to process"}
+
+        total_processed = 0
+        total_errors = 0
+        results = []
+
+        for session in sessions:
+            try:
+                # Find players that are now mapped but might not have metrics calculated
+                newly_mapped_players = session.trace_players.filter(
+                    user__isnull=False,
+                    # You could add additional criteria here to identify players that need metrics
+                )
+
+                if newly_mapped_players.exists():
+                    # Trigger card metrics calculation for this session
+                    result = calculate_card_metrics_task.delay(
+                        session.session_id)
+                    results.append({
+                        'session_id': session.session_id,
+                        'mapped_players_count': newly_mapped_players.count(),
+                        'task_id': result.id,
+                        'status': 'enqueued'
+                    })
+                    total_processed += 1
+                    logger.info(
+                        f"Queued metrics calculation for session {session.session_id} with {newly_mapped_players.count()} mapped players")
+
+            except Exception as e:
+                logger.exception(
+                    f"Error processing session {session.session_id}: {e}")
+                results.append({
+                    'session_id': session.session_id,
+                    'status': 'error',
+                    'error': str(e)
+                })
+                total_errors += 1
+
+        return {
+            "success": True,
+            "total_sessions": sessions.count(),
+            "processed": total_processed,
+            "errors": total_errors,
+            "results": results
+        }
+
+    except Exception as e:
+        error_msg = f"Error in calculate_metrics_for_unmapped_players_task: {str(e)}"
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}

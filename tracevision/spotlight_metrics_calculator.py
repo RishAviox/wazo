@@ -10,41 +10,43 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def clear_spotlight_data_cache(object_id: str, session_id: str) -> bool:
+def clear_spotlight_data_cache(player_id: str, session_id: str) -> bool:
     """
-    Clear cached spotlight data for a specific object.
-    
+    Clear cached spotlight data for a specific player.
+
     Args:
-        object_id: TraceObject object_id
+        player_id: TracePlayer object_id or player identifier
         session_id: TraceSession session_id
-        
+
     Returns:
         bool: True if cache was cleared, False otherwise
     """
     try:
-        cache_key = f"spotlight_data_{session_id}_{object_id}"
+        cache_key = f"spotlight_data_{session_id}_{player_id}"
         cache.delete(cache_key)
-        logger.info(f"Cleared spotlight data cache for {object_id} in session {session_id}")
+        logger.info(
+            f"Cleared spotlight data cache for player {player_id} in session {session_id}")
         return True
     except Exception as e:
-        logger.exception(f"Error clearing spotlight cache for {object_id}: {e}")
+        logger.exception(
+            f"Error clearing spotlight cache for player {player_id}: {e}")
         return False
 
 
 class SpotlightMetricsCalculator:
     """
     Calculate performance metrics from TraceVision spotlight tracking data
-    
+
     This class now supports dynamic field dimensions from TraceSession objects.
     Field dimensions are used to calculate accurate distance measurements and scaling factors.
-    
+
     Examples:
         # Using default FIFA standard dimensions (105m x 68m)
         calculator = SpotlightMetricsCalculator()
-        
+
         # Using custom dimensions
         calculator = SpotlightMetricsCalculator(field_length_m=91.0, field_width_m=55.0)
-        
+
         # Using dimensions from a TraceSession
         calculator = SpotlightMetricsCalculator.from_trace_session(trace_session)
     """
@@ -81,18 +83,18 @@ class SpotlightMetricsCalculator:
     def from_trace_session(cls, trace_session):
         """
         Create a SpotlightMetricsCalculator instance from a TraceSession object
-        
+
         Args:
             trace_session: TraceSession instance with pitch_size field
-            
+
         Returns:
             SpotlightMetricsCalculator instance with field dimensions from the session
-            
+
         Example:
             # Get calculator with field dimensions from session
             session = TraceSession.objects.get(id=session_id)
             calculator = SpotlightMetricsCalculator.from_trace_session(session)
-            
+
             # The calculator will now use the correct field dimensions for accurate calculations
         """
         if hasattr(trace_session, 'pitch_size') and trace_session.pitch_size:
@@ -102,13 +104,13 @@ class SpotlightMetricsCalculator:
             # Fallback to default FIFA standard dimensions
             field_length = 105.0
             field_width = 68.0
-            
+
         return cls(field_length_m=field_length, field_width_m=field_width)
 
     def get_field_dimensions(self) -> Dict[str, float]:
         """
         Get the current field dimensions being used by this calculator
-        
+
         Returns:
             dict: Field dimensions with 'length' and 'width' keys in meters
         """
@@ -159,74 +161,86 @@ class SpotlightMetricsCalculator:
             if cache_key:
                 cached_data = cache.get(cache_key)
                 if cached_data is not None:
-                    logger.debug(f"Retrieved spotlight data from cache for key: {cache_key}")
+                    logger.debug(
+                        f"Retrieved spotlight data from cache for key: {cache_key}")
                     return cached_data
 
             # Check if we're in development mode (local file storage)
             if settings.DEBUG and not hasattr(settings, 'AZURE_CUSTOM_DOMAIN'):
-                logger.info(f"Development mode detected - reading from local file: {blob_url}")
-                
+                logger.info(
+                    f"Development mode detected - reading from local file: {blob_url}")
+
                 # Convert blob URL to local file path
                 if blob_url.startswith('/media/'):
-                    local_file_path = os.path.join(settings.MEDIA_ROOT, blob_url[7:])  # Remove '/media/'
+                    local_file_path = os.path.join(
+                        settings.MEDIA_ROOT, blob_url[7:])  # Remove '/media/'
                 else:
                     local_file_path = blob_url
-                
+
                 if os.path.exists(local_file_path):
                     with open(local_file_path, 'r') as f:
                         data = json.load(f)
-                    
+
                     # Extract spotlights data
                     if isinstance(data, dict) and 'spotlights' in data:
                         spotlights = data['spotlights']
                     elif isinstance(data, list):
                         spotlights = data
                     else:
-                        logger.warning(f"Unexpected data format in local file {local_file_path}")
+                        logger.warning(
+                            f"Unexpected data format in local file {local_file_path}")
                         return []
-                    
+
                     # Cache the data if cache_key is provided
                     if cache_key and spotlights:
-                        cache.set(cache_key, spotlights, timeout=3600)  # Cache for 1 hour
-                        logger.debug(f"Cached spotlight data with key: {cache_key}")
-                    
-                    logger.info(f"Successfully loaded {len(spotlights)} spotlight tracking points from local file")
+                        # Cache for 1 hour
+                        cache.set(cache_key, spotlights, timeout=3600)
+                        logger.debug(
+                            f"Cached spotlight data with key: {cache_key}")
+
+                    logger.info(
+                        f"Successfully loaded {len(spotlights)} spotlight tracking points from local file")
                     return spotlights
                 else:
                     logger.warning(f"Local file not found: {local_file_path}")
                     return []
-            
+
             # Production mode - download from Azure blob storage
             logger.info(f"Loading spotlight data from Azure blob: {blob_url}")
-            
+
             # Use Django's default storage to download the file
             if default_storage.exists(blob_url):
                 # Read the file content
                 with default_storage.open(blob_url, 'r') as f:
                     data = json.load(f)
-                
+
                 # Extract spotlights data
                 if isinstance(data, dict) and 'spotlights' in data:
                     spotlights = data['spotlights']
                 elif isinstance(data, list):
                     spotlights = data
                 else:
-                    logger.warning(f"Unexpected data format in blob {blob_url}")
+                    logger.warning(
+                        f"Unexpected data format in blob {blob_url}")
                     return []
-                
+
                 # Cache the data if cache_key is provided
                 if cache_key and spotlights:
-                    cache.set(cache_key, spotlights, timeout=3600)  # Cache for 1 hour
-                    logger.debug(f"Cached spotlight data with key: {cache_key}")
-                
-                logger.info(f"Successfully loaded {len(spotlights)} spotlight tracking points from Azure blob")
+                    # Cache for 1 hour
+                    cache.set(cache_key, spotlights, timeout=3600)
+                    logger.debug(
+                        f"Cached spotlight data with key: {cache_key}")
+
+                logger.info(
+                    f"Successfully loaded {len(spotlights)} spotlight tracking points from Azure blob")
                 return spotlights
             else:
                 logger.error(f"Blob file not found: {blob_url}")
                 return []
-                
+
         except Exception as e:
-            logger.exception(f"Error loading spotlight data from {blob_url}: {e}")
+            logger.exception(
+                f"Error loading spotlight data from {blob_url}: {e}")
             return []
 
     def calculate_gps_athletic_skills(self, spotlights: List[List[float]]) -> Dict[str, str]:

@@ -16,11 +16,11 @@ def _download_tracking_data_from_azure_blob(blob_url: str, cache_key: str = None
     """
     Download tracking data from Azure blob URL with caching support.
     In development mode, reads from local file system.
-    
+
     Args:
         blob_url: Azure blob URL to download tracking data from (or local file path in dev)
         cache_key: Optional cache key for caching the data
-        
+
     Returns:
         List of tracking data points as [time_ms, x, y, w, h]
     """
@@ -30,51 +30,56 @@ def _download_tracking_data_from_azure_blob(blob_url: str, cache_key: str = None
             cached_data = cache.get(cache_key)
             if cached_data is not None:
                 return cached_data
-        
+
         # Check if we're in development mode (local file storage)
         if settings.DEBUG and not hasattr(settings, 'AZURE_CUSTOM_DOMAIN'):
-            logger.info(f"Development mode detected - reading from local file: {blob_url}")
-            
+            logger.info(
+                f"Development mode detected - reading from local file: {blob_url}")
+
             # Convert blob URL to local file path
             if blob_url.startswith('/media/'):
                 # Remove /media/ prefix and join with MEDIA_ROOT
-                local_file_path = os.path.join(settings.MEDIA_ROOT, blob_url[7:])  # Remove '/media/'
+                local_file_path = os.path.join(
+                    settings.MEDIA_ROOT, blob_url[7:])  # Remove '/media/'
             else:
                 # Assume it's already a local path
                 local_file_path = blob_url
-            
+
             if os.path.exists(local_file_path):
                 with open(local_file_path, 'r') as f:
                     data = json.load(f)
-                
+
                 # Extract spotlights data
                 if isinstance(data, dict) and 'spotlights' in data:
                     tracking_data = data['spotlights']
                 elif isinstance(data, list):
                     tracking_data = data
                 else:
-                    logger.warning(f"Unexpected data format in local file {local_file_path}")
+                    logger.warning(
+                        f"Unexpected data format in local file {local_file_path}")
                     return []
-                
+
                 # Cache the data if cache_key is provided
                 if cache_key and tracking_data:
-                    cache.set(cache_key, tracking_data, timeout=3600)  # Cache for 1 hour
-                
-                logger.info(f"Successfully loaded {len(tracking_data)} tracking points from local file")
+                    cache.set(cache_key, tracking_data,
+                              timeout=3600)  # Cache for 1 hour
+
+                logger.info(
+                    f"Successfully loaded {len(tracking_data)} tracking points from local file")
                 return tracking_data
             else:
                 logger.warning(f"Local file not found: {local_file_path}")
                 return []
-        
+
         # Production mode - download from Azure blob storage
         logger.info(f"Downloading tracking data from Azure blob: {blob_url}")
-        
+
         # Use Django's default storage to download the file
         if default_storage.exists(blob_url):
             # Read the file content
             with default_storage.open(blob_url, 'r') as f:
                 data = json.load(f)
-            
+
             # Extract spotlights data
             if isinstance(data, dict) and 'spotlights' in data:
                 tracking_data = data['spotlights']
@@ -83,49 +88,54 @@ def _download_tracking_data_from_azure_blob(blob_url: str, cache_key: str = None
             else:
                 logger.warning(f"Unexpected data format in blob {blob_url}")
                 return []
-            
+
             # Cache the data if cache_key is provided
             if cache_key and tracking_data:
-                cache.set(cache_key, tracking_data, timeout=3600)  # Cache for 1 hour
-            
-            logger.info(f"Successfully downloaded {len(tracking_data)} tracking points from Azure blob")
+                cache.set(cache_key, tracking_data,
+                          timeout=3600)  # Cache for 1 hour
+
+            logger.info(
+                f"Successfully downloaded {len(tracking_data)} tracking points from Azure blob")
             return tracking_data
         else:
             logger.error(f"Blob file not found: {blob_url}")
             return []
-            
+
     except Exception as e:
-        logger.exception(f"Error downloading tracking data from {blob_url}: {e}")
+        logger.exception(
+            f"Error downloading tracking data from {blob_url}: {e}")
         return []
 
-def clear_tracking_data_cache(object_id: str, session_id: str) -> bool:
+
+def clear_tracking_data_cache(player_id: str, session_id: str) -> bool:
     """
-    Clear cached tracking data for a specific object.
-    
+    Clear cached tracking data for a specific player.
+
     Args:
-        object_id: TraceObject object_id
+        player_id: TracePlayer object_id or player identifier
         session_id: TraceSession session_id
-        
+
     Returns:
         bool: True if cache was cleared, False otherwise
     """
     try:
-        cache_key = f"tracking_data_{session_id}_{object_id}"
+        cache_key = f"tracking_data_{session_id}_{player_id}"
         cache.delete(cache_key)
-        logger.info(f"Cleared tracking data cache for {object_id} in session {session_id}")
+        logger.info(
+            f"Cleared tracking data cache for player {player_id} in session {session_id}")
         return True
     except Exception as e:
-        logger.exception(f"Error clearing cache for {object_id}: {e}")
+        logger.exception(f"Error clearing cache for player {player_id}: {e}")
         return False
 
 
 def clear_session_tracking_data_cache(session_id: str) -> int:
     """
     Clear all cached tracking data for a specific session.
-    
+
     Args:
         session_id: TraceSession session_id
-        
+
     Returns:
         int: Number of cache keys cleared
     """
@@ -135,7 +145,8 @@ def clear_session_tracking_data_cache(session_id: str) -> int:
         cache_pattern = f"tracking_data_{session_id}_*"
         # Note: Django's cache framework doesn't support pattern deletion by default
         # You might need to implement this differently based on your cache backend
-        logger.info(f"Cache clearing for session {session_id} would require cache backend support")
+        logger.info(
+            f"Cache clearing for session {session_id} would require cache backend support")
         return 0
     except Exception as e:
         logger.exception(f"Error clearing session cache for {session_id}: {e}")
@@ -145,37 +156,42 @@ def clear_session_tracking_data_cache(session_id: str) -> int:
 def is_tracking_data_available_in_azure(player_obj) -> bool:
     """
     Check if tracking data is available in Azure blob storage for a player.
-    
+
     Args:
-        player_obj: TraceObject instance
-        
+        player_obj: TracePlayer instance
+
     Returns:
         bool: True if tracking data is available in Azure blob storage
     """
     try:
-        if not player_obj.tracking_blob_url:
+        # Get tracking data from the player's associated trace object
+        trace_object = player_obj.trace_objects.first()
+        if not trace_object or not trace_object.tracking_blob_url:
             return False
-        
+
         # In development mode, check local file system
         if settings.DEBUG and not hasattr(settings, 'AZURE_CUSTOM_DOMAIN'):
             import os
-            
+
             # Convert blob URL to local file path
-            if player_obj.tracking_blob_url.startswith('/media/'):
+            if trace_object.tracking_blob_url.startswith('/media/'):
                 # Remove /media/ prefix and join with MEDIA_ROOT
-                local_file_path = os.path.join(settings.MEDIA_ROOT, player_obj.tracking_blob_url[7:])  # Remove '/media/'
+                local_file_path = os.path.join(
+                    # Remove '/media/'
+                    settings.MEDIA_ROOT, trace_object.tracking_blob_url[7:])
             else:
                 # Assume it's already a local path
-                local_file_path = player_obj.tracking_blob_url
-            
+                local_file_path = trace_object.tracking_blob_url
+
             exists = os.path.exists(local_file_path)
             return exists
-            
+
         # Production mode - check Azure blob storage
-        return default_storage.exists(player_obj.tracking_blob_url)
-        
+        return default_storage.exists(trace_object.tracking_blob_url)
+
     except Exception as e:
-        logger.exception(f"Error checking tracking data availability for {player_obj.object_id}: {e}")
+        logger.exception(
+            f"Error checking tracking data availability for player {player_obj.object_id}: {e}")
         return False
 
 
@@ -347,45 +363,48 @@ class TraceVisionMetricsCalculator:
     def clear_player_cache(self, player_obj) -> bool:
         """
         Clear cached tracking data for a specific player.
-        
+
         Args:
-            player_obj: TraceObject instance for the player
-            
+            player_obj: TracePlayer instance for the player
+
         Returns:
             bool: True if cache was cleared successfully
         """
         try:
             return clear_tracking_data_cache(
-                player_obj.object_id, 
+                player_obj.object_id,
                 player_obj.session.session_id
             )
         except Exception as e:
-            self.logger.exception(f"Error clearing cache for player {player_obj.object_id}: {e}")
+            self.logger.exception(
+                f"Error clearing cache for player {player_obj.object_id}: {e}")
             return False
 
     def clear_session_cache(self, session) -> int:
         """
         Clear cached tracking data for all players in a session.
-        
+
         Args:
             session: TraceSession instance
-            
+
         Returns:
             int: Number of players whose cache was cleared
         """
         try:
             cleared_count = 0
-            player_objects = session.trace_objects.filter(type='player')
-            
+            player_objects = session.trace_players.all()
+
             for player_obj in player_objects:
                 if self.clear_player_cache(player_obj):
                     cleared_count += 1
-            
-            self.logger.info(f"Cleared cache for {cleared_count}/{player_objects.count()} players in session {session.session_id}")
+
+            self.logger.info(
+                f"Cleared cache for {cleared_count}/{player_objects.count()} players in session {session.session_id}")
             return cleared_count
-            
+
         except Exception as e:
-            self.logger.exception(f"Error clearing session cache for {session.session_id}: {e}")
+            self.logger.exception(
+                f"Error clearing session cache for {session.session_id}: {e}")
             return 0
 
     def calculate_metrics_for_session(self, session) -> Dict[str, Any]:
@@ -410,7 +429,7 @@ class TraceVisionMetricsCalculator:
             }
 
             # Get all player objects from session
-            player_objects = session.trace_objects.filter(type='player')
+            player_objects = session.trace_players.all()
 
             if not player_objects.exists():
                 results['errors'].append('No player objects found in session')
@@ -424,7 +443,7 @@ class TraceVisionMetricsCalculator:
                     if player_metrics:
                         results['metrics_calculated'].append({
                             'object_id': player_obj.object_id,
-                            'side': player_obj.side,
+                            'side': player_obj.team.name if player_obj.team else 'unknown',
                             'metrics': player_metrics
                         })
                 except Exception as e:
@@ -455,7 +474,7 @@ class TraceVisionMetricsCalculator:
 
         Args:
             session: TraceSession instance
-            player_obj: TraceObject instance for the player
+            player_obj: TracePlayer instance for the player
 
         Returns:
             dict: Calculated metrics or None if failed
@@ -470,7 +489,7 @@ class TraceVisionMetricsCalculator:
 
             # Get player highlights/events
             player_highlights = self._get_player_highlights(
-                session, player_obj.object_id)
+                session, player_obj)
 
             # Calculate different metric categories
             gps_athletic_metrics = self._calculate_gps_athletic_skills(
@@ -504,7 +523,7 @@ class TraceVisionMetricsCalculator:
 
     def _get_player_tracking_data(self, player_obj) -> List[List[float]]:
         """
-        Extract tracking data for a player from TraceObject using Azure blob storage with caching.
+        Extract tracking data for a player from TracePlayer using Azure blob storage with caching.
 
         Returns:
             list: Tracking data points as [time_ms, x, y, w, h]
@@ -512,21 +531,30 @@ class TraceVisionMetricsCalculator:
         try:
             # Generate cache key for this player's tracking data
             cache_key = f"tracking_data_{player_obj.session.session_id}_{player_obj.object_id}"
-            
+
+            # Get tracking data from the player's associated trace object
+            trace_object = player_obj.trace_objects.first()
+            if not trace_object:
+                self.logger.warning(
+                    f"No trace object found for player {player_obj.object_id}")
+                return []
+
             # First, try to get from Azure blob URL (preferred method)
-            if player_obj.tracking_blob_url:
+            if trace_object.tracking_blob_url:
                 return _download_tracking_data_from_azure_blob(
-                    player_obj.tracking_blob_url, 
+                    trace_object.tracking_blob_url,
                     cache_key
                 )
-            
+
             # Fallback to original tracking_url if blob URL is not available
-            elif player_obj.tracking_url:
-                self.logger.warning(f"Using fallback tracking_url for {player_obj.object_id} - blob URL not available")
-                return self._fetch_tracking_data_from_url(player_obj.tracking_url, cache_key=cache_key)
-            
+            elif trace_object.tracking_url:
+                self.logger.warning(
+                    f"Using fallback tracking_url for {player_obj.object_id} - blob URL not available")
+                return self._fetch_tracking_data_from_url(trace_object.tracking_url, cache_key=cache_key)
+
             else:
-                self.logger.warning(f"No tracking data available for {player_obj.object_id}")
+                self.logger.warning(
+                    f"No tracking data available for {player_obj.object_id}")
             return []
 
         except Exception as e:
@@ -544,8 +572,9 @@ class TraceVisionMetricsCalculator:
                 cached_data = cache.get(cache_key)
                 if cached_data is not None:
                     return cached_data
-            
-            self.logger.info(f"Fetching tracking data from URL: {tracking_url}")
+
+            self.logger.info(
+                f"Fetching tracking data from URL: {tracking_url}")
             response = requests.get(tracking_url, timeout=timeout)
             response.raise_for_status()
             data = response.json()
@@ -558,7 +587,8 @@ class TraceVisionMetricsCalculator:
 
             # Cache the data if cache_key is provided
             if cache_key and tracking_data:
-                cache.set(cache_key, tracking_data, timeout=3600)  # Cache for 1 hour
+                cache.set(cache_key, tracking_data,
+                          timeout=3600)  # Cache for 1 hour
 
             return tracking_data
 
@@ -567,7 +597,7 @@ class TraceVisionMetricsCalculator:
                 f"Error fetching tracking data from {tracking_url}: {e}")
             return []
 
-    def _get_player_highlights(self, session, object_id: str) -> List[Dict]:
+    def _get_player_highlights(self, session, player_obj) -> List[Dict]:
         """
         Get all highlights/events involving a specific player
         """
@@ -578,7 +608,7 @@ class TraceVisionMetricsCalculator:
             for highlight in session.highlights.all():
                 # Check if player is in the highlight objects
                 for highlight_obj in highlight.highlight_objects.all():
-                    if highlight_obj.trace_object.object_id == object_id:
+                    if highlight_obj.player == player_obj:
                         highlights.append({
                             'highlight_id': highlight.highlight_id,
                             'start_offset': highlight.start_offset,
@@ -586,9 +616,9 @@ class TraceVisionMetricsCalculator:
                             'tags': highlight.tags or [],
                             'video_id': highlight.video_id,
                             'objects': [{
-                                'object_id': ho.trace_object.object_id,
-                                'side': ho.trace_object.side,
-                                'type': ho.trace_object.type
+                                'object_id': ho.player.object_id if ho.player else 'unknown',
+                                'side': ho.player.team.name if ho.player and ho.player.team else 'unknown',
+                                'type': 'player'
                             } for ho in highlight.highlight_objects.all()]
                         })
                         break
@@ -597,7 +627,7 @@ class TraceVisionMetricsCalculator:
 
         except Exception as e:
             self.logger.exception(
-                f"Error getting player highlights for {object_id}: {e}")
+                f"Error getting player highlights for {player_obj.object_id}: {e}")
             return []
 
     def _calculate_gps_athletic_skills(self, tracking_data: List[List[float]], session) -> Dict[str, str]:
@@ -607,12 +637,14 @@ class TraceVisionMetricsCalculator:
         try:
             if not tracking_data or len(tracking_data) < 2:
                 # Create calculator with session field dimensions for empty metrics
-                spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(session)
+                spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(
+                    session)
                 return spotlight_calculator._get_empty_athletic_metrics()
 
             # Create calculator with session field dimensions
-            spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(session)
-            
+            spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(
+                session)
+
             # Use the specialized spotlight calculator for better accuracy
             return spotlight_calculator.calculate_gps_athletic_skills(tracking_data)
 
@@ -620,7 +652,8 @@ class TraceVisionMetricsCalculator:
             self.logger.exception(
                 f"Error calculating GPS athletic skills: {e}")
             # Create calculator with session field dimensions for empty metrics
-            spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(session)
+            spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(
+                session)
             return spotlight_calculator._get_empty_athletic_metrics()
 
     def _calculate_gps_football_abilities(self, tracking_data: List[List[float]], highlights: List[Dict], session) -> Dict[str, str]:
@@ -635,7 +668,8 @@ class TraceVisionMetricsCalculator:
         try:
             if not tracking_data:
                 # Create calculator with session field dimensions for empty metrics
-                spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(session)
+                spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(
+                    session)
                 return spotlight_calculator._get_empty_football_metrics()
 
             # Extract objects from highlights to check for ball tracking data
@@ -650,15 +684,17 @@ class TraceVisionMetricsCalculator:
                         })
 
             # Create calculator with session field dimensions
-            spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(session)
-            
+            spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(
+                session)
+
             return spotlight_calculator.calculate_gps_football_abilities(tracking_data, highlights, objects)
 
         except Exception as e:
             self.logger.exception(
                 f"Error calculating GPS football abilities: {e}")
             # Create calculator with session field dimensions for empty metrics
-            spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(session)
+            spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(
+                session)
             return spotlight_calculator._get_empty_football_metrics()
 
     def _calculate_attacking_skills(self, highlights: List[Dict], tracking_data: List[List[float]], session) -> Dict[str, str]:
@@ -768,7 +804,8 @@ class TraceVisionMetricsCalculator:
 
             # Create spotlight calculator with session field dimensions
             if session:
-                spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(session)
+                spotlight_calculator = SpotlightMetricsCalculator.from_trace_session(
+                    session)
             else:
                 spotlight_calculator = SpotlightMetricsCalculator()
 
@@ -901,9 +938,9 @@ class TraceVisionMetricsCalculator:
 
             # Try to infer from tracking data timestamps
             max_time_ms = 0
-            for trace_obj in session.trace_objects.all():
+            for player_obj in session.trace_players.all():
                 # Get tracking data using the proper method
-                tracking_data = self._get_player_tracking_data(trace_obj)
+                tracking_data = self._get_player_tracking_data(player_obj)
                 if tracking_data and len(tracking_data) > 0:
                     last_time = tracking_data[-1][0]
                     max_time_ms = max(max_time_ms, last_time)

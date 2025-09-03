@@ -1,7 +1,13 @@
 from django.db import models
+from django.utils import timezone
 import uuid
 from accounts.models import WajoUser
 from teams.models import Team
+
+
+def get_default_pitch_size():
+    """Return default SENIOR pitch size"""
+    return {'length': 105, 'width': 68}
 
 
 class TraceSession(models.Model):
@@ -48,7 +54,7 @@ class TraceSession(models.Model):
 
     # Pitch size field (JSON to store length and width)
     pitch_size = models.JSONField(
-        default={'length': 105, 'width': 68},  # Default to SENIOR pitch size
+        default=get_default_pitch_size,  # Default to SENIOR pitch size
         blank=True,
         null=True,
         help_text="Football field dimensions in meters: {'length': 105, 'width': 68}"
@@ -62,17 +68,17 @@ class TraceSession(models.Model):
         null=True,
         blank=True,
         help_text="Start time of the video, if known"
-    ) 
+    )
     video_url = models.URLField()
     blob_video_url = models.URLField(
-        blank=True, 
-        null=True, 
+        blank=True,
+        null=True,
         help_text="Azure blob URL for downloaded video file"
     )
     result = models.JSONField(default=dict)
     result_blob_url = models.URLField(
-        blank=True, 
-        null=True, 
+        blank=True,
+        null=True,
         help_text="Azure blob URL for session result data JSON"
     )
 
@@ -122,18 +128,87 @@ class TraceSession(models.Model):
 
 class TracePlayer(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100)
-    jersey_number = models.PositiveIntegerField()
-    team = models.CharField(max_length=100)
-    position = models.CharField(max_length=100)
-    session = models.ForeignKey(to=TraceSession, on_delete=models.CASCADE)
-    # user = models.ForeignKey(WajoUser, on_delete=models.CASCADE, related_name='trace_players', help_text="User who owns this player data")
+    object_id = models.CharField(
+        max_length=100,
+        help_text="Unique identifier from TraceVision API",
+        null=True
+    )
+    name = models.CharField(
+        max_length=100,
+        help_text="Player's name"
+    )
+    jersey_number = models.PositiveIntegerField(
+        help_text="Player's jersey number"
+    )
+    position = models.CharField(
+        max_length=100,
+        help_text="Player's position on the field"
+    )
+
+    # Relationships
+    session = models.ForeignKey(
+        to=TraceSession,
+        on_delete=models.CASCADE,
+        related_name='trace_players',
+        help_text="TraceVision session this player belongs to"
+    )
+    user = models.ForeignKey(
+        WajoUser,
+        on_delete=models.DO_NOTHING,
+        related_name='trace_players',
+        null=True,
+        blank=True,
+        help_text="User who owns this player data (optional for unmapped players)"
+    )
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.CASCADE,
+        related_name='trace_players',
+        help_text="Team this player belongs to"
+    )
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Trace Player"
+        verbose_name_plural = "Trace Players"
+        # Unique constraint: object_id + user (when user is present)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['object_id', 'user'],
+                condition=models.Q(user__isnull=False),
+                name='unique_object_id_per_user'
+            ),
+            # Ensure object_id is unique per session
+            models.UniqueConstraint(
+                fields=['object_id', 'session'],
+                name='unique_object_id_per_session'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['object_id']),
+            models.Index(fields=['user']),
+            models.Index(fields=['team']),
+            models.Index(fields=['session']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.jersey_number}) - {self.team.name if self.team else 'No Team'}"
+
+    @property
+    def is_mapped(self):
+        """Check if this player is mapped to a user"""
+        return self.user is not None
+
+    @property
+    def team_name(self):
+        """Get team name for display"""
+        return self.team.name if self.team else "Unknown Team"
 
 
 class TraceHighlight(models.Model):
-    """
-    Model to store highlight data from the TraceVision API
-    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     highlight_id = models.CharField(
         max_length=100, unique=True, help_text="Unique identifier for the highlight")
@@ -149,8 +224,9 @@ class TraceHighlight(models.Model):
 
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='highlights')
-    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE,
-                             related_name='trace_highlights', help_text="User who owns this highlight")
+    player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='highlights',
+        blank=True, null=True, help_text="Player involved in this highlight (optional)")
 
     # Timestamp fields
     created_at = models.DateTimeField(auto_now_add=True)
@@ -161,7 +237,7 @@ class TraceHighlight(models.Model):
         indexes = [
             models.Index(fields=['highlight_id']),
             models.Index(fields=['session', 'start_offset']),
-            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['player', '-created_at']),
         ]
 
     def __str__(self):
@@ -190,8 +266,9 @@ class TraceObject(models.Model):
 
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='trace_objects')
-    user = models.ForeignKey(WajoUser, on_delete=models.CASCADE,
-                             related_name='user_trace_objects', help_text="User who owns this object")
+    player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='trace_objects',
+        blank=True, null=True, help_text="Player this object belongs to (optional)")
 
     # Status tracking for downloads
     tracking_processed = models.BooleanField(
@@ -207,7 +284,7 @@ class TraceObject(models.Model):
             models.Index(fields=['object_id']),
             models.Index(fields=['session', 'type']),
             models.Index(fields=['session', 'side']),
-            models.Index(fields=['user', 'type']),
+            models.Index(fields=['player', 'type']),
         ]
         unique_together = ['object_id', 'session']
 
@@ -224,6 +301,9 @@ class TraceHighlightObject(models.Model):
         TraceHighlight, on_delete=models.CASCADE, related_name='highlight_objects')
     trace_object = models.ForeignKey(
         TraceObject, on_delete=models.CASCADE, related_name='object_highlights')
+    player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='highlight_objects',
+        blank=True, null=True, help_text="Player involved in this highlight-object relationship (optional)")
 
     # Timestamp fields
     created_at = models.DateTimeField(auto_now_add=True)
@@ -234,6 +314,7 @@ class TraceHighlightObject(models.Model):
         indexes = [
             models.Index(fields=['highlight']),
             models.Index(fields=['trace_object']),
+            models.Index(fields=['player']),
         ]
 
     def __str__(self):
@@ -246,10 +327,13 @@ class TraceVisionPlayerStats(models.Model):
     Generated from tracking data and highlights analysis
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
     session = models.ForeignKey(
-        TraceSession, on_delete=models.CASCADE, related_name='player_stats')
-    object_id = models.CharField(
-        max_length=50, help_text="TraceVision object ID (e.g., home_1, away_15)")
+        TraceSession, on_delete=models.CASCADE, related_name='session_player_stats', null=True, blank=True)
+    player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='player_stats',
+        help_text="Player this statistics belong to", null=True, blank=True)
+
     side = models.CharField(max_length=10, help_text="home or away team")
 
     # Movement and physical stats
@@ -300,9 +384,9 @@ class TraceVisionPlayerStats(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ['session', 'object_id']
+        # unique_together = ['session', 'player']
         indexes = [
-            models.Index(fields=['session', 'object_id']),
+            models.Index(fields=['session', 'player']),
             models.Index(fields=['side', 'performance_score']),
             models.Index(fields=['performance_score', 'last_calculated']),
         ]
@@ -310,7 +394,7 @@ class TraceVisionPlayerStats(models.Model):
         verbose_name_plural = "TraceVision Player Stats"
 
     def __str__(self):
-        return f"{self.object_id} - {self.session.session_id} - Score: {self.performance_score}"
+        return f"{self.player.name} - {self.session.session_id} - Score: {self.performance_score}"
 
     @property
     def distance_per_minute(self):
@@ -401,13 +485,14 @@ class TraceTouchLeaderboard(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='touch_leaderboard')
-    object_id = models.CharField(max_length=50)
+    player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='touch_leaderboard',
+        help_text="Player this touch count belongs to", blank=True, null=True)
     object_side = models.CharField(max_length=10)
     touches = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ['session', 'object_id']
         indexes = [
             models.Index(fields=['session']),
             models.Index(fields=['object_side', 'touches']),
@@ -439,32 +524,187 @@ class TracePossessionSegment(models.Model):
 
 
 class TraceClipReel(models.Model):
+    """
+    Model to store clip reel information for TraceVision highlights.
+    Each highlight can generate multiple video variations (with/without overlay, zoomed, etc.)
+    """
+
+    # Video variation types
+    VIDEO_TYPE_CHOICES = [
+        ('original', 'Original (No Overlay)'),
+        ('with_overlay', 'With Overlay'),
+        ('zoomed_player', 'Zoomed on Player'),
+        ('zoomed_team', 'Zoomed on Team'),
+        ('tactical_view', 'Tactical View'),
+        ('slow_motion', 'Slow Motion'),
+        ('multi_angle', 'Multi-Angle'),
+    ]
+
+    # Generation status choices
+    GENERATION_STATUS_CHOICES = [
+        ('pending', 'Pending Generation'),
+        ('generating', 'Currently Generating'),
+        ('completed', 'Generation Completed'),
+        ('failed', 'Generation Failed'),
+        ('skipped', 'Skipped'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Core highlight information
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='clip_reels')
-    event_id = models.CharField(max_length=100)
-    video_id = models.IntegerField()
-    event_type = models.CharField(max_length=50)
-    side = models.CharField(max_length=10)
-    start_ms = models.IntegerField()
-    duration_ms = models.IntegerField()
-    start_clock = models.CharField(max_length=20, blank=True)
-    end_clock = models.CharField(max_length=20, blank=True)
-    object_id = models.CharField(max_length=50, blank=True, null=True)
-    label = models.CharField(max_length=100, blank=True)
-    tags = models.JSONField(default=list)
-    video_stream = models.URLField(blank=True)
+
+    highlight = models.ForeignKey(
+        'TraceHighlight', on_delete=models.CASCADE, related_name='clip_reels',
+        help_text="The highlight this clip reel is based on")
+
+    event_id = models.CharField(
+        max_length=100, help_text="Unique event identifier")
+
+    # Video variation details
+    video_type = models.CharField(
+        max_length=20,
+        choices=VIDEO_TYPE_CHOICES,
+        default='original',
+        help_text="Type of video variation")
+    video_variant_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Custom name for this video variant (e.g., 'Player Focus', 'Team View')")
+
+    # Highlight metadata
+    event_type = models.CharField(
+        max_length=50, help_text="Type of event (touch, pass, etc.)")
+    side = models.CharField(max_length=10, help_text="Team side (home/away)")
+    start_ms = models.IntegerField(help_text="Start time in milliseconds")
+    duration_ms = models.IntegerField(help_text="Duration in milliseconds")
+    start_clock = models.CharField(
+        max_length=20, blank=True, help_text="Start time in clock format")
+    end_clock = models.CharField(
+        max_length=20, blank=True, help_text="End time in clock format")
+
+    # Player and team information
+    primary_player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='primary_clip_reels',
+        blank=True, null=True, help_text="Primary player involved in this clip")
+    involved_players = models.ManyToManyField(
+        TracePlayer, related_name='involved_clip_reels', blank=True,
+        help_text="All players involved in this highlight")
+
+    # Video generation and storage
+    generation_status = models.CharField(
+        max_length=20,
+        choices=GENERATION_STATUS_CHOICES,
+        default='pending',
+        help_text="Status of video generation")
+    video_url = models.URLField(
+        blank=True, help_text="Azure blob URL for the generated video")
+    video_thumbnail_url = models.URLField(
+        blank=True, help_text="Azure blob URL for video thumbnail")
+    video_size_mb = models.FloatField(
+        default=0.0, help_text="Video file size in MB")
+    video_duration_seconds = models.FloatField(
+        default=0.0, help_text="Actual video duration in seconds")
+
+    # Generation metadata
+    generation_started_at = models.DateTimeField(
+        null=True, blank=True, help_text="When video generation started")
+    generation_completed_at = models.DateTimeField(
+        null=True, blank=True, help_text="When video generation completed")
+    generation_errors = models.JSONField(
+        default=list, help_text="Any errors during generation")
+    generation_metadata = models.JSONField(
+        default=dict, help_text="Additional generation parameters and settings")
+
+    # Video quality and settings
+    resolution = models.CharField(
+        max_length=20, default='1080p', help_text="Video resolution")
+    frame_rate = models.IntegerField(
+        default=30, help_text="Video frame rate (FPS)")
+    bitrate = models.IntegerField(
+        default=0, help_text="Video bitrate (kbps)")
+
+    # Content and tags
+    label = models.CharField(max_length=100, blank=True,
+                             help_text="Display label for the clip")
+    description = models.TextField(
+        blank=True, help_text="Detailed description of the clip")
+    tags = models.JSONField(
+        default=list, help_text="Tags for categorization and filtering")
+
+    # Legacy field for backward compatibility
+    video_stream = models.URLField(
+        blank=True, help_text="Legacy video stream URL")
+
+    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
             models.Index(fields=['session', 'side']),
             models.Index(fields=['session', 'event_id']),
-            models.Index(fields=['session', 'object_id']),
+            models.Index(fields=['session', 'primary_player']),
+            models.Index(fields=['highlight', 'video_type']),
+            models.Index(fields=['generation_status', 'created_at']),
+            models.Index(fields=['video_type', 'generation_status']),
         ]
-        unique_together = ['session', 'event_id', 'object_id']
+        # Allow multiple clip reels per highlight with different video types
+        # unique_together = ['highlight', 'video_type']
         verbose_name = 'Clip Reel Item'
         verbose_name_plural = 'Clip Reel Items'
+
+    def __str__(self):
+        return f"{self.highlight.highlight_id} - {self.get_video_type_display()} ({self.generation_status})"
+
+    @property
+    def is_generated(self):
+        """Check if video has been successfully generated"""
+        return self.generation_status == 'completed' and bool(self.video_url)
+
+    @property
+    def generation_duration(self):
+        """Calculate how long generation took"""
+        if self.generation_started_at and self.generation_completed_at:
+            return self.generation_completed_at - self.generation_started_at
+        return None
+
+    def mark_generation_started(self):
+        """Mark video generation as started"""
+        from django.utils import timezone
+        self.generation_status = 'generating'
+        self.generation_started_at = timezone.now()
+        self.save(update_fields=['generation_status', 'generation_started_at'])
+
+    def mark_generation_completed(self, video_url, video_size_mb=0.0, video_duration_seconds=0.0, thumbnail_url=''):
+        """Mark video generation as completed"""
+        from django.utils import timezone
+        self.generation_status = 'completed'
+        self.generation_completed_at = timezone.now()
+        self.video_url = video_url
+        self.video_size_mb = video_size_mb
+        self.video_duration_seconds = video_duration_seconds
+        if thumbnail_url:
+            self.video_thumbnail_url = thumbnail_url
+        self.save(update_fields=[
+            'generation_status', 'generation_completed_at', 'video_url',
+            'video_size_mb', 'video_duration_seconds', 'video_thumbnail_url'
+        ])
+
+    def mark_generation_failed(self, error_message):
+        """Mark video generation as failed"""
+        from django.utils import timezone
+        self.generation_status = 'failed'
+        self.generation_completed_at = timezone.now()
+        if not self.generation_errors:
+            self.generation_errors = []
+        self.generation_errors.append({
+            'timestamp': timezone.now().isoformat(),
+            'error': error_message
+        })
+        self.save(update_fields=['generation_status',
+                  'generation_completed_at', 'generation_errors'])
 
 
 class TracePass(models.Model):
@@ -472,8 +712,12 @@ class TracePass(models.Model):
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='passes')
     side = models.CharField(max_length=10)
-    from_object_id = models.CharField(max_length=50)
-    to_object_id = models.CharField(max_length=50)
+    from_player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='passes_made',
+        help_text="Player who made the pass", blank=True, null=True)
+    to_player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='passes_received',
+        help_text="Player who received the pass", blank=True, null=True)
     start_ms = models.IntegerField()
     duration_ms = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -481,7 +725,7 @@ class TracePass(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['session', 'side']),
-            models.Index(fields=['session', 'from_object_id', 'to_object_id']),
+            models.Index(fields=['session', 'from_player', 'to_player']),
         ]
         verbose_name = 'Pass'
         verbose_name_plural = 'Passes'
@@ -492,13 +736,16 @@ class TracePassingNetwork(models.Model):
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='passing_network')
     side = models.CharField(max_length=10)
-    from_object_id = models.CharField(max_length=50)
-    to_object_id = models.CharField(max_length=50)
+    from_player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='passing_network_from',
+        help_text="Player who made the passes", blank=True, null=True)
+    to_player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='passing_network_to',
+        help_text="Player who received the passes", blank=True, null=True)
     passes_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ['session', 'side', 'from_object_id', 'to_object_id']
         indexes = [
             models.Index(fields=['session', 'side']),
             models.Index(fields=['passes_count']),
