@@ -706,6 +706,88 @@ class TraceClipReel(models.Model):
         self.save(update_fields=['generation_status',
                   'generation_completed_at', 'generation_errors'])
 
+    def get_tracking_data_for_players(self):
+        """
+        Get tracking data for all involved players in this clip reel.
+        
+        Returns:
+            dict: Dictionary mapping object_id to tracking data from TraceObject.tracking_blob_url
+        """
+        tracking_data = {}
+        
+        for player in self.involved_players.all():
+            # Get TraceObject for this player in this session
+            trace_object = TraceObject.objects.filter(
+                session=self.session,
+                player=player
+            ).first()
+            
+            if trace_object and trace_object.tracking_blob_url:
+                tracking_data[player.object_id] = {
+                    'trace_object': trace_object,
+                    'tracking_blob_url': trace_object.tracking_blob_url,
+                    'player': player
+                }
+        
+        return tracking_data
+
+    def get_video_file_url(self):
+        """
+        Get the video file URL for this clip reel's session.
+        Prefers blob_video_url (downloaded) over video_url (original).
+        
+        Returns:
+            str: Video file URL or None if not available
+        """
+        session = self.session
+        return session.blob_video_url or session.video_url
+
+    def can_generate_overlay(self):
+        """
+        Check if this clip reel can generate an overlay video.
+        
+        Returns:
+            bool: True if all required data is available
+        """
+        # Check if video file is available
+        if not self.get_video_file_url():
+            return False
+        
+        # Check if we have involved players with tracking data
+        tracking_data = self.get_tracking_data_for_players()
+        if not tracking_data:
+            return False
+        
+        # Check if generation status allows processing
+        if self.generation_status not in ['pending', 'failed']:
+            return False
+        
+        return True
+
+    def get_generation_summary(self):
+        """
+        Get a summary of the generation status and metadata.
+        
+        Returns:
+            dict: Summary information about the clip reel generation
+        """
+        return {
+            'clip_reel_id': str(self.id),
+            'highlight_id': self.highlight.highlight_id,
+            'video_type': self.video_type,
+            'video_variant_name': self.video_variant_name,
+            'generation_status': self.generation_status,
+            'is_generated': self.is_generated,
+            'video_url': self.video_url,
+            'video_size_mb': self.video_size_mb,
+            'video_duration_seconds': self.video_duration_seconds,
+            'generation_duration': self.generation_duration,
+            'involved_players_count': self.involved_players.count(),
+            'can_generate_overlay': self.can_generate_overlay(),
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+
 
 class TracePass(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

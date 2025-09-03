@@ -830,6 +830,15 @@ def compute_aggregates_task(session_id):
         agg = TraceVisionAggregationService()
         result = agg.compute_all(session)
         logger.info(f"Computed aggregates for session {session_id}")
+        
+        # Trigger overlay highlights generation for clip reels
+        try:
+            from tracevision.tasks import generate_overlay_highlights_task
+            generate_overlay_highlights_task.delay(session_id)
+            logger.info(f"Queued overlay highlights generation for session {session_id}")
+        except Exception as e:
+            logger.exception(f"Failed to enqueue overlay highlights generation for session {session_id}: {e}")
+        
         return {"success": True, "details": {k: True for k in result.keys()}}
     except Exception as e:
         logger.exception(
@@ -1359,3 +1368,116 @@ def calculate_metrics_for_unmapped_players_task(session_id=None, lookback_days=7
         error_msg = f"Error in calculate_metrics_for_unmapped_players_task: {str(e)}"
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}
+
+
+@shared_task
+def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_size=5):
+    """
+    Generate overlay highlight videos for TraceClipReel objects with video_type='with_overlay' and status='pending'.
+    
+    Args:
+        session_id (str, optional): Process specific session
+        clip_reel_ids (list, optional): Process specific clip reels
+        batch_size (int): Number of clips to process in parallel (default: 5)
+    
+    Returns:
+        dict: Task results with success status and details
+    """
+    try:
+        from .video_generator import TrackingDataCache, create_clip_reel_overlay_video, upload_video_to_storage
+        from .models import TraceClipReel
+        
+        # Query target clip reels
+        clip_reels = TraceClipReel.objects.filter(
+            video_type='with_overlay',
+            generation_status='pending'
+        ).select_related('session', 'highlight').prefetch_related('involved_players')
+        
+        if session_id:
+            clip_reels = clip_reels.filter(session__session_id=session_id)
+        if clip_reel_ids:
+            clip_reels = clip_reels.filter(id__in=clip_reel_ids)
+        
+        if not clip_reels.exists():
+            logger.info("No clip reels to process")
+            return {"success": True, "message": "No clip reels to process"}
+        
+        logger.info(f"Found {clip_reels.count()} clip reels to process")
+        
+        # Initialize tracking data cache
+        tracking_cache = TrackingDataCache()
+        
+        processed_count = 0
+        failed_count = 0
+        results = []
+        
+        for clip_reel in clip_reels:
+            try:
+                logger.info(f"Processing clip reel {clip_reel.id} for highlight {clip_reel.highlight.highlight_id}")
+                
+                # Mark as generating
+                clip_reel.mark_generation_started()
+                
+                # Generate overlay video
+                temp_video_path = create_clip_reel_overlay_video(
+                    clip_reel, tracking_cache
+                )
+                
+                # Upload to storage
+                video_blob_url = upload_video_to_storage(
+                    temp_video_path, clip_reel
+                )
+                
+                # Calculate video file size
+                video_size_mb = os.path.getsize(temp_video_path) / (1024 * 1024)
+                
+                # Mark as completed
+                clip_reel.mark_generation_completed(
+                    video_url=video_blob_url,
+                    video_size_mb=video_size_mb,
+                    video_duration_seconds=clip_reel.duration_ms / 1000.0
+                )
+                
+                # Clean up temporary file
+                os.unlink(temp_video_path)
+                
+                processed_count += 1
+                results.append({
+                    'clip_reel_id': str(clip_reel.id),
+                    'highlight_id': clip_reel.highlight.highlight_id,
+                    'video_type': clip_reel.video_type,
+                    'status': 'completed',
+                    'video_url': video_blob_url,
+                    'video_size_mb': video_size_mb
+                })
+                
+                logger.info(f"Successfully processed clip reel {clip_reel.id}")
+                
+            except Exception as e:
+                logger.exception(f"Error processing clip reel {clip_reel.id}: {e}")
+                clip_reel.mark_generation_failed(str(e))
+                failed_count += 1
+                results.append({
+                    'clip_reel_id': str(clip_reel.id),
+                    'highlight_id': clip_reel.highlight.highlight_id,
+                    'video_type': clip_reel.video_type,
+                    'status': 'failed',
+                    'error': str(e)
+                })
+        
+        # Clear tracking cache
+        tracking_cache.clear_cache()
+        
+        logger.info(f"Overlay highlights generation completed. Processed: {processed_count}, Failed: {failed_count}")
+        
+        return {
+            "success": True,
+            "processed": processed_count,
+            "failed": failed_count,
+            "total": processed_count + failed_count,
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error in generate_overlay_highlights_task: {e}")
+        return {"success": False, "error": str(e)}
