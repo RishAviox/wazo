@@ -1390,7 +1390,8 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
         # Query target clip reels
         clip_reels = TraceClipReel.objects.filter(
             video_type='with_overlay',
-            generation_status='pending'
+            generation_status='pending',
+            primary_player__user__isnull=False,
         ).select_related('session', 'highlight').prefetch_related('involved_players')
         
         if session_id:

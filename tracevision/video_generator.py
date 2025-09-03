@@ -23,21 +23,21 @@ logger = logging.getLogger(__name__)
 
 class TrackingDataCache:
     """Cache tracking data to avoid re-downloading for multiple clip reels"""
-    
+
     def __init__(self):
         self.cache = {}
-    
+
     def get_tracking_data(self, tracking_blob_url: str, video_start_time_ms: int = 0) -> pd.DataFrame:
         """Get tracking data with caching"""
         cache_key = f"{tracking_blob_url}_{video_start_time_ms}"
-        
+
         if cache_key not in self.cache:
             self.cache[cache_key] = load_tracking_data_from_storage(
                 tracking_blob_url, video_start_time_ms
             )
-        
+
         return self.cache[cache_key]
-    
+
     def clear_cache(self):
         """Clear the cache"""
         self.cache.clear()
@@ -46,20 +46,20 @@ class TrackingDataCache:
 def load_tracking_data_from_storage(tracking_blob_url: str, video_start_time_ms: int = 0) -> pd.DataFrame:
     """
     Load tracking data from Azure Blob Storage or local storage.
-    
+
     Args:
         tracking_blob_url: Azure blob URL or local file path for tracking data
         video_start_time_ms: Video start time offset (usually 0)
-    
+
     Returns:
         pandas.DataFrame: Tracking data in same format as original function
     """
     try:
         logger.info(f"Loading tracking data from storage: {tracking_blob_url}")
-        
+
         # Handle different storage types based on DEBUG setting
         from django.conf import settings
-        
+
         if settings.DEBUG:
             # Local development - handle file path properly
             if tracking_blob_url.startswith('/media/'):
@@ -71,30 +71,31 @@ def load_tracking_data_from_storage(tracking_blob_url: str, video_start_time_ms:
             else:
                 # Assume it's already a relative path
                 file_path = tracking_blob_url
-            
+
             logger.info(f"Using local tracking file path: {file_path}")
             response = default_storage.open(file_path)
         else:
             # Production - Azure Blob Storage
             response = default_storage.open(tracking_blob_url)
-        
+
         tracking_data_obj = json.load(response)
         response.close()
-        
+
         # Convert to pandas DataFrame (same format as original WAZO.py)
         tracking_df = pd.DataFrame(
             tracking_data_obj["spotlights"],
             columns=["time_off", "x", "y", "w", "h"],
         )
-        
+
         # Use time_off directly as video time (same as original)
         tracking_df["video_time_ms"] = tracking_df["time_off"]
-        
+
         logger.info(f"Loaded tracking data with {len(tracking_df)} spotlights")
         return tracking_df
-        
+
     except Exception as e:
-        logger.error(f"Error loading tracking data from {tracking_blob_url}: {e}")
+        logger.error(
+            f"Error loading tracking data from {tracking_blob_url}: {e}")
         return pd.DataFrame()  # Return empty DataFrame on error
 
 
@@ -102,17 +103,17 @@ def download_video_from_storage(video_blob_url: str, temp_dir: Optional[str] = N
     """Download video from Azure Blob or local storage to temporary file for OpenCV processing"""
     if temp_dir is None:
         temp_dir = tempfile.gettempdir()
-    
+
     # Generate temporary filename
     temp_filename = f"temp_video_{uuid.uuid4().hex}.mp4"
     temp_path = os.path.join(temp_dir, temp_filename)
-    
+
     try:
         logger.info(f"Downloading video from storage: {video_blob_url}")
-        
+
         # Handle different storage types based on DEBUG setting
         from django.conf import settings
-        
+
         if settings.DEBUG:
             # Local development - handle file path properly
             if video_blob_url.startswith('/media/'):
@@ -124,27 +125,27 @@ def download_video_from_storage(video_blob_url: str, temp_dir: Optional[str] = N
             else:
                 # Assume it's already a relative path
                 file_path = video_blob_url
-            
+
             logger.info(f"Using local file path: {file_path}")
             response = default_storage.open(file_path)
         else:
             # Production - Azure Blob Storage
             response = default_storage.open(video_blob_url)
-        
+
         with open(temp_path, 'wb') as f:
             f.write(response.read())
         response.close()
-        
+
         logger.info(f"Downloaded video to temporary file: {temp_path}")
         return temp_path
-        
+
     except Exception as e:
         logger.error(f"Error downloading video from {video_blob_url}: {e}")
         raise
 
 
 def add_bbox_overlay_to_frame(
-    frame, video_time_ms, tracking_df, object_id, w, h, overlay_tolerance
+    frame, video_time_ms, tracking_df, object_id, w, h, overlay_tolerance, player_name
 ):
     """
     Add a clean, non-sparkling border circle around the player's feet
@@ -206,7 +207,7 @@ def add_bbox_overlay_to_frame(
 
         # ---- Draw object label ----
         if object_id is not None:
-            cv2.putText(frame, object_id,
+            cv2.putText(frame, player_name,
                         (int(cur_x - 20), int(head_y)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
@@ -220,13 +221,15 @@ def create_video_with_tracking_overlay(
     text_str,
     video_filepath,
     out_video_filepath,
+    player_name,
 ):
     """
     Create a video with tracking overlay for a specified time range.
     Adapted from WAZO.py
     """
-    logger.info(f"Creating video with tracking overlay from {video_time_min_ms}ms to {video_time_max_ms}ms")
-    
+    logger.info(
+        f"Creating video with tracking overlay from {video_time_min_ms}ms to {video_time_max_ms}ms")
+
     # Find relevant tracking data for the specified time range:
     use_tracking_df = {}
     for object_id in dict_tracking_df:
@@ -234,12 +237,13 @@ def create_video_with_tracking_overlay(
             dict_tracking_df[object_id]["video_time_ms"] >= video_time_min_ms
         ) & (dict_tracking_df[object_id]["video_time_ms"] <= video_time_max_ms)
         if mask_df.sum() == 0:
-            logger.warning(f"No tracking data found for {object_id} during time range")
+            logger.warning(
+                f"No tracking data found for {object_id} during time range")
             continue
         use_tracking_df[object_id] = (
             dict_tracking_df[object_id].loc[mask_df, :].reset_index(drop=True)
         )
-    
+
     # Get input video capture and properties:
     cap = cv2.VideoCapture(video_filepath)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -255,7 +259,7 @@ def create_video_with_tracking_overlay(
         (w, h),
         True,
     )
-    
+
     # For each tracking data point, create a frame with the tracking overlay:
     overlay_tolerance = 1 / fps * 2 * 1000
     logger.info(f"Seeking to video time: {video_time_min_ms}ms")
@@ -292,8 +296,9 @@ def create_video_with_tracking_overlay(
                 w,
                 h,
                 overlay_tolerance,
+                player_name,
             )
-        
+
         if text_str is not None:
             cv2.putText(
                 frm,
@@ -304,16 +309,16 @@ def create_video_with_tracking_overlay(
                 (0, 255, 0),
                 2,
             )
-        
+
         # Write frame to output video:
         sav.write(frm)
-        # Get the next frame:
+        # Get the next frame:+
         ret, frm = cap.read()
         if not ret or frm is None:
             logger.info(f"End of video reached at time {cur_video_time}ms")
             break
         cur_video_time = cap.get(cv2.CAP_PROP_POS_MSEC)
-    
+
     # Close input and output videos:
     sav.release()
     cap.release()
@@ -323,66 +328,74 @@ def create_video_with_tracking_overlay(
 def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Optional[TrackingDataCache] = None) -> str:
     """
     Create overlay video for a single TraceClipReel object.
-    
+
     Args:
         clip_reel: TraceClipReel instance
         tracking_cache: TrackingDataCache instance for performance
-    
+
     Returns:
         str: Path to generated video file
     """
     if tracking_cache is None:
         tracking_cache = TrackingDataCache()
-    
+
     logger.info(f"Creating overlay video for clip reel {clip_reel.id}")
-    
+
     # Get session and video file
     session = clip_reel.session
     video_file_url = session.blob_video_url or session.video_url
-    
+
     if not video_file_url:
-        raise ValueError(f"No video URL available for session {session.session_id}")
-    
+        raise ValueError(
+            f"No video URL available for session {session.session_id}")
+
     # Download video from storage to temporary file
     temp_video_path = download_video_from_storage(video_file_url)
-    
+
     try:
         # Get involved players and their tracking data
-        involved_players = clip_reel.involved_players.all()
+        # involved_players = clip_reel.involved_players.all()
         tracking_data = {}
-        
-        for player in involved_players:
-            # Get TraceObject for this player in this session
-            trace_object = TraceObject.objects.filter(
-                session=session,
-                player=player
-            ).first()
-            
-            if trace_object and trace_object.tracking_blob_url:
-                # Load tracking data with caching
-                player_tracking_df = tracking_cache.get_tracking_data(
-                    trace_object.tracking_blob_url
-                )
-                
-                if not player_tracking_df.empty:
-                    tracking_data[player.object_id] = player_tracking_df
-                    logger.info(f"Loaded tracking data for player {player.object_id}")
-                else:
-                    logger.warning(f"No tracking data found for player {player.object_id}")
-        
+
+        # for player in involved_players:
+        # Get TraceObject for this player in this session
+        trace_object = TraceObject.objects.filter(
+            session=session,
+            player=clip_reel.primary_player
+        ).first()
+
+        if trace_object and trace_object.tracking_blob_url:
+            # Load tracking data with caching
+            player_tracking_df = tracking_cache.get_tracking_data(
+                trace_object.tracking_blob_url
+            )
+
+            if not player_tracking_df.empty:
+                tracking_data[clip_reel.primary_player.object_id] = player_tracking_df
+                logger.info(
+                    f"Loaded tracking data for player {clip_reel.primary_player.object_id}")
+            else:
+                logger.warning(
+                    f"No tracking data found for player {clip_reel.primary_player.object_id}")
+
         if not tracking_data:
-            raise ValueError(f"No tracking data found for any involved players in clip reel {clip_reel.id}")
-        
+            raise ValueError(
+                f"No tracking data found for any involved players in clip reel {clip_reel.id}")
+
         # Create text string from highlight tags
         text_str = " | ".join(clip_reel.tags or [])
-        if involved_players:
-            player_names = [p.object_id for p in involved_players]
-            text_str += f" | {', '.join(player_names)}"
-        
+        # if involved_players:
+        #     player_names = [p.object_id for p in involved_players]
+        #     text_str += f" | {', '.join(player_names)}"
+
+        player_name = clip_reel.primary_player.user.name
+        if not player_name:
+            player_name = clip_reel.primary_player.name
+
         # Create temporary output file
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
             output_path = temp_file.name
-        
+
         # Generate video using existing function
         create_video_with_tracking_overlay(
             video_time_min_ms=clip_reel.start_ms,
@@ -391,10 +404,11 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
             text_str=text_str,
             video_filepath=temp_video_path,
             out_video_filepath=output_path,
+            player_name=player_name,
         )
-        
+
         return output_path
-        
+
     finally:
         # Clean up temporary video file
         if os.path.exists(temp_video_path):
@@ -408,20 +422,20 @@ def upload_video_to_storage(video_file_path: str, clip_reel: TraceClipReel) -> s
         session_id = clip_reel.session.session_id
         highlight_id = clip_reel.highlight.highlight_id
         video_type = clip_reel.video_type
-        
+
         blob_path = f"highlight_videos/{session_id}/{highlight_id}_{video_type}.mp4"
-        
+
         logger.info(f"Uploading video to storage: {blob_path}")
-        
+
         # Upload to storage (Azure Blob or local based on DEBUG setting)
         with open(video_file_path, 'rb') as video_file:
             saved_path = default_storage.save(blob_path, video_file)
-        
+
         # Return the storage URL
         storage_url = default_storage.url(saved_path)
         logger.info(f"Video uploaded successfully: {storage_url}")
         return storage_url
-        
+
     except Exception as e:
         logger.error(f"Error uploading video to storage: {e}")
         raise
