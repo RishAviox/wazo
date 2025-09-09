@@ -21,6 +21,54 @@ from .models import TraceClipReel, TraceObject, TracePlayer
 logger = logging.getLogger(__name__)
 
 
+def extract_relative_path_from_azure_url(azure_url: str) -> str:
+    """
+    Extract relative path from Azure Blob Storage URL.
+
+    Args:
+        azure_url: Full Azure Blob Storage URL
+
+    Returns:
+        str: Relative path for use with default_storage.open()
+    """
+    if not azure_url.startswith("https://"):
+        return azure_url
+
+    # URL format: https://account.blob.core.windows.net/container/path
+    url_parts = azure_url.split('/')
+
+    # Find the container name in the URL
+    container_index = None
+    for i, part in enumerate(url_parts):
+        if part.endswith('.blob.core.windows.net'):
+            container_index = i + 1
+            break
+
+    if container_index and container_index < len(url_parts):
+        container_name = url_parts[container_index]
+        # Extract path after container name
+        relative_path = '/'.join(url_parts[container_index:])
+
+        # Handle different containers based on Django settings
+        from django.conf import settings
+        django_container = getattr(settings, 'AZURE_CONTAINER_NAME', 'media')
+
+        if container_name == django_container:
+            # Same container as Django settings - remove container name from path
+            path_after_container = '/'.join(url_parts[container_index + 1:])
+            logger.info(
+                f"Using Django container '{django_container}', path: {path_after_container}")
+            return path_after_container
+        else:
+            # Different container - keep full path with container name
+            logger.info(
+                f"Using different container '{container_name}', full path: {relative_path}")
+            return relative_path
+    else:
+        logger.warning(f"Could not extract path from Azure URL: {azure_url}")
+        return azure_url
+
+
 class TrackingDataCache:
     """Cache tracking data to avoid re-downloading for multiple clip reels"""
 
@@ -60,7 +108,15 @@ def load_tracking_data_from_storage(tracking_blob_url: str, video_start_time_ms:
         # Handle different storage types based on DEBUG setting
         from django.conf import settings
 
-        if settings.DEBUG:
+        if tracking_blob_url.startswith("https://"):
+            # Full Azure Blob URL - extract the relative path
+            relative_path = extract_relative_path_from_azure_url(
+                tracking_blob_url)
+            logger.info(f"Relative path: {relative_path}")
+            response = default_storage.open(relative_path)
+            logger.info(f"Response of the {tracking_blob_url}: {response}")
+
+        elif settings.DEBUG and not tracking_blob_url.startswith("https"):
             # Local development - handle file path properly
             if tracking_blob_url.startswith('/media/'):
                 # Remove leading /media/ for local storage
@@ -75,7 +131,7 @@ def load_tracking_data_from_storage(tracking_blob_url: str, video_start_time_ms:
             logger.info(f"Using local tracking file path: {file_path}")
             response = default_storage.open(file_path)
         else:
-            # Production - Azure Blob Storage
+            # Production - Azure Blob Storage with relative path
             response = default_storage.open(tracking_blob_url)
 
         tracking_data_obj = json.load(response)
@@ -114,7 +170,12 @@ def download_video_from_storage(video_blob_url: str, temp_dir: Optional[str] = N
         # Handle different storage types based on DEBUG setting
         from django.conf import settings
 
-        if settings.DEBUG:
+        if video_blob_url.startswith("https://"):
+            # Full Azure Blob URL - extract the relative path
+            relative_path = extract_relative_path_from_azure_url(video_blob_url)
+            response = default_storage.open(relative_path)
+
+        elif settings.DEBUG and not video_blob_url.startswith("https"):
             # Local development - handle file path properly
             if video_blob_url.startswith('/media/'):
                 # Remove leading /media/ for local storage
@@ -129,12 +190,17 @@ def download_video_from_storage(video_blob_url: str, temp_dir: Optional[str] = N
             logger.info(f"Using local file path: {file_path}")
             response = default_storage.open(file_path)
         else:
-            # Production - Azure Blob Storage
+            # Production - Azure Blob Storage with relative path
             response = default_storage.open(video_blob_url)
 
         with open(temp_path, 'wb') as f:
             f.write(response.read())
         response.close()
+        # temp_path = "./media/videos/4299999/4299999_video.mp4"
+        if os.path.exists(temp_path):
+            logger.info(f"{'=='*50}\n\n{temp_path}\n\n{'=='*50}")
+        else:
+            logger.warning(f"Video file not found: {temp_path}")
 
         logger.info(f"Downloaded video to temporary file: {temp_path}")
         return temp_path
@@ -370,6 +436,9 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
                 trace_object.tracking_blob_url
             )
 
+            logger.info(
+                f"Tracking Data Df is downloaded with the URL: {trace_object.tracking_blob_url}, {player_tracking_df}")
+
             if not player_tracking_df.empty:
                 tracking_data[clip_reel.primary_player.object_id] = player_tracking_df
                 logger.info(
@@ -411,31 +480,338 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
 
     finally:
         # Clean up temporary video file
-        if os.path.exists(temp_video_path):
-            os.unlink(temp_video_path)
+        # if os.path.exists(temp_video_path):
+        #     os.unlink(temp_video_path)
+        logger.info("TODO: Cleanup code to remove the file from local storage")
 
 
 def upload_video_to_storage(video_file_path: str, clip_reel: TraceClipReel) -> str:
-    """Upload generated video to Azure Blob Storage or local storage"""
+    """
+    Upload generated video to Azure Blob Storage with robust retry logic and error handling.
+    Based on the same patterns as download_video_and_save_to_azure_blob.
+    """
     try:
         # Generate blob path
         session_id = clip_reel.session.session_id
         highlight_id = clip_reel.highlight.highlight_id
         video_type = clip_reel.video_type
 
-        blob_path = f"highlight_videos/{session_id}/{highlight_id}_{video_type}.mp4"
+        from tracevision.utils import TraceVisionStoragePaths
+        blob_path = TraceVisionStoragePaths.get_highlight_video_path(
+            session_id, highlight_id, video_type)
 
+        # Ensure blob path is clean and valid
+        blob_path = blob_path.replace('//', '/').strip('/')
         logger.info(f"Uploading video to storage: {blob_path}")
 
-        # Upload to storage (Azure Blob or local based on DEBUG setting)
-        with open(video_file_path, 'rb') as video_file:
-            saved_path = default_storage.save(blob_path, video_file)
+        # Validate file exists and get properties
+        if not os.path.exists(video_file_path):
+            raise FileNotFoundError(f"Video file not found: {video_file_path}")
 
-        # Return the storage URL
-        storage_url = default_storage.url(saved_path)
-        logger.info(f"Video uploaded successfully: {storage_url}")
-        return storage_url
+        file_size = os.path.getsize(video_file_path)
+        if file_size == 0:
+            raise ValueError("Video file is empty")
+
+        logger.info(f"Video file size: {file_size / (1024*1024):.1f} MB")
+
+        # Determine content type
+        content_type = "video/mp4"
+        if video_file_path.lower().endswith('.mp4'):
+            content_type = "video/mp4"
+        elif video_file_path.lower().endswith('.avi'):
+            content_type = "video/avi"
+        elif video_file_path.lower().endswith('.mov'):
+            content_type = "video/quicktime"
+
+        # Handle different storage types based on DEBUG setting
+        from django.conf import settings
+
+        # Check if we're using Azure Blob Storage (regardless of DEBUG setting)
+        if hasattr(settings, 'AZURE_CONNECTION_STRING') and settings.AZURE_CONNECTION_STRING:
+            # Azure Blob Storage - use robust upload
+            logger.info("Using robust Azure Blob Storage upload")
+            return upload_video_to_azure_blob_robust(video_file_path, blob_path, content_type, file_size)
+        else:
+            # Local development - use default_storage
+            logger.info("Using local storage (default_storage)")
+            with open(video_file_path, 'rb') as video_file:
+                saved_path = default_storage.save(blob_path, video_file)
+            storage_url = default_storage.url(saved_path)
+            logger.info(f"Video uploaded to local storage: {storage_url}")
+            return storage_url
 
     except Exception as e:
         logger.error(f"Error uploading video to storage: {e}")
         raise
+
+
+def upload_video_to_azure_blob_robust(video_file_path: str, blob_path: str, content_type: str, file_size: int) -> str:
+    """
+    Robust upload to Azure Blob Storage with retry logic, using shared code from tasks.py.
+    """
+    from azure.storage.blob import BlobServiceClient, BlobType, ContentSettings
+    from azure.core.exceptions import ResourceExistsError
+    from django.conf import settings
+    import time
+
+    blob_service_client = None
+    blob_client = None
+
+    # Retry blob client creation for network issues
+    for client_attempt in range(3):
+        try:
+            blob_service_client = BlobServiceClient.from_connection_string(
+                settings.AZURE_CONNECTION_STRING)
+            blob_client = blob_service_client.get_blob_client(
+                container=settings.AZURE_CONTAINER_NAME, blob=blob_path)
+            logger.info(
+                f"Successfully created blob client on attempt {client_attempt + 1}")
+            break
+        except Exception as client_error:
+            if client_attempt < 2:
+                logger.warning(
+                    f"Blob client creation attempt {client_attempt + 1} failed: {client_error}. Retrying...")
+                time.sleep(5)
+            else:
+                logger.error(
+                    f"Failed to create blob client after 3 attempts: {client_error}")
+                raise client_error
+
+    if not blob_client:
+        raise Exception("Failed to create blob client")
+
+    upload_success = False
+    max_retries = 1  # Start with 1 attempt for primary method
+    retry_delay = 10
+
+    # Progress callback for upload monitoring
+    def progress_callback(current, total):
+        if total and total > 0:
+            percentage = (current / total) * 100
+            uploaded_mb = current / (1024 * 1024)
+            total_mb = total / (1024 * 1024)
+            logger.info(
+                f"Upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)")
+
+    # Try primary upload method first
+    for attempt in range(max_retries):
+        try:
+            with open(video_file_path, 'rb') as data:
+                # Try with progress callback first
+                try:
+                    upload_options = {
+                        'data': data,
+                        'blob_type': BlobType.BLOCKBLOB,
+                        'overwrite': True,
+                        'content_settings': ContentSettings(content_type=content_type),
+                        'max_concurrency': 2,
+                        'length': file_size,
+                        'timeout': 7200,  # 2 hours timeout for large files
+                        'progress_hook': progress_callback,
+                    }
+
+                    logger.info(
+                        f"Starting upload attempt {attempt + 1} with progress tracking...")
+                    blob_client.upload_blob(**upload_options)
+                except TypeError as progress_error:
+                    if "progress_callback" in str(progress_error):
+                        logger.warning(
+                            "Progress callback failed, retrying without progress tracking...")
+                        # Reset file pointer
+                        data.seek(0)
+                        # Upload without progress callback
+                        upload_options_simple = {
+                            'data': data,
+                            'blob_type': BlobType.BLOCKBLOB,
+                            'overwrite': True,
+                            'content_settings': ContentSettings(content_type=content_type),
+                            'max_concurrency': 2,
+                            'length': file_size,
+                            'timeout': 7200,
+                        }
+                        blob_client.upload_blob(**upload_options_simple)
+                    else:
+                        raise progress_error
+
+            upload_success = True
+            logger.info(
+                f"Successfully uploaded video to Azure on attempt {attempt + 1}")
+            break
+
+        except Exception as e:
+            error_str = str(e).lower()
+            logger.warning(f"Upload attempt {attempt + 1} failed: {e}")
+
+            # Check for specific network errors
+            if any(keyword in error_str for keyword in ['dns', 'resolve', 'connection', 'network', 'timeout']):
+                logger.warning(
+                    "Network-related error detected, will retry with longer delay...")
+                # Longer backoff for network issues
+                wait_time = retry_delay * (3 ** attempt)
+            else:
+                # Standard exponential backoff
+                wait_time = retry_delay * (2 ** attempt)
+
+            if attempt < max_retries - 1:
+                logger.info(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                # Try alternative upload methods as last resort
+                logger.info("Attempting alternative upload methods...")
+
+                # Try direct upload first (simplest method)
+                try:
+                    logger.info("Trying direct upload method...")
+                    upload_success = upload_video_direct(
+                        blob_client, video_file_path, content_type, file_size)
+                    if upload_success:
+                        logger.info("Direct upload successful!")
+                        break
+                except Exception as direct_error:
+                    logger.warning(f"Direct upload failed: {direct_error}")
+
+                # Try chunked upload for large files (lower threshold for better reliability)
+                if file_size > 10 * 1024 * 1024:  # For files larger than 10MB
+                    try:
+                        logger.info("Trying chunked upload method...")
+                        upload_success = upload_video_chunked(
+                            blob_client, video_file_path, content_type, file_size)
+                        if upload_success:
+                            logger.info("Chunked upload successful!")
+                            break
+                    except Exception as chunked_error:
+                        logger.error(
+                            f"Chunked upload also failed: {chunked_error}")
+
+                logger.error(
+                    f"All upload methods failed: {e}", exc_info=True, stack_info=True)
+                raise e
+
+    if not upload_success:
+        raise Exception("Failed to upload video after all retry attempts")
+
+    # Return the Azure Blob URL
+    storage_url = f"https://{settings.AZURE_ACCOUNT_NAME}.blob.core.windows.net/{settings.AZURE_CONTAINER_NAME}/{blob_path}"
+    logger.info(f"Video uploaded successfully: {storage_url}")
+    return storage_url
+
+
+def upload_video_direct(blob_client, file_path, content_type, file_size):
+    """
+    Simple direct upload without any special configurations.
+    Uses the same pattern as tasks.py upload_file_direct.
+    """
+    try:
+        from azure.storage.blob import BlobType, ContentSettings
+
+        with open(file_path, 'rb') as data:
+            blob_client.upload_blob(
+                data=data,
+                blob_type=BlobType.BLOCKBLOB,
+                overwrite=True,
+                content_settings=ContentSettings(content_type=content_type)
+            )
+        logger.info(
+            f"Successfully uploaded {file_size / (1024*1024):.1f} MB using direct method")
+        return True
+    except Exception as e:
+        logger.error(f"Direct upload failed: {e}")
+        return False
+
+
+def upload_video_chunked(blob_client, file_path, content_type, file_size, chunk_size=2*1024*1024):
+    """
+    Upload large files using chunked approach for better reliability.
+    Uses the same pattern as tasks.py upload_large_file_chunked.
+    """
+    try:
+        from azure.storage.blob import BlobBlock
+        from azure.core.exceptions import ResourceExistsError
+        import time
+        import base64
+
+        # Clear any existing blocks first
+        try:
+            blob_client.delete_blob(delete_snapshots='include')
+            logger.info("Cleared existing blob before chunked upload")
+        except Exception as clear_error:
+            logger.info(f"No existing blob to clear: {clear_error}")
+
+        # Start the block blob upload
+        block_ids = []
+        block_number = 0
+        total_uploaded = 0
+
+        with open(file_path, 'rb') as file_data:
+            while True:
+                chunk = file_data.read(chunk_size)
+                if not chunk:
+                    break
+
+                # Generate unique block ID
+                block_id = base64.b64encode(
+                    f"block-{block_number:06d}-{int(time.time())}".encode()).decode()
+                block_ids.append(BlobBlock(block_id=block_id))
+
+                # Upload the chunk with retry logic
+                chunk_uploaded = False
+                for chunk_attempt in range(3):
+                    try:
+                        # Validate chunk before upload
+                        if not chunk or len(chunk) == 0:
+                            logger.warning(
+                                f"Chunk {block_number} is empty, skipping...")
+                            break
+
+                        # Ensure block_id is properly formatted
+                        if not block_id or len(block_id) == 0:
+                            logger.error(
+                                f"Invalid block_id for chunk {block_number}")
+                            break
+
+                        # Add small delay between chunks to avoid rate limiting
+                        if block_number > 0:
+                            time.sleep(0.1)
+
+                        blob_client.stage_block(block_id, chunk)
+                        chunk_uploaded = True
+                        total_uploaded += len(chunk)
+                        break
+                    except Exception as chunk_error:
+                        if chunk_attempt < 2:
+                            logger.warning(
+                                f"Chunk {block_number} upload attempt {chunk_attempt + 1} failed: {chunk_error}. Retrying...")
+                            # Exponential backoff
+                            time.sleep(2 ** chunk_attempt)
+                        else:
+                            logger.error(
+                                f"Chunk {block_number} upload failed after 3 attempts: {chunk_error}")
+                            raise chunk_error
+
+                if not chunk_uploaded:
+                    logger.error(f"Failed to upload chunk {block_number}")
+                    return False
+
+                block_number += 1
+                # Log progress every 10 chunks
+                if block_number % 10 == 0:
+                    percentage = (total_uploaded / file_size) * 100
+                    uploaded_mb = total_uploaded / (1024 * 1024)
+                    total_mb = file_size / (1024 * 1024)
+                    logger.info(
+                        f"Chunked upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)")
+
+        # Commit the block list
+        if block_ids:
+            logger.info(f"Committing {len(block_ids)} blocks...")
+            blob_client.commit_block_list(block_ids)
+            logger.info(
+                f"Successfully uploaded {file_size / (1024*1024):.1f} MB using chunked method")
+            return True
+        else:
+            logger.error("No blocks to commit")
+            return False
+
+    except Exception as e:
+        logger.error(f"Chunked upload failed: {e}")
+        return False

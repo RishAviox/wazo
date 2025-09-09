@@ -1,0 +1,59 @@
+version: '3.9'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  django:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wajo-app:latest
+    container_name: wajo-app
+    volumes:
+      - .:/app
+      - media_volume:/app/media
+    ports:
+      - "8003:8000"
+    env_file:
+      - .env
+    environment:
+      - django-settings-module=wajo_backend.settings
+    depends_on:
+      - redis
+
+  celery:
+    image: wajo-app:latest
+    container_name: celery-worker
+    entrypoint: ""
+    command: celery -A wajo_backend worker --loglevel=INFO
+    volumes:
+      - .:/app
+      - media_volume:/app/media
+    env_file:
+      - .env
+    environment:
+      - django-settings-module=wajo_backend.settings
+    depends_on:
+      - redis
+      
+  celery-beat:
+    image: wajo-app:latest
+    container_name: celery-beat
+    entrypoint: ""
+    command: celery -A wajo_backend beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - .:/app
+      - media_volume:/app/media
+    env_file:
+      - .env
+    environment:
+      - django-settings-module=wajo_backend.settings
+    depends_on:
+      - redis
+
+volumes:
+  media_volume:

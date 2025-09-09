@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import time
 import requests
 import mimetypes
 import tempfile
@@ -8,11 +9,14 @@ from celery import shared_task
 from django.db import transaction
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from azure.storage.blob import BlobServiceClient, BlobType, ContentSettings
 
 from tracevision.models import TraceSession, TraceObject, TraceHighlight, TraceHighlightObject, TracePlayer
 from tracevision.services import TraceVisionService
 from tracevision.notification_service import NotificationService
 from django.conf import settings
+
+from tracevision.utils import TraceVisionStoragePaths
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +77,8 @@ def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
 
         # Create proper file path structure for Azure blob storage
         session_id = trace_object.session.session_id
-        file_name = f"{trace_object.object_id}_tracking_data.json"
-        file_path = f"tracking_data/{session_id}/{file_name}"
+        file_path = TraceVisionStoragePaths.get_tracking_data_path(
+            session_id, trace_object.object_id)
 
         # Create ContentFile with the JSON data
         json_content = json.dumps(tracking_data, indent=2)
@@ -128,24 +132,129 @@ def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
         }
 
 
+def upload_file_direct(blob_client, file_path, content_type, file_size):
+    """
+    Simple direct upload without any special configurations.
+    """
+    try:
+        with open(file_path, 'rb') as data:
+            blob_client.upload_blob(
+                data=data,
+                blob_type=BlobType.BLOCKBLOB,
+                overwrite=True,
+                content_settings=ContentSettings(content_type=content_type)
+            )
+        logger.info(
+            f"Successfully uploaded {file_size / (1024*1024*1024):.2f} GB using direct method")
+        return True
+    except Exception as e:
+        logger.error(f"Direct upload failed: {e}")
+        return False
+
+
+def upload_large_file_chunked(blob_client, file_path, content_type, file_size, chunk_size=2*1024*1024):
+    """
+    Upload large files using chunked approach for better reliability.
+    """
+    try:
+        import base64
+        from azure.storage.blob import BlobBlock
+        from azure.core.exceptions import ResourceExistsError
+
+        # Clear any existing blocks first
+        try:
+            blob_client.delete_blob(delete_snapshots='include')
+            logger.info("Cleared existing blob before chunked upload")
+        except Exception as clear_error:
+            logger.info(f"No existing blob to clear: {clear_error}")
+
+        # Start the block blob upload
+        block_ids = []
+        block_number = 0
+        total_uploaded = 0
+
+        with open(file_path, 'rb') as file_data:
+            while True:
+                chunk = file_data.read(chunk_size)
+                if not chunk:
+                    break
+
+                # Generate unique block ID
+                block_id = base64.b64encode(
+                    f"block-{block_number:06d}-{int(time.time())}".encode()).decode()
+                block_ids.append(BlobBlock(block_id=block_id))
+
+                # Upload the chunk with retry logic
+                chunk_uploaded = False
+                for chunk_attempt in range(3):
+                    try:
+                        # Validate chunk before upload
+                        if not chunk or len(chunk) == 0:
+                            logger.warning(
+                                f"Chunk {block_number} is empty, skipping...")
+                            break
+
+                        # Ensure block_id is properly formatted
+                        if not block_id or len(block_id) == 0:
+                            logger.error(
+                                f"Invalid block_id for chunk {block_number}")
+                            break
+
+                        # Add small delay between chunks to avoid rate limiting
+                        if block_number > 0:
+                            time.sleep(0.1)
+
+                        blob_client.stage_block(block_id, chunk)
+                        chunk_uploaded = True
+                        break
+                    except Exception as chunk_error:
+                        if chunk_attempt < 2:
+                            logger.warning(
+                                f"Chunk {block_number} upload attempt {chunk_attempt + 1} failed: {chunk_error}. Retrying...")
+                            # Exponential backoff
+                            time.sleep(2 ** chunk_attempt)
+                        else:
+                            logger.error(
+                                f"Chunk {block_number} upload failed after 3 attempts: {chunk_error}")
+                            raise chunk_error
+
+                if not chunk_uploaded:
+                    raise Exception(f"Failed to upload chunk {block_number}")
+
+                block_number += 1
+                total_uploaded += len(chunk)
+
+                # Log progress
+                percentage = (total_uploaded / file_size) * 100
+                uploaded_mb = total_uploaded / (1024 * 1024)
+                total_mb = file_size / (1024 * 1024)
+                logger.info(
+                    f"Chunked upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)")
+
+        # Commit the blocks
+        if block_ids:
+            blob_client.commit_block_list(block_ids)
+            logger.info(
+                f"Successfully uploaded {file_size / (1024*1024*1024):.2f} GB using chunked method")
+            return True
+        else:
+            logger.error("No blocks to commit")
+            return False
+
+    except Exception as e:
+        logger.error(f"Chunked upload failed: {e}")
+        return False
+
+
 @shared_task
-def download_video_and_save_to_azure_blob(session_id, timeout=300):
+def download_video_and_save_to_azure_blob(session_id, timeout=1200):
     """
     Download video from TraceSession's video_url, upload to Azure Blob Storage,
     and save the blob URL back to the TraceSession.
-
-    Args:
-        session_id (int): TraceSession ID
-        timeout (int): Request timeout in seconds (default 5 minutes for video)
-
-    Returns:
-        dict: Result containing success status, blob_url, and message
     """
     try:
-        # Get the session from the database
         session = TraceSession.objects.get(id=session_id)
 
-        # Check if already downloaded to prevent duplicates
         if session.blob_video_url:
             logger.info(
                 f"Video already downloaded for session {session.session_id}")
@@ -158,90 +267,225 @@ def download_video_and_save_to_azure_blob(session_id, timeout=300):
         logger.info(
             f"Downloading video for session {session.session_id} from: {session.video_url}")
 
-        # Download video with streaming to handle large files
+        # Download the video stream
         response = requests.get(
-            session.video_url, timeout=timeout, stream=True)
+            session.video_url, stream=True, timeout=max(timeout, 600))
         response.raise_for_status()
 
-        # Get content type and file extension
+        # # Validate content type
         content_type = response.headers.get('content-type', '')
         file_extension = mimetypes.guess_extension(content_type) or '.mp4'
+        # content_type = "video/mp4"
+        # file_extension = ".mp4"
+        blob_path = TraceVisionStoragePaths.get_session_video_path(
+            session.session_id, "original")
 
-        # Create proper file path structure for Azure blob storage
-        file_name = f"{session.session_id}_video{file_extension}"
-        file_path = f"videos/{session.session_id}/{file_name}"
+        # Ensure blob path is clean and valid
+        blob_path = blob_path.replace('//', '/').strip('/')
+        logger.info(f"Blob path: {blob_path}")
 
-        # Save to Azure Blob Storage with streaming
-        logger.info(f"Uploading video to Azure blob: {file_path}")
+        # Create temp file and stream content to it
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+            temp_file_path = tmp_file.name
+            total_size = 0
+            chunk_count = 0
 
-        # Create a temporary file to store the video
-        temp_file_path = None
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
-                temp_file_path = temp_file.name
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        temp_file.write(chunk)
-                temp_file.flush()
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    tmp_file.write(chunk)
+                    total_size += len(chunk)
+                    chunk_count += 1
+                    if chunk_count % 1000 == 0:
+                        logger.info(f"Downloaded {total_size / (1024*1024):.1f} MB for session {session.session_id}")
 
-            # Read the temporary file and upload to blob storage
-            with open(temp_file_path, 'rb') as video_file:
-                file_content = ContentFile(video_file.read())
-                saved_path = default_storage.save(file_path, file_content)
+        logger.info(f"Download complete. Total size: {total_size / (1024*1024):.1f} MB")
 
-        finally:
-            # Clean up temporary file with proper error handling
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.unlink(temp_file_path)
-                except (OSError, PermissionError) as e:
+        # Upload to Azure Blob Storage using SDK with retry logic
+        blob_service_client = None
+        blob_client = None
+
+        # Retry blob client creation for network issues
+        for client_attempt in range(3):
+            try:
+                blob_service_client = BlobServiceClient.from_connection_string(
+                    settings.AZURE_CONNECTION_STRING)
+                blob_client = blob_service_client.get_blob_client(
+                    container=settings.AZURE_CONTAINER_NAME, blob=blob_path)
+                logger.info(
+                    f"Successfully created blob client on attempt {client_attempt + 1}")
+                break
+            except Exception as client_error:
+                if client_attempt < 2:
                     logger.warning(
-                        f"Could not delete temporary file {temp_file_path}: {e}")
-                    # On Windows, sometimes files are still locked, try again after a short delay
-                    import time
-                    time.sleep(0.1)
+                        f"Blob client creation attempt {client_attempt + 1} failed: {client_error}. Retrying...")
+                    time.sleep(5)
+                else:
+                    logger.error(
+                        f"Failed to create blob client after 3 attempts: {client_error}")
+                    raise client_error
+
+        if not blob_client:
+            raise Exception("Failed to create blob client")
+
+        upload_success = False
+        max_retries = 1
+        retry_delay = 10
+
+        temp_file_path = "video.mp4"
+
+        # Progress callback for upload monitoring
+        def progress_callback(current, total):
+            if total and total > 0:
+                percentage = (current / total) * 100
+                uploaded_mb = current / (1024 * 1024)
+                total_mb = total / (1024 * 1024)
+                logger.info(
+                    f"Upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)")
+
+        for attempt in range(max_retries):
+            try:
+                # Validate file exists and get size
+                if not os.path.exists(temp_file_path):
+                    raise FileNotFoundError(
+                        f"Video file not found: {temp_file_path}")
+
+                file_size = os.path.getsize(temp_file_path)
+                if file_size == 0:
+                    raise ValueError("Video file is empty")
+
+                logger.info(
+                    f"{'=='*50}\n\nVideo File Size: {file_size / (1024*1024*1024):.2f} GB\n\n{'=='*50}")
+
+                with open(temp_file_path, 'rb') as data:
+                    # Try with progress callback first
                     try:
-                        os.unlink(temp_file_path)
-                    except (OSError, PermissionError):
-                        logger.warning(
-                            f"Failed to delete temporary file {temp_file_path} after retry")
+                        upload_options = {
+                            'data': data,
+                            'blob_type': BlobType.BLOCKBLOB,
+                            'overwrite': True,
+                            'content_settings': ContentSettings(content_type=content_type),
+                            'max_concurrency': 2,  # Reduced for stability with large files
+                            'length': file_size,
+                            'timeout': 7200,  # 2 hours timeout for very large files
+                            'progress_hook': progress_callback,  # Add progress tracking
+                        }
 
-        # Generate the full URL for the blob
-        blob_url = default_storage.url(saved_path)
+                        logger.info(
+                            f"Starting upload attempt {attempt + 1} with progress tracking...")
+                        blob_client.upload_blob(**upload_options)
+                    except TypeError as progress_error:
+                        if "progress_callback" in str(progress_error):
+                            logger.warning(
+                                "Progress callback failed, retrying without progress tracking...")
+                            # Reset file pointer
+                            data.seek(0)
+                            # Upload without progress callback
+                            upload_options_simple = {
+                                'data': data,
+                                'blob_type': BlobType.BLOCKBLOB,
+                                'overwrite': True,
+                                'content_settings': ContentSettings(content_type=content_type),
+                                'max_concurrency': 2,
+                                'length': file_size,
+                                'timeout': 7200,
+                            }
+                            blob_client.upload_blob(**upload_options_simple)
+                        else:
+                            raise progress_error
 
-        # Update the TraceSession with the blob URL
+                upload_success = True
+                logger.info(
+                    f"Successfully uploaded video to Azure on attempt {attempt + 1}")
+                break
+
+            except Exception as e:
+                error_str = str(e).lower()
+                logger.warning(f"Upload attempt {attempt + 1} failed: {e}")
+
+                # Check for specific network errors
+                if any(keyword in error_str for keyword in ['dns', 'resolve', 'connection', 'network', 'timeout']):
+                    logger.warning(
+                        "Network-related error detected, will retry with longer delay...")
+                    # Longer backoff for network issues
+                    wait_time = retry_delay * (3 ** attempt)
+                else:
+                    # Standard exponential backoff
+                    wait_time = retry_delay * (2 ** attempt)
+
+                if attempt < max_retries - 1:
+                    logger.info(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    # Try alternative upload methods as last resort
+                    logger.info("Attempting alternative upload methods...")
+
+                    # Try direct upload first (simplest method)
+                    try:
+                        logger.info("Trying direct upload method...")
+                        upload_success = upload_file_direct(
+                            blob_client, temp_file_path, content_type, file_size)
+                        if upload_success:
+                            logger.info("Direct upload successful!")
+                            break
+                    except Exception as direct_error:
+                        logger.warning(f"Direct upload failed: {direct_error}")
+
+                    # Try chunked upload for large files (lower threshold for better reliability)
+                    if file_size > 10 * 1024 * 1024:  # For files larger than 10MB
+                        try:
+                            logger.info("Trying chunked upload method...")
+                            upload_success = upload_large_file_chunked(
+                                blob_client, temp_file_path, content_type, file_size)
+                            if upload_success:
+                                logger.info("Chunked upload successful!")
+                                break
+                        except Exception as chunked_error:
+                            logger.error(
+                                f"Chunked upload also failed: {chunked_error}")
+
+                    logger.error(
+                        f"All upload methods failed: {e}", exc_info=True, stack_info=True)
+                    raise e
+
+        # Clean up temp file
+        # try:
+        #     os.remove(temp_file_path)
+        # except Exception as e:
+        #     logger.warning(f"Failed to delete temp file {temp_file_path}: {e}")
+
+        if not upload_success:
+            return {
+                'success': False,
+                'blob_url': None,
+                'error': "Upload failed after retries"
+            }
+
+        # Get full blob URL
+        blob_url = f"{blob_client.url}"
         session.blob_video_url = blob_url
         session.save()
-
-        # Log success with file size
-        file_size_mb = os.path.getsize(
-            saved_path) / (1024 * 1024) if os.path.exists(saved_path) else 0
-        logger.info(
-            f"Successfully downloaded video for session {session.session_id}: "
-            f"Size: {file_size_mb:.2f} MB, saved to {blob_url}")
 
         return {
             'success': True,
             'blob_url': blob_url,
             'message': 'Downloaded and uploaded successfully',
-            'file_size_mb': file_size_mb
+            'file_size_mb': os.path.getsize(temp_file_path) / (1024 * 1024)
         }
 
     except requests.exceptions.RequestException as e:
-        logger.error(
-            f"Failed to download video for session {session.session_id} from {session.video_url}: {e}")
+        logger.error(f"Failed to download video for session {session_id}: {e}")
         return {
             'success': False,
             'blob_url': None,
-            'error': f"Network error: {str(e)}"
+            'error': f"Download error: {str(e)}"
         }
+
     except Exception as e:
-        logger.error(
-            f"Error processing video for session {session.session_id}: {e}")
+        logger.error(f"Unexpected error processing session {session_id}: {e}")
         return {
             'success': False,
             'blob_url': None,
-            'error': f"Processing error: {str(e)}"
+            'error': f"Internal error: {str(e)}"
         }
 
 
@@ -271,8 +515,8 @@ def upload_result_data_to_azure_blob(session, result_data):
             f"Uploading result data for session {session.session_id} to Azure blob")
 
         # Create proper file path structure for Azure blob storage
-        file_name = f"{session.session_id}_result_data.json"
-        file_path = f"session_results/{session.session_id}/{file_name}"
+        file_path = TraceVisionStoragePaths.get_session_result_path(
+            session.session_id)
 
         # Create ContentFile with the JSON data
         json_content = json.dumps(result_data, indent=2, ensure_ascii=False)
@@ -830,15 +1074,17 @@ def compute_aggregates_task(session_id):
         agg = TraceVisionAggregationService()
         result = agg.compute_all(session)
         logger.info(f"Computed aggregates for session {session_id}")
-        
+
         # Trigger overlay highlights generation for clip reels
         try:
             from tracevision.tasks import generate_overlay_highlights_task
             generate_overlay_highlights_task.delay(session_id)
-            logger.info(f"Queued overlay highlights generation for session {session_id}")
+            logger.info(
+                f"Queued overlay highlights generation for session {session_id}")
         except Exception as e:
-            logger.exception(f"Failed to enqueue overlay highlights generation for session {session_id}: {e}")
-        
+            logger.exception(
+                f"Failed to enqueue overlay highlights generation for session {session_id}: {e}")
+
         return {"success": True, "details": {k: True for k in result.keys()}}
     except Exception as e:
         logger.exception(
@@ -1374,74 +1620,76 @@ def calculate_metrics_for_unmapped_players_task(session_id=None, lookback_days=7
 def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_size=5):
     """
     Generate overlay highlight videos for TraceClipReel objects with video_type='with_overlay' and status='pending'.
-    
+
     Args:
         session_id (str, optional): Process specific session
         clip_reel_ids (list, optional): Process specific clip reels
         batch_size (int): Number of clips to process in parallel (default: 5)
-    
+
     Returns:
         dict: Task results with success status and details
     """
     try:
         from .video_generator import TrackingDataCache, create_clip_reel_overlay_video, upload_video_to_storage
         from .models import TraceClipReel
-        
+
         # Query target clip reels
         clip_reels = TraceClipReel.objects.filter(
             video_type='with_overlay',
-            generation_status='pending',
+            generation_status__in=['pending', 'failed'],
             primary_player__user__isnull=False,
         ).select_related('session', 'highlight').prefetch_related('involved_players')
-        
+
         if session_id:
             clip_reels = clip_reels.filter(session__session_id=session_id)
         if clip_reel_ids:
             clip_reels = clip_reels.filter(id__in=clip_reel_ids)
-        
+
         if not clip_reels.exists():
             logger.info("No clip reels to process")
             return {"success": True, "message": "No clip reels to process"}
-        
+
         logger.info(f"Found {clip_reels.count()} clip reels to process")
-        
+
         # Initialize tracking data cache
         tracking_cache = TrackingDataCache()
-        
+
         processed_count = 0
         failed_count = 0
         results = []
-        
+
         for clip_reel in clip_reels:
             try:
-                logger.info(f"Processing clip reel {clip_reel.id} for highlight {clip_reel.highlight.highlight_id}")
-                
+                logger.info(
+                    f"Processing clip reel {clip_reel.id} for highlight {clip_reel.highlight.highlight_id}")
+
                 # Mark as generating
                 clip_reel.mark_generation_started()
-                
+
                 # Generate overlay video
                 temp_video_path = create_clip_reel_overlay_video(
                     clip_reel, tracking_cache
                 )
-                
+
                 # Upload to storage
                 video_blob_url = upload_video_to_storage(
                     temp_video_path, clip_reel
                 )
-                
+
                 # Calculate video file size
-                video_size_mb = os.path.getsize(temp_video_path) / (1024 * 1024)
-                
+                video_size_mb = os.path.getsize(
+                    temp_video_path) / (1024 * 1024)
+
                 # Mark as completed
                 clip_reel.mark_generation_completed(
                     video_url=video_blob_url,
                     video_size_mb=video_size_mb,
                     video_duration_seconds=clip_reel.duration_ms / 1000.0
                 )
-                
+
                 # Clean up temporary file
                 os.unlink(temp_video_path)
-                
+
                 processed_count += 1
                 results.append({
                     'clip_reel_id': str(clip_reel.id),
@@ -1451,11 +1699,12 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
                     'video_url': video_blob_url,
                     'video_size_mb': video_size_mb
                 })
-                
+
                 logger.info(f"Successfully processed clip reel {clip_reel.id}")
-                
+
             except Exception as e:
-                logger.exception(f"Error processing clip reel {clip_reel.id}: {e}")
+                logger.exception(
+                    f"Error processing clip reel {clip_reel.id}: {e}")
                 clip_reel.mark_generation_failed(str(e))
                 failed_count += 1
                 results.append({
@@ -1465,12 +1714,13 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
                     'status': 'failed',
                     'error': str(e)
                 })
-        
+
         # Clear tracking cache
         tracking_cache.clear_cache()
-        
-        logger.info(f"Overlay highlights generation completed. Processed: {processed_count}, Failed: {failed_count}")
-        
+
+        logger.info(
+            f"Overlay highlights generation completed. Processed: {processed_count}, Failed: {failed_count}")
+
         return {
             "success": True,
             "processed": processed_count,
@@ -1478,7 +1728,7 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
             "total": processed_count + failed_count,
             "results": results
         }
-        
+
     except Exception as e:
         logger.exception(f"Error in generate_overlay_highlights_task: {e}")
         return {"success": False, "error": str(e)}
