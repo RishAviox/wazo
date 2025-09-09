@@ -14,9 +14,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("django-secret-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
-ALLOWED_HOSTS = ['.hiwajo.com']
+ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = [
     'https://api.hiwajo.com', 
     'https://api2.hiwajo.com',
@@ -49,8 +49,9 @@ INSTALLED_APPS = [
     "match_data",
     "chatbot_features",
     "tracevision",
+    "django_apscheduler",
+    "django_celery_results",
     "django_celery_beat",
-    "django_apscheduler"
 ]
 
 MIDDLEWARE = [
@@ -101,7 +102,7 @@ WSGI_APPLICATION = "wajo_backend.wsgi.application"
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://redis-server:6379/1",  # Redis DB 1
+        "LOCATION": os.getenv("celery-broker-url", "redis://redis-server:6379/1"),  # Redis DB 1
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -112,7 +113,7 @@ CACHES = {
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
+PROD_DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("wajo-db-name"),
@@ -122,6 +123,16 @@ DATABASES = {
         "PASSWORD": os.environ.get("wajo-db-password"),
     }
 }
+
+LOCAL_DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / 'db_pilot.sqlite3',
+    },
+}
+
+DATABASES = LOCAL_DATABASES
+
 
 
 # Password validation
@@ -146,10 +157,16 @@ AUTH_PASSWORD_VALIDATORS = [
 # Celery configuration
 PROJECT_NAME = os.getenv("project-name", 'wajo_backend')
 CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60
+# Celery configuration - use service name for Docker, localhost for local development
+CELERY_BROKER_URL = os.getenv("celery-broker-url", "redis://redis:6379/0")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_BACKEND = 'django-db'
 DJANGO_SETTINGS_MODULE = os.getenv("django-settings-module", "wajo_backend.settings")
 
-# Celery Beat Configuration (only needed for production settings)
+# Celery Beat Configuration
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_BEAT_SYNC_EVERY = 1  # Sync schedule every 1 minute
 
