@@ -3,9 +3,12 @@ from tracevision.models import TraceSession, TraceClipReel, TracePlayer
 from tracevision.utils import get_hex_from_color_name
 
 class TraceClipReelSerializer(serializers.ModelSerializer):
+    age_group = serializers.CharField(source="session.age_group", read_only=True)
+    match_date = serializers.DateField(source="session.match_date", read_only=True)
     class Meta:
         model = TraceClipReel
         fields = '__all__'
+        extra_fields = ['age_group', 'match_date']
 
 
 class TraceVisionProcessesSerializer(serializers.ModelSerializer):

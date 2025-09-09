@@ -772,55 +772,45 @@ class TraceVisionPlayerStatsDetailView(APIView):
 from datetime import datetime     
 class GetTracePlayerReelsView(APIView):
     permission_classes = [IsAuthenticated]
-    # def get(self, request):
-    #     if not request.user.is_authenticated:
-    #         return Response(
-    #             {"error": "Unauthorized", "details": "You are not authorized to access this resource"},
-                
-    #         )
+   
     def get(self, request):
         player = request.user.trace_players.first()
         clipreels = player.primary_clip_reels.all() if player else []
-        # tags = request.query_params.getlist('tags')
-        # tags = [tag.strip().strip('"').strip("'") for tag in request.query_params.getlist('tags')]
-        # print(tags)
-
+        
      
-        # if tags:
-        #     clipreels = [cr for cr in clipreels if all(tag in cr.tags for tag in tags)]
-
-        #     print(clipreels)
+       #video_type_query_parameter
         video_type = request.query_params.get('video_type')
         print(type(video_type))
 
         if video_type:
             clipreels = clipreels.filter(video_type=video_type)
-
+        
+        #session_query_parameter
         session = request.query_params.get('session')
         print(type(session))
         if session:
             clipreels = clipreels.filter(session=session)
 
-
+        #generation_status_query_parameter
         generation_status = request.query_params.get('generation_status')
         print(type(generation_status))
         if generation_status:
             clipreels = clipreels.filter(generation_status=generation_status)
         
-
+        #match_date_query_parameter
         match_date = request.query_params.get('match_date')
         # if match_date:
         #     clipreels = clipreels.filter(session__match_date=match_date)
         if match_date:
             try:
-             match_date_obj = datetime.strptime(match_date, "%Y-%m-%d").date()
-             clipreels = clipreels.filter(session__match_date=match_date_obj)
+             match_date = datetime.strptime(match_date, "%Y-%m-%d").date()
+             clipreels = clipreels.filter(session__match_date=match_date)
             except ValueError:
               return Response(
             {"error": "Invalid date format. Use YYYY-MM-DD."},
             status=400
         )
-
+        #age_group_query_parameter
         age_group = request.query_params.get('age_group')
         if age_group:
             clipreels = clipreels.filter(session__age_group=age_group)
