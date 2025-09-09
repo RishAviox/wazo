@@ -1,6 +1,11 @@
 from rest_framework import serializers
-from tracevision.models import TraceSession
+from tracevision.models import TraceSession, TraceClipReel, TracePlayer
 from tracevision.utils import get_hex_from_color_name
+
+class TraceClipReelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TraceClipReel
+        fields = '__all__'
 
 
 class TraceVisionProcessesSerializer(serializers.ModelSerializer):
@@ -245,3 +250,8 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             )
         
         return value
+
+class CoachViewSpecificTeamPlayersSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TracePlayer
+        fields = '__all__'

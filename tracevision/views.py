@@ -1,19 +1,20 @@
 import logging
 import requests
 from datetime import datetime
-
+from django.db.models import JSONField   # Postgres native
+from tracevision.models import TraceClipReel
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
+from tracevision.tasks import generate_overlay_highlights_task
 
 from tracevision.models import TraceSession, TracePlayer
-from tracevision.serializers import TraceVisionProcessesSerializer, TraceVisionProcessSerializer, TraceSessionListSerializer
+from tracevision.serializers import TraceVisionProcessesSerializer, TraceVisionProcessSerializer, TraceSessionListSerializer, TraceClipReelSerializer, CoachViewSpecificTeamPlayersSerializer
 from tracevision.services import TraceVisionService
 from teams.models import Team
-from tracevision.tasks import download_video_and_save_to_azure_blob
 
 logger = logging.getLogger()
 
@@ -102,7 +103,7 @@ class TraceVisionProcessView(APIView):
             # Parse the final score to get individual team scores
             home_score, away_score = map(int, final_score_str.split('-'))
 
-            # Get or create Team objects
+            # Step 1: Get or create Team objects
             logger.info("Getting or creating Team objects...")
             
             # Get or create home team using name and jersey color as unique identifier
@@ -125,7 +126,7 @@ class TraceVisionProcessView(APIView):
                 }
             )
 
-            # Create TraceVision session
+            # Step 2: Create TraceVision session
             logger.info("Creating TraceVision session...")
             session_payload = {
                 "query": """
@@ -283,8 +284,6 @@ class TraceVisionProcessView(APIView):
                 status="waiting_for_data"  # Set initial status
             )
 
-            download_video_and_save_to_azure_blob.delay(session.id)
-
             return Response({
                 "success": True,
                 "id": session.id,
@@ -359,8 +358,15 @@ class TraceVisionPollStatusView(APIView):
                 logger.info(
                     f"Updated session {session.session_id} status from {previous_status} to {new_status}")
 
-            result_data = tracevision_service.get_session_result(
-                session)
+                # If status changed to completed, fetch and save result data
+                if new_status == "processed":
+                    result_data = tracevision_service.get_session_result(
+                        session)
+                    if result_data:
+                        session.result = result_data
+                        session.save()
+                        logger.info(
+                            f"Updated result data for completed session {session.session_id}")
 
             # Prepare response data
             response_data = {
@@ -370,7 +376,7 @@ class TraceVisionPollStatusView(APIView):
                 "status": session.status,
                 "previous_status": previous_status,
                 "status_updated": new_status != previous_status if new_status else False,
-                "result": result_data,
+                "result": session.result,
                 "match_date": session.match_date,
                 "home_team": session.home_team.name if session.home_team else None,
                 "away_team": session.away_team.name if session.away_team else None,
@@ -760,3 +766,128 @@ class TraceVisionPlayerStatsDetailView(APIView):
                 "error": "Internal server error",
                 "details": str(e)
             }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+
+from datetime import datetime     
+class GetTracePlayerReelsView(APIView):
+    permission_classes = [IsAuthenticated]
+    # def get(self, request):
+    #     if not request.user.is_authenticated:
+    #         return Response(
+    #             {"error": "Unauthorized", "details": "You are not authorized to access this resource"},
+                
+    #         )
+    def get(self, request):
+        player = request.user.trace_players.first()
+        clipreels = player.primary_clip_reels.all() if player else []
+        # tags = request.query_params.getlist('tags')
+        # tags = [tag.strip().strip('"').strip("'") for tag in request.query_params.getlist('tags')]
+        # print(tags)
+
+     
+        # if tags:
+        #     clipreels = [cr for cr in clipreels if all(tag in cr.tags for tag in tags)]
+
+        #     print(clipreels)
+        video_type = request.query_params.get('video_type')
+        print(type(video_type))
+
+        if video_type:
+            clipreels = clipreels.filter(video_type=video_type)
+
+        session = request.query_params.get('session')
+        print(type(session))
+        if session:
+            clipreels = clipreels.filter(session=session)
+
+
+        generation_status = request.query_params.get('generation_status')
+        print(type(generation_status))
+        if generation_status:
+            clipreels = clipreels.filter(generation_status=generation_status)
+        
+
+        match_date = request.query_params.get('match_date')
+        # if match_date:
+        #     clipreels = clipreels.filter(session__match_date=match_date)
+        if match_date:
+            try:
+             match_date_obj = datetime.strptime(match_date, "%Y-%m-%d").date()
+             clipreels = clipreels.filter(session__match_date=match_date_obj)
+            except ValueError:
+              return Response(
+            {"error": "Invalid date format. Use YYYY-MM-DD."},
+            status=400
+        )
+
+        age_group = request.query_params.get('age_group')
+        if age_group:
+            clipreels = clipreels.filter(session__age_group=age_group)
+
+     
+
+
+        serializer = TraceClipReelSerializer(clipreels, many=True)
+        return Response(
+            {"success": True, "clipreels": serializer.data},
+            
+        )
+    
+
+
+class CoachViewSpecificTeamPlayers(APIView):
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return Response(
+                {"error": "Unauthorized", "details": "You are not authorized to access this resource"},
+                
+            )
+        role = request.user.role
+        if role == 'Coach':
+            team = request.user.team
+            players = team.players.all()
+            print(players)
+            serializer = CoachViewSpecificTeamPlayersSerializer(players, many=True)
+            return Response(
+                {"success": True, "players": serializer.data},
+                
+            )
+        else:
+            return Response(
+                {"error": "Unauthorized", "details": "You are not authorized to access this resource"},
+                
+            )
+        
+
+class GeneratingAgainClipReelsView(APIView):
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return Response(
+                {"error": "Unauthorized", "details": "You are not authorized to access this resource"},
+                
+            )
+        role = request.user.role
+        if role == 'User':
+            clip_reel_id = request.data.get('clip_reel_id')
+            clip_reel = TraceClipReel.objects.get(id=clip_reel_id)
+            clip_reel.generation_status = 'pending'
+            generate_overlay_highlights_task.delay(None, [clip_reel.id])
+            clip_reel.save()
+            return Response(
+                {"success": True, "message": "Clip reel generation started"},
+                
+            )
+        if role == 'Coach':
+            team = request.user.team
+            players = team.players.all()
+            for player in players:
+                clip_reels = player.primary_clip_reels.all()
+                for clip_reel in clip_reels:
+                    clip_reel.generation_status = 'pending'
+                    generate_overlay_highlights_task.delay(None, [clip_reel.id])
+                    clip_reel.save()
+            return Response(
+                {"success": True, "message": "Clip reel generation started"},
+                
+            )
