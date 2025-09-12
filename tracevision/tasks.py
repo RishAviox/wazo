@@ -331,7 +331,7 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
         max_retries = 1
         retry_delay = 10
 
-        temp_file_path = "video.mp4"
+        # temp_file_path = "video.mp4"
 
         # Progress callback for upload monitoring
         def progress_callback(current, total):
@@ -835,16 +835,18 @@ def create_silent_notification(session):
 
 
 @shared_task
-def process_trace_sessions_task(trace_session_id):
+def process_trace_sessions_task(trace_session_id=None):
     """
     Celery task to process all TraceSession objects and update their status from TraceVision API.
     Create database notifications when status changes to "completed".
     """
     try:
         # Query all sessions that are not already processed or in error state
-        # sessions = TraceSession.objects.exclude(
-        #     status__in=["processed", "process_error"])
-        sessions = TraceSession.objects.filter(id=trace_session_id)
+        if not trace_session_id:
+            sessions = TraceSession.objects.exclude(
+                status__in=["processed", "process_error"])
+        else:
+            sessions = TraceSession.objects.filter(id=trace_session_id)
 
         if not sessions.exists():
             logger.info(

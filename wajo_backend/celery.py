@@ -24,9 +24,10 @@ app.conf.beat_schedule = getattr(settings, 'CELERY_BEAT_SCHEDULE', {
     #     'task': 'tracevision.reconcile_aggregates_for_processed_sessions',
     #     'schedule': 15 * 60,  # seconds
     # },
-    # Testing: poll and process TraceVision sessions every 10 minutes
-    # 'tracevision-process-sessions-every-10m': {
-    #     'task': 'tracevision.process_trace_sessions',
-    #     'schedule': 1 * 60,  # seconds
-    # },
+    # Process TraceVision sessions every 2 hours, starting immediately
+    'tracevision-process-sessions-every-2h': {
+        'task': 'tracevision.tasks.process_trace_sessions_task',
+        # 'schedule': 2 * 60 * 60,  # 2 hours in seconds
+        'schedule': 60,  # every minute
+    },
 })
