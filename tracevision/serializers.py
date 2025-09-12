@@ -96,7 +96,28 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         required=False,
         help_text="Start time of the video, if known (optional)"
     )
-    
+    match_start_time = serializers.CharField(
+        required=False,
+        help_text="Match start time in format 'HH:MM:SS' (optional)"
+    )
+    first_half_end_time = serializers.CharField(
+        required=False,
+        help_text="First half end time in format 'HH:MM:SS' (optional)"
+    )
+    second_half_start_time = serializers.CharField(
+        required=False,
+        help_text="Second half start time in format 'HH:MM:SS' (optional)"
+    )
+    match_end_time = serializers.CharField(
+        required=False,
+        help_text="Match end time in format 'HH:MM:SS' (optional)"
+    )
+    basic_game_stats = serializers.FileField(
+        required=False,
+        help_text="Basic game stats file (optional)"
+    )
+   
+
     # Age group and pitch size fields
     age_group = serializers.ChoiceField(
         choices=[
@@ -126,7 +147,8 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         max_value=100,
         help_text="Custom pitch width in meters (optional, will use age group default if not provided)"
     )
-
+    
+    
     def validate_video_file(self, value):
         """Validate video file field."""
         if value is None:
