@@ -87,7 +87,13 @@ class TraceSession(models.Model):
         default="waiting_for_data",
         help_text="Status of the session processing"
     )
-
+    
+    match_start_time = models.CharField(max_length=20, null=True, blank=True, help_text="Match start time in format 'HH:MM:SS'")
+    first_half_end_time = models.CharField(max_length=20, null=True, blank=True, help_text="First half end time in format 'HH:MM:SS'")
+    second_half_start_time = models.CharField(max_length=20, null=True, blank=True, help_text="Second half start time in format 'HH:MM:SS'")
+    match_end_time = models.CharField(max_length=20, null=True, blank=True, help_text="Match end time in format 'HH:MM:SS'")
+    basic_game_stats = models.FileField(upload_to='basic_game_stats/', null=True, blank=True, help_text="Basic game stats file")
+   
     # Timestamp fields
     created_at = models.DateTimeField(
         auto_now_add=True, help_text="When the session was created")

@@ -8,7 +8,9 @@ from .views import (
     TraceVisionSchedulerStatusView,
     TraceVisionSessionResultView,
     TraceVisionPlayerStatsView,
-    TraceVisionPlayerStatsDetailView
+    TraceVisionPlayerStatsDetailView,
+    GetTracePlayerReelsView,
+    CoachViewSpecificTeamPlayers,
 )
 
 urlpatterns = [
@@ -23,4 +25,6 @@ urlpatterns = [
     # Player stats endpoints
     path('sessions/<int:pk>/stats/', TraceVisionPlayerStatsView.as_view(), name='player-stats'),
     path('sessions/<int:pk>/stats/<int:player_id>/', TraceVisionPlayerStatsDetailView.as_view(), name='player-stats-detail'),
+    path('highlights/', GetTracePlayerReelsView.as_view(), name='player-reels'),
+    path('coach/players/', CoachViewSpecificTeamPlayers.as_view(), name='coach-players'),
 ]

@@ -1,6 +1,14 @@
 from rest_framework import serializers
-from tracevision.models import TraceSession
+from tracevision.models import TraceSession, TraceClipReel, TracePlayer
 from tracevision.utils import get_hex_from_color_name
+
+class TraceClipReelSerializer(serializers.ModelSerializer):
+    age_group = serializers.CharField(source="session.age_group", read_only=True)
+    match_date = serializers.DateField(source="session.match_date", read_only=True)
+    class Meta:
+        model = TraceClipReel
+        fields = '__all__'
+        extra_fields = ['age_group', 'match_date']
 
 
 class TraceVisionProcessesSerializer(serializers.ModelSerializer):
@@ -88,7 +96,28 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         required=False,
         help_text="Start time of the video, if known (optional)"
     )
-    
+    match_start_time = serializers.CharField(
+        required=False,
+        help_text="Match start time in format 'HH:MM:SS' (optional)"
+    )
+    first_half_end_time = serializers.CharField(
+        required=False,
+        help_text="First half end time in format 'HH:MM:SS' (optional)"
+    )
+    second_half_start_time = serializers.CharField(
+        required=False,
+        help_text="Second half start time in format 'HH:MM:SS' (optional)"
+    )
+    match_end_time = serializers.CharField(
+        required=False,
+        help_text="Match end time in format 'HH:MM:SS' (optional)"
+    )
+    basic_game_stats = serializers.FileField(
+        required=False,
+        help_text="Basic game stats file (optional)"
+    )
+   
+
     # Age group and pitch size fields
     age_group = serializers.ChoiceField(
         choices=[
@@ -118,7 +147,8 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         max_value=100,
         help_text="Custom pitch width in meters (optional, will use age group default if not provided)"
     )
-
+    
+    
     def validate_video_file(self, value):
         """Validate video file field."""
         if value is None:
@@ -245,3 +275,8 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             )
         
         return value
+
+class CoachViewSpecificTeamPlayersSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TracePlayer
+        fields = '__all__'
