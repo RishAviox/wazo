@@ -1,8 +1,7 @@
-from django.db import models
-from django.utils import timezone
 import uuid
-from accounts.models import WajoUser
+from django.db import models
 from teams.models import Team
+from accounts.models import WajoUser
 
 
 def get_default_pitch_size():
@@ -215,6 +214,34 @@ class TracePlayer(models.Model):
 
 
 class TraceHighlight(models.Model):
+    # Event type choices for different match events
+    EVENT_TYPE_CHOICES = [
+        ('touch', 'Touch'),
+        ('touch-chain', 'Touch Chain'),
+        ('goal', 'Goal'),
+        ('yellow_card', 'Yellow Card'),
+        ('red_card', 'Red Card'),
+        ('substitution', 'Substitution'),
+        ('save', 'Save'),
+        ('shot', 'Shot'),
+        ('pass', 'Pass'),
+        ('tackle', 'Tackle'),
+        ('foul', 'Foul'),
+        ('offside', 'Offside'),
+        ('corner', 'Corner'),
+        ('free_kick', 'Free Kick'),
+        ('penalty', 'Penalty'),
+        ('other', 'Other'),
+    ]
+
+    # Source choices for highlight origin
+    SOURCE_CHOICES = [
+        ('tracevision', 'TraceVision API'),
+        ('excel_import', 'Excel Import'),
+        ('manual', 'Manual Entry'),
+        ('ai_detection', 'AI Detection'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     highlight_id = models.CharField(
         max_length=100, unique=True, help_text="Unique identifier for the highlight")
@@ -227,6 +254,41 @@ class TraceHighlight(models.Model):
     tags = models.JSONField(
         default=list, help_text="Tags associated with the highlight")
     video_stream = models.URLField(help_text="URL to the video stream")
+
+    # New fields for enhanced event tracking
+    event_type = models.CharField(
+        max_length=20,
+        choices=EVENT_TYPE_CHOICES,
+        default='touch',
+        help_text="Type of event this highlight represents"
+    )
+    source = models.CharField(
+        max_length=20,
+        choices=SOURCE_CHOICES,
+        default='tracevision',
+        help_text="Source of this highlight data"
+    )
+    match_time = models.CharField(
+        max_length=8, 
+        null=True, blank=True, 
+        help_text="Match time when event occurred in MM:SS format (e.g., '16:30', '77:15')"
+    )
+    half = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Match half (1 or 2) when event occurred"
+    )
+    
+    # Event-specific metadata
+    event_metadata = models.JSONField(
+        default=dict, help_text="Additional event-specific data (scorer, card type, etc.)"
+    )
+    
+    # Player performance impact
+    performance_impact = models.FloatField(
+        default=0.0, help_text="Impact score on player performance (0-100)"
+    )
+    team_impact = models.FloatField(
+        default=0.0, help_text="Impact score on team performance (0-100)"
+    )
 
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='highlights')
@@ -244,10 +306,113 @@ class TraceHighlight(models.Model):
             models.Index(fields=['highlight_id']),
             models.Index(fields=['session', 'start_offset']),
             models.Index(fields=['player', '-created_at']),
+            models.Index(fields=['event_type', 'session']),
+            models.Index(fields=['source', 'session']),
+            models.Index(fields=['match_time', 'session']),
+            models.Index(fields=['performance_impact', 'session']),
         ]
 
     def __str__(self):
-        return f"Highlight {self.highlight_id} - {self.duration}ms"
+        return f"Highlight {self.highlight_id} - {self.event_type} - {self.duration}ms"
+
+    @property
+    def is_goal(self):
+        """Check if this highlight represents a goal"""
+        return self.event_type == 'goal'
+
+    @property
+    def is_card(self):
+        """Check if this highlight represents a card event"""
+        return self.event_type in ['yellow_card', 'red_card']
+
+    @property
+    def is_positive_event(self):
+        """Check if this is a positive event for the player's team"""
+        return self.event_type in ['goal', 'save', 'tackle', 'pass']
+
+    @property
+    def is_negative_event(self):
+        """Check if this is a negative event for the player's team"""
+        return self.event_type in ['red_card', 'yellow_card', 'foul', 'offside']
+
+    def get_event_description(self):
+        """Get a human-readable description of the event"""
+        time_str = self.match_time or "Unknown time"
+        if self.event_type == 'goal':
+            scorer = self.event_metadata.get('scorer', 'Unknown')
+            return f"Goal by {scorer} at {time_str}"
+        elif self.event_type in ['yellow_card', 'red_card']:
+            player = self.event_metadata.get('player', 'Unknown')
+            card_type = 'Yellow' if self.event_type == 'yellow_card' else 'Red'
+            return f"{card_type} card for {player} at {time_str}"
+        else:
+            return f"{self.get_event_type_display()} at {time_str}"
+
+    @property
+    def minute(self):
+        """Get minute from match_time (for backward compatibility)"""
+        if self.match_time:
+            try:
+                return int(self.match_time.split(':')[0])
+            except (ValueError, IndexError):
+                return None
+        return None
+
+    @property
+    def second(self):
+        """Get second from match_time (for backward compatibility)"""
+        if self.match_time:
+            try:
+                return int(self.match_time.split(':')[1])
+            except (ValueError, IndexError):
+                return None
+        return None
+
+    def set_match_time(self, minute, second=0):
+        """Set match_time from minute and second values"""
+        if minute is not None:
+            self.match_time = f"{minute:02d}:{second:02d}"
+        else:
+            self.match_time = None
+
+    def get_total_seconds(self):
+        """Get total seconds from start of match"""
+        if self.match_time:
+            try:
+                parts = self.match_time.split(':')
+                minutes = int(parts[0])
+                seconds = int(parts[1])
+                return minutes * 60 + seconds
+            except (ValueError, IndexError):
+                return None
+        return None
+
+    def calculate_performance_impact(self):
+        """Calculate performance impact based on event type and metadata"""
+        base_impact = 0.0
+        
+        if self.event_type == 'goal':
+            base_impact = 25.0  # High positive impact
+        elif self.event_type == 'red_card':
+            base_impact = -20.0  # High negative impact
+        elif self.event_type == 'yellow_card':
+            base_impact = -5.0   # Low negative impact
+        elif self.event_type == 'save':
+            base_impact = 15.0   # High positive impact for goalkeeper
+        elif self.event_type == 'tackle':
+            base_impact = 8.0    # Positive impact for defensive action
+        elif self.event_type == 'pass':
+            base_impact = 3.0    # Low positive impact
+        
+        # Adjust based on match context (minute, half, etc.)
+        minute = self.minute
+        if minute:
+            if minute <= 15:  # Early in half
+                base_impact *= 0.8
+            elif minute >= 75:  # Late in half
+                base_impact *= 1.2
+        
+        return max(-50.0, min(50.0, base_impact))  # Clamp between -50 and 50
 
 
 class TraceObject(models.Model):

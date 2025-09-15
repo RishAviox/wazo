@@ -2,6 +2,9 @@
 
 set -e
 
+echo "Creating migrations..."
+python manage.py makemigrations
+
 echo "Running migrations..."
 python manage.py migrate
 

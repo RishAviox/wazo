@@ -31,3 +31,8 @@ wajo_prod_postgres_data_23July2025_without_logs.json
 wajo_prod_postgres_data_23July2025.json
 chatbot_features/system_instructions/*
 celerybeat-*
+examples/
+
+
+*.mp4
+*.json

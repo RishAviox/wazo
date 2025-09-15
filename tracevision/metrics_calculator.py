@@ -6,7 +6,6 @@ from typing import Dict, List, Optional, Any
 from django.core.files.storage import default_storage
 from django.core.cache import cache
 from django.conf import settings
-
 from tracevision.spotlight_metrics_calculator import SpotlightMetricsCalculator
 
 logger = logging.getLogger(__name__)
@@ -196,7 +195,7 @@ def is_tracking_data_available_in_azure(player_obj) -> bool:
 
 
 def count_defensive_actions(highlights: List[Dict]) -> Dict[str, float]:
-    """Count defensive actions from highlights"""
+    """Count defensive actions from highlights using both event types and tags"""
     actions = {
         'blocks': 0, 'tackles_attempted': 0, 'tackles_won': 0, 'clearances': 0,
         'interceptions': 0, 'interventions': 0, 'recoveries': 0,
@@ -206,15 +205,47 @@ def count_defensive_actions(highlights: List[Dict]) -> Dict[str, float]:
     }
 
     for highlight in highlights:
+        event_type = highlight.get('event_type', '')
         tags = highlight.get('tags', [])
-        # Estimate defensive actions based on tags and context
-        if 'defensive' in tags or 'tackle' in tags:
+        metadata = highlight.get('event_metadata', {})
+        
+        # Use both event_type and tags in the same condition
+        if event_type == 'tackle' or 'defensive' in tags or 'tackle' in tags:
             actions['tackles_attempted'] += 1
-            actions['tackles_won'] += 1  # Assume successful if tracked
-        if 'interception' in tags:
+            # Assume successful if tracked (could be improved with metadata)
+            actions['tackles_won'] += 1
+        elif event_type == 'save' or 'save' in tags:
+            actions['shots_blocked'] += 1
+        elif event_type == 'foul' or 'foul' in tags:
+            # Check if it's a defensive action (could be in metadata)
+            if metadata.get('defensive_action', False):
+                actions['interventions'] += 1
+        
+        # Check for specific defensive actions in metadata or tags
+        if metadata.get('interception', False) or 'interception' in tags:
             actions['interceptions'] += 1
-        if 'recovery' in tags or 'regain' in tags:
+        if metadata.get('clearance', False) or 'clearance' in tags:
+            actions['clearances'] += 1
+        if metadata.get('recovery', False) or 'recovery' in tags or 'regain' in tags:
             actions['recoveries'] += 1
+        if metadata.get('aerial_duel', False) or 'aerial_duel' in tags:
+            actions['aerial_duels_total'] += 1
+            if metadata.get('aerial_duel_won', False):
+                actions['aerial_duels_won'] += 1
+        if metadata.get('ground_duel', False) or 'ground_duel' in tags:
+            actions['ground_duels_total'] += 1
+            if metadata.get('ground_duel_won', False):
+                actions['ground_duels_won'] += 1
+        if metadata.get('loose_ball_duel', False) or 'loose_ball_duel' in tags:
+            actions['loose_ball_duels'] += 1
+        if metadata.get('aerial_clearance', False) or 'aerial_clearance' in tags:
+            actions['aerial_clearances'] += 1
+        if metadata.get('defensive_line_support', False) or 'defensive_line_support' in tags:
+            actions['defensive_line_support'] += 1
+        if metadata.get('mistake', False) or 'mistake' in tags:
+            actions['mistakes'] += 1
+        if metadata.get('own_goal', False) or 'own_goal' in tags:
+            actions['own_goals'] += 1
 
     # Calculate success rates
     actions['tackle_success_rate'] = (
@@ -228,7 +259,7 @@ def count_defensive_actions(highlights: List[Dict]) -> Dict[str, float]:
 
 
 def count_attacking_actions(highlights: List[Dict]) -> Dict[str, int]:
-    """Count attacking actions from highlights"""
+    """Count attacking actions from highlights using both event types and tags"""
     actions = {
         'goals': 0, 'shots': 0, 'assists': 0, 'offsides': 0,
         'key_passes': 0, 'shots_in_pa': 0, 'shots_outside_pa': 0,
@@ -237,58 +268,97 @@ def count_attacking_actions(highlights: List[Dict]) -> Dict[str, int]:
     }
 
     for highlight in highlights:
+        event_type = highlight.get('event_type', '')
         tags = highlight.get('tags', [])
-        # Analyze tags to increment counters based on TraceVision's tagging
-        if 'goal' in tags:
+        metadata = highlight.get('event_metadata', {})
+        
+        # Use both event_type and tags in the same condition
+        if event_type == 'goal' or 'goal' in tags:
             actions['goals'] += 1
-        if 'shot' in tags:
+        elif event_type == 'shot' or 'shot' in tags:
             actions['shots'] += 1
-        if 'assist' in tags:
+            # Check if shot is in penalty area (could be in metadata)
+            if metadata.get('in_penalty_area', False):
+                actions['shots_in_pa'] += 1
+            else:
+                actions['shots_outside_pa'] += 1
+        elif event_type == 'pass' or 'touch-chain' in tags:
+            actions['key_passes'] += 1
+            # Check if it's a final third pass (could be in metadata)
+            if metadata.get('final_third', False):
+                actions['final_third_passes'] += 1
+        elif event_type == 'offside' or 'offside' in tags:
+            actions['offsides'] += 1
+        elif event_type == 'foul' or 'foul' in tags:
+            # Check if it's a take-on attempt (could be in metadata)
+            if metadata.get('take_on', False) or 'dribble' in tags or 'take-on' in tags:
+                actions['take_ons'] += 1
+        
+        # Check for assists in metadata or tags
+        if metadata.get('assist', False) or 'assist' in tags:
             actions['assists'] += 1
-        if 'cross' in tags:
+        
+        # Check for crosses in metadata or tags
+        if metadata.get('cross', False) or 'cross' in tags:
             actions['crosses'] += 1
-        if 'touch-chain' in tags:
-            actions['key_passes'] += 1  # Estimate key passes from touch chains
-        if 'dribble' in tags or 'take-on' in tags:
-            actions['take_ons'] += 1
+        
+        # Check for pressure control in metadata
+        if metadata.get('pressure_control', False):
+            actions['pressure_controls'] += 1
 
     return actions
 
 
 def calculate_passing_stats(highlights: List[Dict]) -> Dict[str, float]:
     """
-    Estimate passing stats from TraceVision highlights.
+    Estimate passing stats from TraceVision highlights using both event types and tags.
     Pass = change of possession from one player to another within consecutive highlights of the same team.
     """
     completed = 0
     attempted = 0
 
-    # Filter for touch-chain highlights (possession sequences)
-    chains = [h for h in highlights if "touch-chain" in h.get("tags", [])]
+    # Count passes using both event types and tags
+    for highlight in highlights:
+        event_type = highlight.get('event_type', '')
+        tags = highlight.get('tags', [])
+        
+        if event_type == 'pass' or 'pass' in tags:
+            attempted += 1
+            # Assume completed if tracked (could be improved with metadata)
+            completed += 1
+        elif event_type == 'touch-chain' or 'touch-chain' in tags:
+            # Touch chains indicate successful passes
+            attempted += 1
+            completed += 1
 
-    # Sort chains by start time to ensure chronological order
-    chains.sort(key=lambda h: h.get("start_offset", 0))
+    # If no direct passes found, analyze touch chains for possession changes
+    if attempted == 0:
+        # Filter for touch-chain highlights (possession sequences)
+        chains = [h for h in highlights if "touch-chain" in h.get("tags", [])]
 
-    prev_player = None
-    prev_side = None
+        # Sort chains by start time to ensure chronological order
+        chains.sort(key=lambda h: h.get("start_offset", 0))
 
-    for h in chains:
-        objs = h.get("objects", [])
-        if not objs:
-            continue
+        prev_player = None
+        prev_side = None
 
-        # TraceVision returns objects like [{"object_id": "away_15", "type": "player", ...}]
-        player_id = objs[0].get("object_id")
-        side = objs[0].get("side")
+        for h in chains:
+            objs = h.get("objects", [])
+            if not objs:
+                continue
 
-        # If the same team retained the ball and player changed → count as pass
-        if prev_player and prev_side == side:
-            if player_id != prev_player:
-                attempted += 1
-                completed += 1  # assume completed since chain continues
+            # TraceVision returns objects like [{"object_id": "away_15", "type": "player", ...}]
+            player_id = objs[0].get("object_id")
+            side = objs[0].get("side")
 
-        prev_player = player_id
-        prev_side = side
+            # If the same team retained the ball and player changed → count as pass
+            if prev_player and prev_side == side:
+                if player_id != prev_player:
+                    attempted += 1
+                    completed += 1  # assume completed since chain continues
+
+            prev_player = player_id
+            prev_side = side
 
     percentage = (completed / attempted * 100) if attempted > 0 else 0.0
 
@@ -599,29 +669,40 @@ class TraceVisionMetricsCalculator:
 
     def _get_player_highlights(self, session, player_obj) -> List[Dict]:
         """
-        Get all highlights/events involving a specific player
+        Get all highlights/events involving a specific player using efficient Django queries
         """
         try:
-            highlights = []
+            # Use Django ORM to get highlights where this player is involved
+            highlights_queryset = session.highlights.filter(
+                highlight_objects__player=player_obj
+            ).select_related('player').prefetch_related('highlight_objects__player__team').distinct()
 
-            # Get highlights where this player is involved
-            for highlight in session.highlights.all():
-                # Check if player is in the highlight objects
-                for highlight_obj in highlight.highlight_objects.all():
-                    if highlight_obj.player == player_obj:
-                        highlights.append({
-                            'highlight_id': highlight.highlight_id,
-                            'start_offset': highlight.start_offset,
-                            'duration': highlight.duration,
-                            'tags': highlight.tags or [],
-                            'video_id': highlight.video_id,
-                            'objects': [{
-                                'object_id': ho.player.object_id if ho.player else 'unknown',
-                                'side': ho.player.team.name if ho.player and ho.player.team else 'unknown',
-                                'type': 'player'
-                            } for ho in highlight.highlight_objects.all()]
-                        })
-                        break
+            highlights = []
+            for highlight in highlights_queryset:
+                # Get all players involved in this highlight
+                highlight_objects = highlight.highlight_objects.select_related('player__team').all()
+                
+                highlights.append({
+                    'highlight_id': highlight.highlight_id,
+                    'start_offset': highlight.start_offset,
+                    'duration': highlight.duration,
+                    'tags': highlight.tags or [],
+                    'video_id': highlight.video_id,
+                    'event_type': highlight.event_type,
+                    'source': highlight.source,
+                    'match_time': highlight.match_time,
+                    'half': highlight.half,
+                    'event_metadata': highlight.event_metadata or {},
+                    'performance_impact': highlight.performance_impact,
+                    'team_impact': highlight.team_impact,
+                    'video_stream': highlight.video_stream,
+                    'objects': [{
+                        'object_id': ho.player.object_id if ho.player else 'unknown',
+                        'side': ho.player.team.name if ho.player and ho.player.team else 'unknown',
+                        'type': 'player',
+                        'player_name': ho.player.name if ho.player else 'unknown'
+                    } for ho in highlight_objects]
+                })
 
             return highlights
 
@@ -629,6 +710,76 @@ class TraceVisionMetricsCalculator:
             self.logger.exception(
                 f"Error getting player highlights for {player_obj.object_id}: {e}")
             return []
+
+    def get_player_highlights_queryset(self, session, player_obj):
+        """
+        Get highlights queryset for a specific player - can be used for further filtering
+        
+        Args:
+            session: TraceSession instance
+            player_obj: TracePlayer instance
+            
+        Returns:
+            QuerySet: Filtered highlights queryset
+        """
+        try:
+            return session.highlights.filter(
+                highlight_objects__player=player_obj
+            ).select_related('player').prefetch_related('highlight_objects__player__team').distinct()
+        except Exception as e:
+            self.logger.exception(f"Error getting highlights queryset for {player_obj.object_id}: {e}")
+            return session.highlights.none()
+
+    def get_player_highlights_by_event_type(self, session, player_obj, event_type):
+        """
+        Get highlights for a specific player filtered by event type
+        
+        Args:
+            session: TraceSession instance
+            player_obj: TracePlayer instance
+            event_type: Event type to filter by (e.g., 'goal', 'yellow_card', 'red_card')
+            
+        Returns:
+            QuerySet: Filtered highlights queryset
+        """
+        try:
+            return self.get_player_highlights_queryset(session, player_obj).filter(
+                event_type=event_type
+            )
+        except Exception as e:
+            self.logger.exception(f"Error getting {event_type} highlights for {player_obj.object_id}: {e}")
+            return session.highlights.none()
+
+    def get_player_highlights_by_time_range(self, session, player_obj, start_minute=None, end_minute=None):
+        """
+        Get highlights for a specific player filtered by time range
+        
+        Args:
+            session: TraceSession instance
+            player_obj: TracePlayer instance
+            start_minute: Start minute filter (optional)
+            end_minute: End minute filter (optional)
+            
+        Returns:
+            QuerySet: Filtered highlights queryset
+        """
+        try:
+            queryset = self.get_player_highlights_queryset(session, player_obj)
+            
+            if start_minute is not None:
+                # Convert minute to milliseconds for start_offset comparison
+                start_offset = start_minute * 60 * 1000
+                queryset = queryset.filter(start_offset__gte=start_offset)
+            
+            if end_minute is not None:
+                # Convert minute to milliseconds for start_offset comparison
+                end_offset = end_minute * 60 * 1000
+                queryset = queryset.filter(start_offset__lte=end_offset)
+            
+            return queryset
+        except Exception as e:
+            self.logger.exception(f"Error getting time-filtered highlights for {player_obj.object_id}: {e}")
+            return session.highlights.none()
 
     def _calculate_gps_athletic_skills(self, tracking_data: List[List[float]], session) -> Dict[str, str]:
         """
@@ -699,17 +850,17 @@ class TraceVisionMetricsCalculator:
 
     def _calculate_attacking_skills(self, highlights: List[Dict], tracking_data: List[List[float]], session) -> Dict[str, str]:
         """
-        Calculate Attacking Skills metrics from highlights and events
+        Calculate Attacking Skills metrics from highlights and events using both event types and tags
 
         Expected format:
         {"Goals": "0", "Shots": "0", "Assists": "0", "Passing": "9/19 (47%)", ...}
         """
         try:
-            # Count different types of attacking actions from highlights
-            attacking_actions = count_attacking_actions(highlights)
+            # Count different types of attacking actions from highlights using both event types and tags
+            attacking_actions = self._count_attacking_actions(highlights)
 
-            # Calculate passing statistics
-            passing_stats = calculate_passing_stats(highlights)
+            # Calculate passing statistics using both event types and tags
+            passing_stats = self._calculate_passing_stats(highlights, session)
 
             # Estimate play time
             play_time_minutes = self._estimate_player_play_time(tracking_data)
@@ -745,16 +896,16 @@ class TraceVisionMetricsCalculator:
 
     def _calculate_defensive_skills(self, highlights: List[Dict], tracking_data: List[List[float]], session) -> Dict[str, str]:
         """
-        Calculate Video Card Defensive metrics
+        Calculate Video Card Defensive metrics using both event types and tags
 
         Expected format:
         {"Blocks": "0", "Tackles": "1/1 (100%)", "Clearances": "0", ...}
         """
         try:
-            # Count defensive actions from highlights
+            # Count defensive actions from highlights using both event types and tags
             defensive_actions = count_defensive_actions(highlights)
 
-            # Calculate defensive passing stats
+            # Calculate defensive passing stats using both event types and tags
             defensive_passing = calculate_passing_stats(highlights)
 
             # Estimate play time
@@ -988,9 +1139,9 @@ class TraceVisionMetricsCalculator:
             "Mistakes": "0", "Own Goals": "0", "Play time": "0/90 min", "Game Rating": "0.0"
         }
 
-    def _count_attacking_actions(self, highlights: List[Dict]) -> Dict[str, int]:
-        """Count attacking actions from highlights"""
 
+    def _count_attacking_actions(self, highlights: List[Dict]) -> Dict[str, int]:
+        """Count attacking actions from highlights (legacy method for backward compatibility)"""
         actions = {
             'goals': 0, 'shots': 0, 'assists': 0, 'offsides': 0,
             'key_passes': 0, 'shots_in_pa': 0, 'shots_outside_pa': 0,

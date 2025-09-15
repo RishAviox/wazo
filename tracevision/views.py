@@ -10,7 +10,7 @@ from rest_framework import status as http_status
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
-from tracevision.tasks import generate_overlay_highlights_task
+from tracevision.tasks import download_video_and_save_to_azure_blob, generate_overlay_highlights_task
 from datetime import datetime 
 from datetime import timedelta
 
@@ -117,10 +117,7 @@ class TraceVisionProcessView(APIView):
             # Parse the final score to get individual team scores
             home_score, away_score = map(int, final_score_str.split('-'))
 
-            # Step 1: Get or create Team objects
-            logger.info("Getting or creating Team objects...")
-           
-            
+            logger.info("Getting or creating Team objects...")          
             # Get or create home team using name and jersey color as unique identifier
             home_team_obj, _ = Team.objects.get_or_create(
                 name=home_team,
@@ -304,8 +301,9 @@ class TraceVisionProcessView(APIView):
                 second_half_start_time=second_half_start_time,
                 match_end_time=match_end_time,
                 basic_game_stats=basic_game_stats,
-               
             )
+
+            download_video_and_save_to_azure_blob.delay(session.id)
 
             return Response({
                 "success": True,

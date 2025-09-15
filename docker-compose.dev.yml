@@ -3,12 +3,12 @@ version: '3.9'
 services:
 
   wajo-redis:
-    ports:
+    ports: []
 
   django:
     environment:
       - django-settings-module=wajo_backend.settings
-    entrypoint: ""
+    # entrypoint: ""
     command: python manage.py runserver 0.0.0.0:8000
     ports:
       - "8003:8000"
@@ -18,7 +18,7 @@ services:
   wajo-celery-worker:
     environment:
       - django-settings-module=wajo_backend.settings
-    entrypoint: ""
+    # entrypoint: ""
     command: celery -A wajo_backend worker --loglevel=INFO
     volumes:
       - .:/app
