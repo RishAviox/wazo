@@ -23,6 +23,77 @@ from tracevision.utils import TraceVisionStoragePaths
 
 logger = logging.getLogger(__name__)
 
+import math
+
+# def clean_record(record: dict) -> dict:
+#     cleaned = {}
+#     for k, v in record.items():
+#         if v is None:
+#             cleaned[k] = None
+#         elif isinstance(v, float) and math.isnan(v):
+#             cleaned[k] = None
+#         else:
+#             cleaned[k] = v
+#     return cleaned
+# import math
+
+# def clean_record(record: dict) -> dict:
+#     cleaned = {}
+#     for k, v in record.items():
+#         # Handle NaN and None
+#         if v is None or (isinstance(v, float) and math.isnan(v)):
+#             cleaned[k] = None
+#         elif k.lower() == "goals":
+#             # Always return list
+#             if v in (None, "", []):
+#                 cleaned[k] = []
+#             elif isinstance(v, str):
+#                 cleaned[k] = [s.strip() for s in v.split(",") if s.strip()]
+#             else:
+#                 cleaned[k] = v
+#         elif k.lower() == "cards":
+#             # Always return null if missing
+#             if v in (None, "", []):
+#                 cleaned[k] = None
+#             else:
+#                 cleaned[k] = str(v).strip()
+#         else:
+#             cleaned[k] = v
+#     return cleaned
+import math
+import re
+
+def clean_record(record: dict) -> dict:
+    cleaned = {}
+    for k, v in record.items():
+        if v is None or (isinstance(v, float) and math.isnan(v)):
+            cleaned[k] = None
+
+        elif k.lower() == "goals":
+            # Always a list of integers
+            if v in (None, "", []):
+                cleaned[k] = []
+            elif isinstance(v, str):
+                # Extract all numbers (remove quotes/min etc.)
+                minutes = re.findall(r"\d+", v)
+                cleaned[k] = [int(m) for m in minutes]
+            elif isinstance(v, list):
+                # Convert possible ["16'", "77'"] → [16, 77]
+                cleaned[k] = [int(re.sub(r"\D", "", str(m))) for m in v if str(m).strip()]
+            else:
+                cleaned[k] = [int(v)] if str(v).isdigit() else []
+
+        elif k.lower() == "cards":
+            # Always null if missing
+            if v in (None, "", []):
+                cleaned[k] = None
+            else:
+                cleaned[k] = str(v).strip()
+
+        else:
+            cleaned[k] = v
+    return cleaned
+
 
 def get_full_azure_blob_url(file_path: str) -> str:
     """
@@ -1832,42 +1903,83 @@ def parse_excel_match_data(excel_file_path, session):
         # Parse Match Summary sheet
         if 'Match Summary' in excel_data:
             summary_df = excel_data['Match Summary']
+            summary_df = summary_df.where(pd.notna(summary_df), None)
             if not summary_df.empty:
                 match_data['match_summary'] = summary_df.iloc[0].to_dict()
         
         # Parse Starting Lineups sheet
+        # if 'Starting Lineups' in excel_data:
+        #     lineups_df = excel_data['Starting Lineups']
+        #     # Replace NaN values with None (which becomes null in JSON)
+        #     # lineups_df = lineups_df.fillna('')
+        #     lineups_df = lineups_df.where(pd.notna(lineups_df), None)
+        #     match_data['starting_lineups'] = lineups_df.to_dict('records')
         if 'Starting Lineups' in excel_data:
-            lineups_df = excel_data['Starting Lineups']
-            # Replace NaN values with None (which becomes null in JSON)
-            lineups_df = lineups_df.fillna('')
-            match_data['starting_lineups'] = lineups_df.to_dict('records')
+          lineups_df = excel_data['Starting Lineups']
+          lineups_df = lineups_df.where(pd.notna(lineups_df), None)
+        #   lineups = lineups_df.to_dict('records')
+          lineups = [clean_record(player) for player in lineups_df.to_dict('records')]
+
+    # Fix Goals and Cards: convert None/'' → []
+          for player in lineups:
+            if 'Goals' in player and (player['Goals'] is None or str(player['Goals']).strip() == ''):
+              player['Goals'] = []
+            if 'Cards' in player and (player['Cards'] is None or str(player['Cards']).strip() == ''):
+              player['Cards'] = None
+            if 'SubOffMinute' in player and player['SubOffMinute'] is None:
+              player['SubOffMinute'] = None  
+
+          match_data['starting_lineups'] = lineups
+
+
+            
         
         # Parse Replacements sheet
+        # if 'Replacements' in excel_data:
+        #     replacements_df = excel_data['Replacements']
+        #     # Replace NaN values with empty strings
+        #     # replacements_df = replacements_df.fillna('')
+        #     replacements_df = replacements_df.where(pd.notna(replacements_df), None)
+        #     match_data['replacements'] = replacements_df.to_dict('records')
         if 'Replacements' in excel_data:
-            replacements_df = excel_data['Replacements']
-            # Replace NaN values with empty strings
-            replacements_df = replacements_df.fillna('')
-            match_data['replacements'] = replacements_df.to_dict('records')
+         replacements_df = excel_data['Replacements']
+         replacements_df = replacements_df.where(pd.notna(replacements_df), None)
+         replacements = [clean_record(player) for player in replacements_df.to_dict('records')]
+
+
+    # Fix Goals and Cards: convert None/'' → []
+         for player in replacements:
+          if 'Goals' in player and (player['Goals'] is None or str(player['Goals']).strip() == ''):
+            player['Goals'] = []
+          if 'Cards' in player and (player['Cards'] is None or str(player['Cards']).strip() == ''):
+            player['Cards'] = None
+          if 'ReplacerMinute' in player and player['ReplacerMinute'] is None:
+            player['ReplacerMinute'] = None
+          match_data['replacements'] = replacements
+
         
         # Parse Bench sheet
         if 'Bench' in excel_data:
             bench_df = excel_data['Bench']
             # Replace NaN values with empty strings
-            bench_df = bench_df.fillna('')
+            # bench_df = bench_df.fillna('')
+            bench_df = bench_df.where(pd.notna(bench_df), None)
             match_data['bench'] = bench_df.to_dict('records')
         
         # Parse Coaches sheet
         if 'Coaches' in excel_data:
             coaches_df = excel_data['Coaches']
             # Replace NaN values with empty strings
-            coaches_df = coaches_df.fillna('')
+            # coaches_df = coaches_df.fillna('')
+            coaches_df = coaches_df.where(pd.notna(coaches_df), None)
             match_data['coaches'] = coaches_df.to_dict('records')
         
         # Parse Referees sheet
         if 'Referees' in excel_data:
             referees_df = excel_data['Referees']
             # Replace NaN values with empty strings
-            referees_df = referees_df.fillna('')
+            # referees_df = referees_df.fillna('')
+            referees_df = referees_df.where(pd.notna(referees_df), None)
             match_data['referees'] = referees_df.to_dict('records')
         
         # Create player mappings from all player data
@@ -1876,6 +1988,7 @@ def parse_excel_match_data(excel_file_path, session):
         # Map starting lineups
         for player in match_data['starting_lineups']:
             # Skip invalid entries (empty values, headers, etc.)
+            logger.info(f"Player: {player}")
             if (not player.get('Team') or 
                 not player.get('Number') or 
                 not player.get('Name') or
@@ -1891,7 +2004,7 @@ def parse_excel_match_data(excel_file_path, session):
             # Skip if player name is empty or invalid
             if not player_name or len(player_name) < 2:
                 continue
-            
+            role_val = player.get('Role')
             # Create mapping key
             mapping_key = f"{team_side}_{jersey_number}"
             player_mappings[mapping_key] = {
@@ -1899,7 +2012,10 @@ def parse_excel_match_data(excel_file_path, session):
                 'jersey_number': jersey_number,
                 'team_side': team_side,
                 'team_name': player['Team'],
-                'role': player.get('Role', '') or '',
+                # 'role': player.get('Role', '') or '',
+               
+                'role': '' if role_val is None or (isinstance(role_val, float) and pd.isna(role_val)) else str(role_val),
+
                 'source': 'starting_lineup'
             }
         
@@ -2340,7 +2456,7 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
             match_data = parse_excel_match_data(excel_file_path, session)
         except Exception as e:
             error_msg = f"Failed to parse Excel file: {str(e)}"
-            logger.error(error_msg)
+            logger.error(error_msg, stack_info=True, exc_info=True)
             return {"success": False, "error": error_msg}
         # Update TracePlayer names from Excel data
         logger.info(f"Updating TracePlayer names from Excel data...")

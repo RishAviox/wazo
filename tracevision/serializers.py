@@ -249,8 +249,8 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             )
         
         value = value.strip()
-        
         # Check if it contains exactly one dash
+        
         if value.count('-') != 1:
             raise serializers.ValidationError(
                 "Final score must be in format 'home_score-away_score' (e.g., '2-1', '0-0')"
