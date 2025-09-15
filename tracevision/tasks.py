@@ -13,7 +13,7 @@ from django.db import transaction
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from azure.storage.blob import BlobServiceClient, BlobType, ContentSettings
-
+import uuid
 from tracevision.models import TraceSession, TraceObject, TraceHighlight, TraceHighlightObject, TracePlayer
 from tracevision.services import TraceVisionService
 from tracevision.notification_service import NotificationService
@@ -1703,6 +1703,176 @@ def calculate_metrics_for_unmapped_players_task(session_id=None, lookback_days=7
         error_msg = f"Error in calculate_metrics_for_unmapped_players_task: {str(e)}"
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}
+import re
+import pandas as pd
+
+# ---------------------- Add this ABOVE parse_excel_match_data ----------------------
+# def extract_player_events(player: dict, session, source: str) -> list:
+#     """
+#     Extract events (goals, cards, substitutions) from a single player row.
+#     """
+#     events = []
+#     team_side = determine_team_side(player['Team'], session)
+#     jersey_number = player.get('Number')
+#     player_name = player.get('Name', '').strip()
+
+#     # Skip invalid rows
+#     if not player_name or not jersey_number:
+#         return events
+
+#     # Convert jersey number to int if possible
+#     try:
+#         jersey_number = int(jersey_number)
+#     except:
+#         pass
+
+#     # ---- Goals ----
+#     if player.get('Goals') and isinstance(player['Goals'], list):
+#         for g in player['Goals']:
+#             try:
+#                 minute = int(str(g).replace("'", "").strip())
+#                 events.append({
+#                     "type": "goal",
+#                     "player_name": player_name,
+#                     "jersey_number": jersey_number,
+#                     "minute": minute,
+#                     "team_side": team_side,
+#                     "source": source
+#                 })
+#             except:
+#                 continue
+
+#     # ---- Cards ----
+#     if player.get('Cards') and isinstance(player['Cards'], str):
+#         events.append({
+#             "type": "card",
+#             "player_name": player_name,
+#             "jersey_number": jersey_number,
+#             "card": player['Cards'],
+#             "team_side": team_side,
+#             "source": source
+#         })
+
+#     # ---- Substitution off ----
+#     if player.get('SubOffMinute') is not None:
+#         try:
+#             minute = int(player['SubOffMinute'])
+#             events.append({
+#                 "type": "substitution_off",
+#                 "player_name": player_name,
+#                 "jersey_number": jersey_number,
+#                 "minute": minute,
+#                 "team_side": team_side,
+#                 "source": source
+#             })
+#         except:
+#             pass
+
+#     # ---- Substitution on ---- (from replacements sheet)
+#     if player.get('ReplacerMinute') is not None:
+#         try:
+#             minute = int(player['ReplacerMinute'])
+#             events.append({
+#                 "type": "substitution_on",
+#                 "player_name": player_name,
+#                 "jersey_number": jersey_number,
+#                 "minute": minute,
+#                 "team_side": team_side,
+#                 "source": source
+#             })
+#         except:
+#             pass
+
+#     return events
+def extract_player_events(player: dict, session, source: str) -> list:
+    """
+    Extract events (goals, cards, substitutions) from a single player row.
+    Includes team name and category (goals, discipline, substitution).
+    """
+    events = []
+    team_side = determine_team_side(player['Team'], session)
+    team_name = player.get('Team')
+    jersey_number = player.get('Number')
+    player_name = player.get('Name', '').strip()
+
+    # Skip invalid rows
+    if not player_name or not jersey_number:
+        return events
+
+    # Convert jersey number to int if possible
+    try:
+        jersey_number = int(jersey_number)
+    except:
+        pass
+
+    # ---- Goals ----
+    if player.get('Goals') and isinstance(player['Goals'], list):
+        for g in player['Goals']:
+            try:
+                minute = int(str(g).replace("'", "").strip())
+                events.append({
+                    "type": "goal",
+                    "category": "goals",
+                    "player_name": player_name,
+                    "jersey_number": jersey_number,
+                    "minute": minute,
+                    "team_side": team_side,
+                    "team_name": team_name,
+                    "source": source
+                })
+            except:
+                continue
+
+    # ---- Cards ----
+    if player.get('Cards') and isinstance(player['Cards'], str):
+        events.append({
+            "type": "card",
+            "category": "discipline",
+            "player_name": player_name,
+            "jersey_number": jersey_number,
+            "card": player['Cards'],
+            "team_side": team_side,
+            "team_name": team_name,
+            "source": source
+        })
+
+    # ---- Substitution off ----
+    if player.get('SubOffMinute') is not None:
+        try:
+            minute = int(player['SubOffMinute'])
+            events.append({
+                "type": "substitution_off",
+                "category": "substitution",
+                "player_name": player_name,
+                "jersey_number": jersey_number,
+                "minute": minute,
+                "team_side": team_side,
+                "team_name": team_name,
+                "source": source
+            })
+        except:
+            pass
+
+    # ---- Substitution on ---- (from replacements sheet)
+    if player.get('ReplacerMinute') is not None:
+        try:
+            minute = int(player['ReplacerMinute'])
+            events.append({
+                "type": "substitution_on",
+                "category": "substitution",
+                "player_name": player_name,
+                "jersey_number": jersey_number,
+                "minute": minute,
+                "team_side": team_side,
+                "team_name": team_name,
+                "source": source
+            })
+        except:
+            pass
+
+    return events
+
+# ---------------------- END HELPER ----------------------
 
 
 @shared_task
@@ -1907,13 +2077,7 @@ def parse_excel_match_data(excel_file_path, session):
             if not summary_df.empty:
                 match_data['match_summary'] = summary_df.iloc[0].to_dict()
         
-        # Parse Starting Lineups sheet
-        # if 'Starting Lineups' in excel_data:
-        #     lineups_df = excel_data['Starting Lineups']
-        #     # Replace NaN values with None (which becomes null in JSON)
-        #     # lineups_df = lineups_df.fillna('')
-        #     lineups_df = lineups_df.where(pd.notna(lineups_df), None)
-        #     match_data['starting_lineups'] = lineups_df.to_dict('records')
+        
         if 'Starting Lineups' in excel_data:
           lineups_df = excel_data['Starting Lineups']
           lineups_df = lineups_df.where(pd.notna(lineups_df), None)
@@ -1934,13 +2098,7 @@ def parse_excel_match_data(excel_file_path, session):
 
             
         
-        # Parse Replacements sheet
-        # if 'Replacements' in excel_data:
-        #     replacements_df = excel_data['Replacements']
-        #     # Replace NaN values with empty strings
-        #     # replacements_df = replacements_df.fillna('')
-        #     replacements_df = replacements_df.where(pd.notna(replacements_df), None)
-        #     match_data['replacements'] = replacements_df.to_dict('records')
+        
         if 'Replacements' in excel_data:
          replacements_df = excel_data['Replacements']
          replacements_df = replacements_df.where(pd.notna(replacements_df), None)
@@ -2083,6 +2241,46 @@ def parse_excel_match_data(excel_file_path, session):
         
         # Extract events from match data
         events = []
+
+        # From starting lineups
+        for player in match_data['starting_lineups']:
+            events.extend(extract_player_events(player, session, source="starting_lineup"))
+
+# From replacements
+        for player in match_data['replacements']:
+            events.extend(extract_player_events(player, session, source="replacement"))
+
+# From bench 
+        for player in match_data['bench']:
+            events.extend(extract_player_events(player, session, source="bench"))
+        
+
+        for event in events:
+    # If 'minute' is missing, provide a default or skip
+           if 'minute' not in event or event['minute'] is None:
+             event['minute'] = 0  # or any default value you want
+    
+    # Now safely add match_time
+           if 'match_time' not in event:
+             event['match_time'] = f"{event['minute']}:00"
+
+           if 'event_metadata' not in event:
+             event['event_metadata'] = {
+            'player_name': event.get('player_name', ''),
+            'minute': event['minute'],
+            'match_time': event['match_time'],
+            'team_side': event.get('team_side', ''),
+            'team_name': event.get('team_name', ''),
+            'category': event.get('category', event.get('type', ''))
+        } 
+
+        # for event in events:
+        #   if 'match_time' not in event:
+        #       event['match_time'] = f"{event['minute']}:00"  # or any format you need
+    
+
+        match_data['events'] = events
+
         
         # TODO: Process the 'Starting Lineups' sheet to generates the Events for goals, cards and replacements
         # +++++++++++++++++++++++++++++++++++++Events processing code blocks++++++++++++++++++++++++++++++++++++
@@ -2482,87 +2680,92 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
         highlights_created = 0
         errors = []
         
-        # with transaction.atomic():
-        #     for event in match_data.get('events', []):
-        #         try:
-        #             # Map player to TracePlayer
-        #             trace_player = map_player_to_trace_player(
-        #                 event['player_name'],
-        #                 event.get('jersey_number', 0),
-        #                 event['team_side'],
-        #                 session
-        #             )
+        with transaction.atomic():
+            for event in match_data.get('events', []):
+                try:
+                    # Map player to TracePlayer
                     
-        #             if not trace_player:
-        #                 logger.warning(f"Skipping event for unmapped player: {event['player_name']}")
-        #                 continue
+                    trace_player = map_player_to_trace_player(
+                        event['player_name'],
+                        event.get('jersey_number', 0),
+                        event['team_side'],
+                        session
+                    )
                     
-        #             # Convert match time to milliseconds
-        #             start_offset = convert_match_time_to_milliseconds(
-        #                 event['match_time'],
-        #                 event.get('half')
-        #             )
+                    if not trace_player:
+                        logger.warning(f"Skipping event for unmapped player: {event['player_name']}")
+                        continue
                     
-        #             # Determine highlight duration based on event type
-        #             duration = 10000  # 10 seconds default
-        #             if event['type'] == 'goal':
-        #                 duration = 15000  # 15 seconds for goals
-        #             elif event['type'] in ['red_card', 'yellow_card']:
-        #                 duration = 8000   # 8 seconds for cards
+                    # Convert match time to milliseconds
+                    start_offset = convert_match_time_to_milliseconds(
+                        event['match_time'],
+                        event.get('half')
+                    )
                     
-        #             # Create unique highlight ID
-        #             highlight_id = f"excel-{event['type']}-{session_id}-{event['match_time'].replace(':', '')}-{trace_player.object_id}"
+                    # Determine highlight duration based on event type
+                    duration = 10000  # 10 seconds default
+                    if event['type'] == 'goal':
+                        duration = 15000  # 15 seconds for goals
+                    elif event['type'] in ['red_card', 'yellow_card']:
+                        duration = 8000   # 8 seconds for cards
                     
-        #             # Check if highlight already exists
-        #             if TraceHighlight.objects.filter(highlight_id=highlight_id).exists():
-        #                 logger.info(f"Highlight {highlight_id} already exists, skipping")
-        #                 continue
+                    # Create unique highlight ID
+                    highlight_id = f"excel-{event['type']}-{session_id}-{event['match_time'].replace(':', '')}-{trace_player.object_id}"
                     
-        #             # Create TraceHighlight
-        #             highlight = TraceHighlight.objects.create(
-        #                 highlight_id=highlight_id,
-        #                 video_id=0,  # Will be updated with actual video ID
-        #                 start_offset=start_offset,
-        #                 duration=duration,
-        #                 tags=[event['team_side'], event['type'], f"{event['match_time']}"],
-        #                 video_stream=session.video_url,
-        #                 event_type=event['type'],
-        #                 source='excel_import',
-        #                 match_time=event['match_time'],
-        #                 half=1 if event['minute'] <= 45 else 2,
-        #                 event_metadata=event['event_metadata'],
-        #                 session=session,
-        #                 player=trace_player
-        #             )
+                    # Check if highlight already exists
+                    if TraceHighlight.objects.filter(highlight_id=highlight_id).exists():
+                        logger.info(f"Highlight {highlight_id} already exists, skipping")
+                        continue
+                  
+
+# Convert session ID to UUID
                     
-        #             # Calculate performance impact
-        #             highlight.performance_impact = highlight.calculate_performance_impact()
-        #             highlight.team_impact = abs(highlight.performance_impact) * 0.5  # Team impact is half of player impact
-        #             highlight.save()
+                    # Create TraceHighlight
+                    highlight = TraceHighlight.objects.create(
+                        highlight_id=highlight_id,
+                        video_id=0,  # Will be updated with actual video ID
+                        start_offset=start_offset,
+                        duration=duration,
+                        tags=[event['team_side'], event['type'], f"{event['match_time']}"],
+                        video_stream=session.video_url,
+                        event_type=event['type'],
+                        source='excel_import',
+                        match_time=event['match_time'],
+                        half=1 if event['minute'] <= 45 else 2,
+                        event_metadata=event['event_metadata'],
+                        session=session,
+                        player=trace_player
+                    )
+
+                    logger.info(f"Highlight: {highlight}")
+                    # Calculate performance impact
+                    highlight.performance_impact = highlight.calculate_performance_impact()
+                    highlight.team_impact = abs(highlight.performance_impact) * 0.5  # Team impact is half of player impact
+                    highlight.save()
                     
-        #             # Create highlight-object relationship if trace object exists
-        #             trace_object = TraceObject.objects.filter(
-        #                 session=session,
-        #                 player=trace_player
-        #             ).first()
+                    # Create highlight-object relationship if trace object exists
+                    trace_object = TraceObject.objects.filter(
+                        session=session,
+                        player=trace_player
+                    ).first()
                     
-        #             if trace_object:
-        #                 TraceHighlightObject.objects.create(
-        #                     highlight=highlight,
-        #                     trace_object=trace_object,
-        #                     player=trace_player
-        #                 )
+                    if trace_object:
+                        TraceHighlightObject.objects.create(
+                            highlight=highlight,
+                            trace_object=trace_object,
+                            player=trace_player
+                        )
+                    logger.info(f"TraceObject: {trace_object}")
+                    highlights_created += 1
+                    events_processed += 1
                     
-        #             highlights_created += 1
-        #             events_processed += 1
+                    logger.info(f"Created highlight {highlight_id} for {event['type']} by {event['player_name']} at {event['match_time']}")
                     
-        #             logger.info(f"Created highlight {highlight_id} for {event['type']} by {event['player_name']} at {event['match_time']}")
-                    
-        #         except Exception as e:
-        #             error_msg = f"Error processing event {event}: {str(e)}"
-        #             logger.error(error_msg)
-        #             errors.append(error_msg)
-        #             continue
+                except Exception as e:
+                    error_msg = f"Error processing event {event}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+                    continue
         
         # Update session with Excel processing status
         session.result['excel_highlights_processed'] = True
