@@ -1768,10 +1768,28 @@ def determine_team_side(excel_team_name, session):
         home_team_name = session.home_team.name if session.home_team else None
         away_team_name = session.away_team.name if session.away_team else None
         
-        # Try partial match (in case of slight differences)
-        if home_team_name and home_team_name.lower() in excel_team_name.lower():
+        if not excel_team_name or not isinstance(excel_team_name, str):
+            logger.warning(f"Invalid team name: '{excel_team_name}'. Defaulting to 'away'.")
+            return 'away'
+        
+        excel_team_clean = excel_team_name.strip().lower()
+        
+        # Try exact match first
+        if home_team_name and excel_team_clean == home_team_name.lower():
             return 'home'
-        elif away_team_name and away_team_name.lower() in excel_team_name.lower():
+        elif away_team_name and excel_team_clean == away_team_name.lower():
+            return 'away'
+        
+        # Try partial match (in case of slight differences)
+        if home_team_name and home_team_name.lower() in excel_team_clean:
+            return 'home'
+        elif away_team_name and away_team_name.lower() in excel_team_clean:
+            return 'away'
+        
+        # Try reverse partial match
+        if home_team_name and excel_team_clean in home_team_name.lower():
+            return 'home'
+        elif away_team_name and excel_team_clean in away_team_name.lower():
             return 'away'
         
         # If no match found, log warning and default to 'away'
@@ -1820,26 +1838,36 @@ def parse_excel_match_data(excel_file_path, session):
         # Parse Starting Lineups sheet
         if 'Starting Lineups' in excel_data:
             lineups_df = excel_data['Starting Lineups']
+            # Replace NaN values with None (which becomes null in JSON)
+            lineups_df = lineups_df.fillna('')
             match_data['starting_lineups'] = lineups_df.to_dict('records')
         
         # Parse Replacements sheet
         if 'Replacements' in excel_data:
             replacements_df = excel_data['Replacements']
+            # Replace NaN values with empty strings
+            replacements_df = replacements_df.fillna('')
             match_data['replacements'] = replacements_df.to_dict('records')
         
         # Parse Bench sheet
         if 'Bench' in excel_data:
             bench_df = excel_data['Bench']
+            # Replace NaN values with empty strings
+            bench_df = bench_df.fillna('')
             match_data['bench'] = bench_df.to_dict('records')
         
         # Parse Coaches sheet
         if 'Coaches' in excel_data:
             coaches_df = excel_data['Coaches']
+            # Replace NaN values with empty strings
+            coaches_df = coaches_df.fillna('')
             match_data['coaches'] = coaches_df.to_dict('records')
         
         # Parse Referees sheet
         if 'Referees' in excel_data:
             referees_df = excel_data['Referees']
+            # Replace NaN values with empty strings
+            referees_df = referees_df.fillna('')
             match_data['referees'] = referees_df.to_dict('records')
         
         # Create player mappings from all player data
@@ -1847,84 +1875,128 @@ def parse_excel_match_data(excel_file_path, session):
         
         # Map starting lineups
         for player in match_data['starting_lineups']:
-            if 'Team' in player and 'Number' in player and 'Name' in player:
-                # Determine team side by comparing with session teams
-                team_side = determine_team_side(player['Team'], session)
-                jersey_number = player['Number']
-                player_name = player['Name']
+            # Skip invalid entries (empty values, headers, etc.)
+            if (not player.get('Team') or 
+                not player.get('Number') or 
+                not player.get('Name') or
+                player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
+                player.get('Team').strip() in ['', 'no.']):
+                continue
                 
-                # Create mapping key
-                mapping_key = f"{team_side}_{jersey_number}"
+            # Determine team side by comparing with session teams
+            team_side = determine_team_side(player['Team'], session)
+            jersey_number = int(player['Number'])
+            player_name = player['Name'].strip()
+            
+            # Skip if player name is empty or invalid
+            if not player_name or len(player_name) < 2:
+                continue
+            
+            # Create mapping key
+            mapping_key = f"{team_side}_{jersey_number}"
+            player_mappings[mapping_key] = {
+                'name': player_name,
+                'jersey_number': jersey_number,
+                'team_side': team_side,
+                'team_name': player['Team'],
+                'role': player.get('Role', '') or '',
+                'source': 'starting_lineup'
+            }
+        
+        # Map replacements
+        for player in match_data['replacements']:
+            # Skip invalid entries (empty values, headers, etc.)
+            if (not player.get('Team') or 
+                not player.get('Number') or 
+                not player.get('Name') or
+                player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
+                player.get('Team').strip() in ['', 'no.']):
+                continue
+                
+            team_side = determine_team_side(player['Team'], session)
+            jersey_number = int(player['Number'])
+            player_name = player['Name'].strip()
+            
+            # Skip if player name is empty or invalid
+            if not player_name or len(player_name) < 2:
+                continue
+            
+            # Create mapping key
+            mapping_key = f"{team_side}_{jersey_number}"
+            if mapping_key not in player_mappings:  # Only add if not already in starting lineup
                 player_mappings[mapping_key] = {
                     'name': player_name,
                     'jersey_number': jersey_number,
                     'team_side': team_side,
                     'team_name': player['Team'],
-                    'role': player.get('Role', ''),
-                    'source': 'starting_lineup'
+                    'role': player.get('Role', '') or '',
+                    'source': 'replacement'
                 }
-        
-        # Map replacements
-        for player in match_data['replacements']:
-            if 'Team' in player and 'Number' in player and 'Name' in player:
-                team_side = determine_team_side(player['Team'], session)
-                jersey_number = player['Number']
-                player_name = player['Name']
-                
-                # Create mapping key
-                mapping_key = f"{team_side}_{jersey_number}"
-                if mapping_key not in player_mappings:  # Only add if not already in starting lineup
-                    player_mappings[mapping_key] = {
-                        'name': player_name,
-                        'jersey_number': jersey_number,
-                        'team_side': team_side,
-                        'team_name': player['Team'],
-                        'role': player.get('Role', ''),
-                        'source': 'replacement'
-                    }
         
         # Map bench players
         for player in match_data['bench']:
-            if 'Team' in player and 'Number' in player and 'Name' in player:
-                team_side = determine_team_side(player['Team'], session)
-                jersey_number = player['Number']
-                player_name = player['Name']
+            # Skip invalid entries (empty values, headers, etc.)
+            if (not player.get('Team') or 
+                not player.get('Number') or 
+                not player.get('Name') or
+                player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
+                player.get('Team').strip() in ['', 'no.']):
+                continue
                 
-                # Create mapping key
-                mapping_key = f"{team_side}_{jersey_number}"
-                if mapping_key not in player_mappings:  # Only add if not already mapped
-                    player_mappings[mapping_key] = {
-                        'name': player_name,
-                        'jersey_number': jersey_number,
-                        'team_side': team_side,
-                        'team_name': player['Team'],
-                        'role': '',
-                        'source': 'bench'
-                    }
+            team_side = determine_team_side(player['Team'], session)
+            jersey_number = int(player['Number'])
+            player_name = player['Name'].strip()
+            
+            # Skip if player name is empty or invalid
+            if not player_name or len(player_name) < 2:
+                continue
+            
+            # Create mapping key
+            mapping_key = f"{team_side}_{jersey_number}"
+            if mapping_key not in player_mappings:  # Only add if not already mapped
+                player_mappings[mapping_key] = {
+                    'name': player_name,
+                    'jersey_number': jersey_number,
+                    'team_side': team_side,
+                    'team_name': player['Team'],
+                    'role': '',
+                    'source': 'bench'
+                }
         
         match_data['player_mappings'] = player_mappings
         
         # Extract events from match data
         events = []
         
+        # TODO: Process the 'Starting Lineups' sheet to generates the Events for goals, cards and replacements
+        # +++++++++++++++++++++++++++++++++++++Events processing code blocks++++++++++++++++++++++++++++++++++++
         # Extract goals from match summary
-        if 'Home Goals' in match_data['match_summary']:
-            home_goals = match_data['match_summary'].get('Home Goals', '')
-            if pd.notna(home_goals) and home_goals:
-                goals = parse_goals_from_text(str(home_goals), 'home')
-                events.extend(goals)
+        # if 'Home Goals' in match_data['match_summary']:
+        #     home_goals = match_data['match_summary'].get('Home Goals', '')
+        #     if pd.notna(home_goals) and home_goals:
+        #         goals = parse_goals_from_text(str(home_goals), 'home')
+        #         events.extend(goals)
         
-        if 'Away Goals' in match_data['match_summary']:
-            away_goals = match_data['match_summary'].get('Away Goals', '')
-            if pd.notna(away_goals) and away_goals:
-                goals = parse_goals_from_text(str(away_goals), 'away')
-                events.extend(goals)
+        # if 'Away Goals' in match_data['match_summary']:
+        #     away_goals = match_data['match_summary'].get('Away Goals', '')
+        #     if pd.notna(away_goals) and away_goals:
+        #         goals = parse_goals_from_text(str(away_goals), 'away')
+        #         events.extend(goals)
         
         # Extract cards from starting lineups
-        for player in match_data['starting_lineups']:
-            if 'Cards' in player and pd.notna(player['Cards']) and player['Cards']:
-                cards = parse_cards_from_text(str(player['Cards']), player, 'starting', session)
-                events.extend(cards)
+        # for player in match_data['starting_lineups']:
+        #     # Skip invalid entries
+        #     if (not player.get('Team') or 
+        #         not player.get('Number') or 
+        #         not player.get('Name') or
+        #         player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
+        #         player.get('Team').strip() in ['', 'no.']):
+        #         continue
+                
+        #     if 'Cards' in player and player['Cards'] and player['Cards'].strip():
+        #         cards = parse_cards_from_text(str(player['Cards']), player, 'starting', session)
+        #         events.extend(cards)
+        # +++++++++++++++++++++++++++++++++++++Events processing code blocks end++++++++++++++++++++++++++++++++++++
         
         match_data['events'] = events
         
@@ -2227,7 +2299,7 @@ def convert_minute_to_milliseconds(minute, half=None):
 
 
 @shared_task
-def process_excel_match_highlights_task(session_id, excel_file_path=None):
+def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko_vs_MaccabiHaifa_AllInfo.xlsx"):
     """
     Process Excel match data and create highlights for goals, cards, and other events
     
@@ -2277,91 +2349,104 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
         logger.info(f"Player name updates: {player_update_result['updated_count']}/{player_update_result['total_mappings']} players updated")
         
         # Process events and create highlights
+        import json
+        import os
+
+        # Write match_data to a JSON file with proper spacing
+        output_dir = os.path.dirname(excel_file_path)
+        output_json_path = os.path.join(output_dir, f"{session_id}_parsed_match_data.json")
+        try:
+            with open(output_json_path, "w", encoding="utf-8") as f:
+                json.dump(match_data, f, indent=2, ensure_ascii=False)
+            logger.info(f"Parsed match data written to {output_json_path}")
+        except Exception as e:
+            logger.error(f"Failed to write match_data to JSON: {e}")
+        
         events_processed = 0
         highlights_created = 0
         errors = []
         
-        with transaction.atomic():
-            for event in match_data.get('events', []):
-                try:
-                    # Map player to TracePlayer
-                    trace_player = map_player_to_trace_player(
-                        event['player_name'],
-                        event.get('jersey_number', 0),
-                        event['team_side'],
-                        session
-                    )
+        # with transaction.atomic():
+        #     for event in match_data.get('events', []):
+        #         try:
+        #             # Map player to TracePlayer
+        #             trace_player = map_player_to_trace_player(
+        #                 event['player_name'],
+        #                 event.get('jersey_number', 0),
+        #                 event['team_side'],
+        #                 session
+        #             )
                     
-                    if not trace_player:
-                        logger.warning(f"Skipping event for unmapped player: {event['player_name']}")
-                        continue
+        #             if not trace_player:
+        #                 logger.warning(f"Skipping event for unmapped player: {event['player_name']}")
+        #                 continue
                     
-                    # Convert match time to milliseconds
-                    start_offset = convert_match_time_to_milliseconds(
-                        event['match_time'],
-                        event.get('half')
-                    )
+        #             # Convert match time to milliseconds
+        #             start_offset = convert_match_time_to_milliseconds(
+        #                 event['match_time'],
+        #                 event.get('half')
+        #             )
                     
-                    # Determine highlight duration based on event type
-                    duration = 10000  # 10 seconds default
-                    if event['type'] == 'goal':
-                        duration = 15000  # 15 seconds for goals
-                    elif event['type'] in ['red_card', 'yellow_card']:
-                        duration = 8000   # 8 seconds for cards
+        #             # Determine highlight duration based on event type
+        #             duration = 10000  # 10 seconds default
+        #             if event['type'] == 'goal':
+        #                 duration = 15000  # 15 seconds for goals
+        #             elif event['type'] in ['red_card', 'yellow_card']:
+        #                 duration = 8000   # 8 seconds for cards
                     
-                    # Create unique highlight ID
-                    highlight_id = f"excel-{event['type']}-{session_id}-{event['match_time'].replace(':', '')}-{trace_player.object_id}"
+        #             # Create unique highlight ID
+        #             highlight_id = f"excel-{event['type']}-{session_id}-{event['match_time'].replace(':', '')}-{trace_player.object_id}"
                     
-                    # Check if highlight already exists
-                    if TraceHighlight.objects.filter(highlight_id=highlight_id).exists():
-                        logger.info(f"Highlight {highlight_id} already exists, skipping")
-                        continue
+        #             # Check if highlight already exists
+        #             if TraceHighlight.objects.filter(highlight_id=highlight_id).exists():
+        #                 logger.info(f"Highlight {highlight_id} already exists, skipping")
+        #                 continue
                     
-                    # Create TraceHighlight
-                    highlight = TraceHighlight.objects.create(
-                        highlight_id=highlight_id,
-                        video_id=0,  # Will be updated with actual video ID
-                        start_offset=start_offset,
-                        duration=duration,
-                        tags=[event['team_side'], event['type'], f"{event['match_time']}"],
-                        video_stream=session.video_url,
-                        event_type=event['type'],
-                        source='excel_import',
-                        match_time=event['match_time'],
-                        half=1 if event['minute'] <= 45 else 2,
-                        event_metadata=event['event_metadata'],
-                        session=session,
-                        player=trace_player
-                    )
+        #             # Create TraceHighlight
+        #             highlight = TraceHighlight.objects.create(
+        #                 highlight_id=highlight_id,
+        #                 video_id=0,  # Will be updated with actual video ID
+        #                 start_offset=start_offset,
+        #                 duration=duration,
+        #                 tags=[event['team_side'], event['type'], f"{event['match_time']}"],
+        #                 video_stream=session.video_url,
+        #                 event_type=event['type'],
+        #                 source='excel_import',
+        #                 match_time=event['match_time'],
+        #                 half=1 if event['minute'] <= 45 else 2,
+        #                 event_metadata=event['event_metadata'],
+        #                 session=session,
+        #                 player=trace_player
+        #             )
                     
-                    # Calculate performance impact
-                    highlight.performance_impact = highlight.calculate_performance_impact()
-                    highlight.team_impact = abs(highlight.performance_impact) * 0.5  # Team impact is half of player impact
-                    highlight.save()
+        #             # Calculate performance impact
+        #             highlight.performance_impact = highlight.calculate_performance_impact()
+        #             highlight.team_impact = abs(highlight.performance_impact) * 0.5  # Team impact is half of player impact
+        #             highlight.save()
                     
-                    # Create highlight-object relationship if trace object exists
-                    trace_object = TraceObject.objects.filter(
-                        session=session,
-                        player=trace_player
-                    ).first()
+        #             # Create highlight-object relationship if trace object exists
+        #             trace_object = TraceObject.objects.filter(
+        #                 session=session,
+        #                 player=trace_player
+        #             ).first()
                     
-                    if trace_object:
-                        TraceHighlightObject.objects.create(
-                            highlight=highlight,
-                            trace_object=trace_object,
-                            player=trace_player
-                        )
+        #             if trace_object:
+        #                 TraceHighlightObject.objects.create(
+        #                     highlight=highlight,
+        #                     trace_object=trace_object,
+        #                     player=trace_player
+        #                 )
                     
-                    highlights_created += 1
-                    events_processed += 1
+        #             highlights_created += 1
+        #             events_processed += 1
                     
-                    logger.info(f"Created highlight {highlight_id} for {event['type']} by {event['player_name']} at {event['match_time']}")
+        #             logger.info(f"Created highlight {highlight_id} for {event['type']} by {event['player_name']} at {event['match_time']}")
                     
-                except Exception as e:
-                    error_msg = f"Error processing event {event}: {str(e)}"
-                    logger.error(error_msg)
-                    errors.append(error_msg)
-                    continue
+        #         except Exception as e:
+        #             error_msg = f"Error processing event {event}: {str(e)}"
+        #             logger.error(error_msg)
+        #             errors.append(error_msg)
+        #             continue
         
         # Update session with Excel processing status
         session.result['excel_highlights_processed'] = True
@@ -2386,9 +2471,9 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
             }
         }
         
-        logger.info(f"Excel highlights processing completed for session {session_id}. "
-                   f"Events processed: {events_processed}, Highlights created: {highlights_created}, "
-                   f"Players updated: {player_update_result['updated_count']}")
+        # logger.info(f"Excel highlights processing completed for session {session_id}. "
+        #            f"Events processed: {events_processed}, Highlights created: {highlights_created}, "
+        #            f"Players updated: {player_update_result['updated_count']}")
         
         return result
         
