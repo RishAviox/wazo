@@ -1,9 +1,22 @@
 from rest_framework import serializers
-from tracevision.models import TraceSession
+from tracevision.models import TraceSession, TraceClipReel, TracePlayer
 from tracevision.utils import get_hex_from_color_name
+
+class TraceClipReelSerializer(serializers.ModelSerializer):
+    age_group = serializers.CharField(source="session.age_group", read_only=True)
+    match_date = serializers.DateField(source="session.match_date", read_only=True)
+    class Meta:
+        model = TraceClipReel
+        fields = '__all__'
+        extra_fields = ['age_group', 'match_date']
 
 
 class TraceVisionProcessesSerializer(serializers.ModelSerializer):
+    home_team_name = serializers.CharField(source='home_team.name', read_only=True)
+    away_team_name = serializers.CharField(source='away_team.name', read_only=True)
+    home_team_jersey_color = serializers.CharField(source='home_team.jersey_color', read_only=True)
+    away_team_jersey_color = serializers.CharField(source='away_team.jersey_color', read_only=True)
+    
     class Meta:
         model = TraceSession
         fields = '__all__'
@@ -14,16 +27,24 @@ class TraceSessionListSerializer(serializers.ModelSerializer):
     """
     Serializer for TraceSession list view with essential information
     """
+    home_team_name = serializers.CharField(source='home_team.name', read_only=True)
+    away_team_name = serializers.CharField(source='away_team.name', read_only=True)
+    home_team_jersey_color = serializers.CharField(source='home_team.jersey_color', read_only=True)
+    away_team_jersey_color = serializers.CharField(source='away_team.jersey_color', read_only=True)
+    pitch_dimensions = serializers.CharField(source='get_pitch_dimensions', read_only=True)
+    
     class Meta:
         model = TraceSession
         fields = [
             'id', 'session_id', 'status', 'user', 'match_date', 'home_team', 'away_team',
-            'home_score', 'away_score', 'home_team_jersey_color', 'away_team_jersey_color',
+            'home_team_name', 'away_team_name', 'home_score', 'away_score', 
+            'home_team_jersey_color', 'away_team_jersey_color', 'age_group', 'pitch_size', 'pitch_dimensions',
             'final_score', 'start_time', 'video_url', 'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'session_id', 'status', 'user', 'match_date', 'home_team', 'away_team',
-            'home_score', 'away_score', 'home_team_jersey_color', 'away_team_jersey_color',
+            'home_team_name', 'away_team_name', 'home_score', 'away_score', 
+            'home_team_jersey_color', 'away_team_jersey_color', 'age_group', 'pitch_size', 'pitch_dimensions',
             'final_score', 'start_time', 'video_url', 'created_at', 'updated_at'
         ]
 
@@ -75,7 +96,59 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         required=False,
         help_text="Start time of the video, if known (optional)"
     )
+    match_start_time = serializers.CharField(
+        required=False,
+        help_text="Match start time in format 'HH:MM:SS' (optional)"
+    )
+    first_half_end_time = serializers.CharField(
+        required=False,
+        help_text="First half end time in format 'HH:MM:SS' (optional)"
+    )
+    second_half_start_time = serializers.CharField(
+        required=False,
+        help_text="Second half start time in format 'HH:MM:SS' (optional)"
+    )
+    match_end_time = serializers.CharField(
+        required=False,
+        help_text="Match end time in format 'HH:MM:SS' (optional)"
+    )
+    basic_game_stats = serializers.FileField(
+        required=False,
+        help_text="Basic game stats file (optional)"
+    )
+   
 
+    # Age group and pitch size fields
+    age_group = serializers.ChoiceField(
+        choices=[
+            ('U11_U12', 'U11-U12 (9v9)'),
+            ('U13_U14', 'U13-U14 (11v11)'),
+            ('U15_U16', 'U15-U16 (11v11)'),
+            ('U17_U18', 'U17-U18 (11v11)'),
+            ('SENIOR', 'Senior (18+)'),
+        ],
+        required=False,
+        default='SENIOR',
+        allow_blank=True,
+        allow_null=True,
+        help_text="Age group of the players (defaults to SENIOR if not provided)"
+    )
+    
+    # Optional custom pitch size (if user wants to override default)
+    pitch_length = serializers.FloatField(
+        required=False,
+        min_value=50,
+        max_value=130,
+        help_text="Custom pitch length in meters (optional, will use age group default if not provided)"
+    )
+    pitch_width = serializers.FloatField(
+        required=False,
+        min_value=30,
+        max_value=100,
+        help_text="Custom pitch width in meters (optional, will use age group default if not provided)"
+    )
+    
+    
     def validate_video_file(self, value):
         """Validate video file field."""
         if value is None:
@@ -176,8 +249,8 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             )
         
         value = value.strip()
-        
         # Check if it contains exactly one dash
+        
         if value.count('-') != 1:
             raise serializers.ValidationError(
                 "Final score must be in format 'home_score-away_score' (e.g., '2-1', '0-0')"
@@ -202,3 +275,8 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             )
         
         return value
+
+class CoachViewSpecificTeamPlayersSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TracePlayer
+        fields = '__all__'

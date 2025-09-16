@@ -47,6 +47,23 @@ jobs:
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
           --image $IMAGE_NAME
 
+    - name: Update Celery Worker
+      run: |
+        IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/${{ secrets.WAJO_BACKEND_CONTAINER_STAGING_NAME }}:${{ github.sha }}
+        az containerapp update \
+          --name wajo-celery-worker-staging \
+          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+          --image $IMAGE_NAME \
+
+
+    - name: Update Celery Beat
+      run: |
+        IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/${{ secrets.WAJO_BACKEND_CONTAINER_STAGING_NAME }}:${{ github.sha }}
+        az containerapp update \
+          --name wajo-celery-beat-staging \
+          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+          --image $IMAGE_NAME \
+        
     - name: Cleanup old Docker images
       run: |
         # Keep only the last 3 images and delete older ones

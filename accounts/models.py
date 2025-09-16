@@ -29,6 +29,17 @@ class WajoUser(models.Model):
     wake_up_time = models.TimeField(blank=True, null=True)
     sleep_time = models.TimeField(blank=True, null=True)
     picture = models.ImageField(blank=True, null=True, upload_to=profile_picture_path)
+    jersey_number = models.IntegerField(blank=True, null=True)
+    
+    # Team relationship for players
+    team = models.ForeignKey(
+        'teams.Team', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='players',
+        help_text="Team this user belongs to (for players)"
+    )
 
     # Self-referential many-to-many relationship
     coach = models.ManyToManyField('self', related_name='players',

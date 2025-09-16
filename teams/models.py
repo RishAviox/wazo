@@ -1,12 +1,14 @@
+import uuid
 from django.db import models
 from accounts.models import WajoUser
 
 from core.soft_delete import WajoModel
 
 class Team(WajoModel):
-    id = models.CharField(max_length=10, primary_key=True, unique=True)  # User-defined unique ID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, blank=True, null=True)
     logo = models.ImageField(upload_to="team_logos/", blank=True, null=True)
+    jersey_color = models.CharField(max_length=7, blank=True, null=True)
     coach = models.ManyToManyField(
         WajoUser,
         related_name='teams_coached',

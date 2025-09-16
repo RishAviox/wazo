@@ -45,7 +45,10 @@ class WajoUserSerializer(serializers.ModelSerializer):
     
     def get_players(self, obj):
         # Return full player details only if the user is a Coach
-        if obj.role.lower() != 'coach':
+        try:
+            if obj.role.lower() != 'coach':
+                return None
+        except:
             return None
         return [
             {

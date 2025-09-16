@@ -1,0 +1,34 @@
+version: '3.9'
+
+services:
+
+  wajo-redis:
+    ports: []
+
+  django:
+    environment:
+      - django-settings-module=wajo_backend.settings
+    entrypoint: ""
+    # command: python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - "8003:8000"
+    volumes:
+      - .:/app
+
+  wajo-celery-worker:
+    environment:
+      - django-settings-module=wajo_backend.settings
+    entrypoint: ""
+    command: celery -A wajo_backend worker --loglevel=INFO
+    volumes:
+      - .:/app
+
+  wajo-celery-beat:
+    # environment:
+    #   - django-settings-module=wajo_backend.settings
+    # entrypoint: ""
+    # command: celery -A wajo_backend beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    # volumes:
+    #   - .:/app
+    profiles: ["dont-run"]
