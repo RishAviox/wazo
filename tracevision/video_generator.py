@@ -165,38 +165,38 @@ def download_video_from_storage(video_blob_url: str, temp_dir: Optional[str] = N
     temp_path = os.path.join(temp_dir, temp_filename)
 
     try:
-        logger.info(f"Downloading video from storage: {video_blob_url}")
+        # logger.info(f"Downloading video from storage: {video_blob_url}")
 
-        # Handle different storage types based on DEBUG setting
-        from django.conf import settings
+        # # Handle different storage types based on DEBUG setting
+        # from django.conf import settings
 
-        if video_blob_url.startswith("https://"):
-            # Full Azure Blob URL - extract the relative path
-            relative_path = extract_relative_path_from_azure_url(video_blob_url)
-            response = default_storage.open(relative_path)
+        # if video_blob_url.startswith("https://"):
+        #     # Full Azure Blob URL - extract the relative path
+        #     relative_path = extract_relative_path_from_azure_url(video_blob_url)
+        #     response = default_storage.open(relative_path)
 
-        elif settings.DEBUG and not video_blob_url.startswith("https"):
-            # Local development - handle file path properly
-            if video_blob_url.startswith('/media/'):
-                # Remove leading /media/ for local storage
-                file_path = video_blob_url[7:]  # Remove '/media/'
-            elif video_blob_url.startswith('media/'):
-                # Already has media/ prefix
-                file_path = video_blob_url
-            else:
-                # Assume it's already a relative path
-                file_path = video_blob_url
+        # elif settings.DEBUG and not video_blob_url.startswith("https"):
+        #     # Local development - handle file path properly
+        #     if video_blob_url.startswith('/media/'):
+        #         # Remove leading /media/ for local storage
+        #         file_path = video_blob_url[7:]  # Remove '/media/'
+        #     elif video_blob_url.startswith('media/'):
+        #         # Already has media/ prefix
+        #         file_path = video_blob_url
+        #     else:
+        #         # Assume it's already a relative path
+        #         file_path = video_blob_url
 
-            logger.info(f"Using local file path: {file_path}")
-            response = default_storage.open(file_path)
-        else:
-            # Production - Azure Blob Storage with relative path
-            response = default_storage.open(video_blob_url)
+        #     logger.info(f"Using local file path: {file_path}")
+        #     response = default_storage.open(file_path)
+        # else:
+        #     # Production - Azure Blob Storage with relative path
+        #     response = default_storage.open(video_blob_url)
 
-        with open(temp_path, 'wb') as f:
-            f.write(response.read())
-        response.close()
-        # temp_path = "./media/videos/4299999/4299999_video.mp4"
+        # with open(temp_path, 'wb') as f:
+        #     f.write(response.read())
+        # response.close()
+        temp_path = "./media/videos/4299999/4299999_video.mp4"
         if os.path.exists(temp_path):
             logger.info(f"{'=='*50}\n\n{temp_path}\n\n{'=='*50}")
         else:

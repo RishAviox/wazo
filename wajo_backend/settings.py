@@ -232,9 +232,9 @@ AZURE_CONTAINER_NAME = "media"
 # STATICFILES_STORAGE = 'core.azure_storages.AzureStaticStorage'
 DEFAULT_FILE_STORAGE = 'core.azure_storages.AzureMediaStorage'
 
-STATIC_URL = "static/"
+# STATIC_URL = "static/"
 # Set URLs to serve static and media files
-# STATIC_URL = f"https://{AZURE_CUSTOM_DOMAIN}/static/"
+STATIC_URL = f"https://{AZURE_CUSTOM_DOMAIN}/static/"
 MEDIA_URL = f"https://{AZURE_CUSTOM_DOMAIN}/media/"
 
 TRACEVISION_CUSTOMER_ID = os.environ.get("tracevision-customer-id")

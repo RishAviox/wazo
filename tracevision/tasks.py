@@ -1128,14 +1128,14 @@ def compute_aggregates_task(session_id):
         logger.info(f"Computed aggregates for session {session_id}")
 
         # Trigger overlay highlights generation for clip reels
-        try:
-            from tracevision.tasks import generate_overlay_highlights_task
-            generate_overlay_highlights_task.delay(session_id)
-            logger.info(
-                f"Queued overlay highlights generation for session {session_id}")
-        except Exception as e:
-            logger.exception(
-                f"Failed to enqueue overlay highlights generation for session {session_id}: {e}")
+        # try:
+        #     from tracevision.tasks import generate_overlay_highlights_task
+        #     generate_overlay_highlights_task.delay(session_id)
+        #     logger.info(
+        #         f"Queued overlay highlights generation for session {session_id}")
+        # except Exception as e:
+        #     logger.exception(
+        #         f"Failed to enqueue overlay highlights generation for session {session_id}: {e}")
         
         return {"success": True, "details": {k: True for k in result.keys()}}
     except Exception as e:

@@ -195,31 +195,32 @@ class TraceVisionStoragePaths:
 def convert_game_time_to_video_milliseconds(session, game_minute, game_second=0):
     """
     Convert game time (minute:second) to video milliseconds using session timeline data.
-    
+
     This function handles the complex mapping between game time and video time by considering:
     - Video start delay (match_start_time)
     - First half duration and end time
     - Half time break duration
     - Second half start time
-    
+
     Args:
         session (TraceSession): Session with timeline data
         game_minute (int): Game minute (0-90+)
         game_second (int): Game second (0-59)
-    
+
     Returns:
         int: Milliseconds from video start, or 0 if conversion fails
     """
     try:
         if not session or game_minute is None:
             return 0
-            
+
         # Validate that we have the required timeline data
-        if not all([session.match_start_time, session.first_half_end_time, 
+        if not all([session.match_start_time, session.first_half_end_time,
                    session.second_half_start_time, session.match_end_time]):
-            logger.warning(f"Session {session.session_id} missing timeline data. Cannot convert game time.")
+            logger.warning(
+                f"Session {session.session_id} missing timeline data. Cannot convert game time.")
             return 0
-            
+
         # Convert timeline strings to seconds
         def time_to_seconds(time_str):
             """Convert HH:MM:SS or MM:SS to total seconds"""
@@ -236,93 +237,101 @@ def convert_game_time_to_video_milliseconds(session, game_minute, game_second=0)
             except (ValueError, IndexError):
                 logger.warning(f"Invalid time format: {time_str}")
                 return 0
-        
+
         # Get video timeline in seconds
         video_match_start = time_to_seconds(session.match_start_time)
         video_first_half_end = time_to_seconds(session.first_half_end_time)
-        video_second_half_start = time_to_seconds(session.second_half_start_time)
+        video_second_half_start = time_to_seconds(
+            session.second_half_start_time)
         video_match_end = time_to_seconds(session.match_end_time)
-        
-        # Calculate game time in seconds
-        game_time_seconds = game_minute * 60 + game_second
-        
-        # Calculate actual game half durations from video timeline
+
         # First half game duration = time from match start to first half end
         first_half_game_duration = video_first_half_end - video_match_start
-        
+
         # Half time break duration = time from first half end to second half start
         half_time_duration = video_second_half_start - video_first_half_end
-        
+
         # Second half game duration = time from second half start to match end
         second_half_game_duration = video_match_end - video_second_half_start
-        
-        # Calculate the actual game minute when first half ends (based on video timeline)
-        first_half_end_game_minute = first_half_game_duration / 60.0  # Convert to minutes
-        second_half_start_game_minute = first_half_end_game_minute + (half_time_duration / 60.0)
-        second_half_end_game_minute = second_half_start_game_minute + (second_half_game_duration / 60.0)
-        
+
+        # Use standard football timing: first half 0-45 min, second half 45-90+ min
+        first_half_end_game_minute = 45.0  # Standard first half ends at 45 minutes
+        second_half_start_game_minute = 45.0  # Second half starts at 45 minutes
+        second_half_end_game_minute = 90.0  # Standard second half ends at 90 minutes
+
         logger.info(f"Session {session.session_id} timeline analysis:")
-        logger.info(f"  First half: 0-{first_half_end_game_minute:.1f} min (video: {session.match_start_time} to {session.first_half_end_time})")
-        logger.info(f"  Half time: {first_half_end_game_minute:.1f}-{second_half_start_game_minute:.1f} min (video: {session.first_half_end_time} to {session.second_half_start_time})")
-        logger.info(f"  Second half: {second_half_start_game_minute:.1f}-{second_half_end_game_minute:.1f} min (video: {session.second_half_start_time} to {session.match_end_time})")
-        
-        # Determine which half the event occurs in based on actual timeline
-        if game_time_seconds <= first_half_end_game_minute * 60:  # First half
-            # Map game time to video time in first half
-            game_first_half_progress = game_time_seconds / (first_half_end_game_minute * 60)  # 0.0 to 1.0
-            video_time_seconds = video_match_start + (first_half_game_duration * game_first_half_progress)
-            
-        elif game_time_seconds <= second_half_start_game_minute * 60:  # Half time
-            # During half time, map to the half time period
-            half_time_progress = (game_time_seconds - (first_half_end_game_minute * 60)) / (half_time_duration)
-            half_time_progress = max(0, min(1, half_time_progress))  # Clamp between 0 and 1
-            video_time_seconds = video_first_half_end + (half_time_duration * half_time_progress)
-            
-        elif game_time_seconds <= second_half_end_game_minute * 60:  # Second half
-            # Map game time to video time in second half
-            game_second_half_progress = (game_time_seconds - (second_half_start_game_minute * 60)) / (second_half_game_duration)
-            game_second_half_progress = max(0, min(1, game_second_half_progress))  # Clamp between 0 and 1
-            video_time_seconds = video_second_half_start + (second_half_game_duration * game_second_half_progress)
-            
-        else:  # Extra time (beyond calculated match end)
-            # For extra time, extend proportionally beyond match end
-            extra_time_seconds = game_time_seconds - (second_half_end_game_minute * 60)
-            # Map extra time to additional video time (assume 1:1 ratio for extra time)
-            video_time_seconds = video_match_end + extra_time_seconds
-        
+        logger.info(
+            f"  First half: 0-{first_half_end_game_minute:.1f} min (video: {session.match_start_time} to {session.first_half_end_time})")
+        logger.info(
+            f"  Half time: {first_half_end_game_minute:.1f}-{second_half_start_game_minute:.1f} min (video: {session.first_half_end_time} to {session.second_half_start_time})")
+        logger.info(
+            f"  Second half: {second_half_start_game_minute:.1f}-{second_half_end_game_minute:.1f} min (video: {session.second_half_start_time} to {session.match_end_time})")
+
+        if game_minute <= 45:  # First half (0-45 min game time)
+            # Map game time proportionally within first half video duration
+            progress = game_minute / 45.0  # 0.0 to 1.0
+            video_time_seconds = video_match_start + \
+                (first_half_game_duration * progress)
+            logger.info(
+                f"  First half: {game_minute}/45 = {progress:.3f} progress")
+
+        else:
+            minutes_into_second_half = game_minute - 45
+            seconds_into_second_half = minutes_into_second_half * 60 + game_second
+
+            second_half_video_duration = video_match_end - video_second_half_start
+            second_half_game_duration = 45 * 60  # Standard 45 minutes for second half
+
+            # Calculate the time ratio (how much video time per game time)
+            time_ratio = second_half_video_duration / second_half_game_duration
+
+            # Map game time to video time using the calculated ratio
+            game_time_into_second_half = (game_minute - 45) * 60 + game_second
+            video_time_seconds = video_second_half_start + \
+                (game_time_into_second_half * time_ratio)
+
+            # For extra time beyond normal match duration, add additional time
+            if game_minute > 90:
+                extra_minutes = game_minute - 90
+                video_time_seconds += extra_minutes * 60
+                logger.info(f"    Extra time: +{extra_minutes} min")
+
         # Convert to milliseconds
         video_time_milliseconds = int(video_time_seconds * 1000)
-        
-        logger.info(f"Converted game time {game_minute}:{game_second:02d} to video time {video_time_seconds:.2f}s ({video_time_milliseconds}ms)")
-        
+
+        logger.info(
+            f"Converted game time {game_minute}:{game_second:02d} to video time {video_time_seconds:.2f}s ({video_time_milliseconds}ms)")
+
         return video_time_milliseconds
-        
+
     except Exception as e:
-        logger.exception(f"Error converting game time {game_minute}:{game_second} to video milliseconds: {e}")
+        logger.exception(
+            f"Error converting game time {game_minute}:{game_second} to video milliseconds: {e}")
         return 0
 
 
 def determine_game_half_from_minute(session, game_minute):
     """
     Determine which half a game minute falls into based on session timeline data.
-    
+
     Args:
         session (TraceSession): Session with timeline data
         game_minute (int): Game minute (0-90+)
-    
+
     Returns:
         int: Half number (1 or 2), or None if cannot determine
     """
     try:
         if not session or game_minute is None:
             return None
-            
+
         # Validate that we have the required timeline data
-        if not all([session.match_start_time, session.first_half_end_time, 
+        if not all([session.match_start_time, session.first_half_end_time,
                    session.second_half_start_time, session.match_end_time]):
-            logger.warning(f"Session {session.session_id} missing timeline data. Cannot determine half.")
+            logger.warning(
+                f"Session {session.session_id} missing timeline data. Cannot determine half.")
             return None
-            
+
         # Convert timeline strings to seconds
         def time_to_seconds(time_str):
             """Convert HH:MM:SS or MM:SS to total seconds"""
@@ -339,23 +348,26 @@ def determine_game_half_from_minute(session, game_minute):
             except (ValueError, IndexError):
                 logger.warning(f"Invalid time format: {time_str}")
                 return 0
-        
+
         # Get video timeline in seconds
         video_match_start = time_to_seconds(session.match_start_time)
         video_first_half_end = time_to_seconds(session.first_half_end_time)
-        video_second_half_start = time_to_seconds(session.second_half_start_time)
+        video_second_half_start = time_to_seconds(
+            session.second_half_start_time)
         video_match_end = time_to_seconds(session.match_end_time)
-        
+
         # Calculate actual game half durations from video timeline
         first_half_game_duration = video_first_half_end - video_match_start
         half_time_duration = video_second_half_start - video_first_half_end
         second_half_game_duration = video_match_end - video_second_half_start
-        
+
         # Calculate the actual game minute when first half ends (based on video timeline)
         first_half_end_game_minute = first_half_game_duration / 60.0  # Convert to minutes
-        second_half_start_game_minute = first_half_end_game_minute + (half_time_duration / 60.0)
-        second_half_end_game_minute = second_half_start_game_minute + (second_half_game_duration / 60.0)
-        
+        second_half_start_game_minute = first_half_end_game_minute + \
+            (half_time_duration / 60.0)
+        second_half_end_game_minute = second_half_start_game_minute + \
+            (second_half_game_duration / 60.0)
+
         # Determine which half the event occurs in based on actual timeline
         if game_minute <= first_half_end_game_minute:
             return 1  # First half
@@ -363,26 +375,27 @@ def determine_game_half_from_minute(session, game_minute):
             return 2  # Second half
         else:
             return 2  # Extra time is considered part of second half
-        
+
     except Exception as e:
-        logger.exception(f"Error determining half for game minute {game_minute}: {e}")
+        logger.exception(
+            f"Error determining half for game minute {game_minute}: {e}")
         return None
 
 
 def extract_timeline_data(session):
     """
     Extract timeline data from session for time conversion functions.
-    
+
     Args:
         session (TraceSession): Session with timeline data
-    
+
     Returns:
         dict: Timeline data with video times in seconds
     """
     try:
         if not session:
             return None
-            
+
         # Convert timeline strings to seconds
         def time_to_seconds(time_str):
             """Convert HH:MM:SS or MM:SS to total seconds"""
@@ -399,23 +412,26 @@ def extract_timeline_data(session):
             except (ValueError, IndexError):
                 logger.warning(f"Invalid time format: {time_str}")
                 return 0
-        
+
         # Get video timeline in seconds
         video_match_start = time_to_seconds(session.match_start_time)
         video_first_half_end = time_to_seconds(session.first_half_end_time)
-        video_second_half_start = time_to_seconds(session.second_half_start_time)
+        video_second_half_start = time_to_seconds(
+            session.second_half_start_time)
         video_match_end = time_to_seconds(session.match_end_time)
-        
+
         # Calculate actual game half durations from video timeline
         first_half_game_duration = video_first_half_end - video_match_start
         half_time_duration = video_second_half_start - video_first_half_end
         second_half_game_duration = video_match_end - video_second_half_start
-        
+
         # Calculate the actual game minute when first half ends (based on video timeline)
         first_half_end_game_minute = first_half_game_duration / 60.0  # Convert to minutes
-        second_half_start_game_minute = first_half_end_game_minute + (half_time_duration / 60.0)
-        second_half_end_game_minute = second_half_start_game_minute + (second_half_game_duration / 60.0)
-        
+        second_half_start_game_minute = first_half_end_game_minute + \
+            (half_time_duration / 60.0)
+        second_half_end_game_minute = second_half_start_game_minute + \
+            (second_half_game_duration / 60.0)
+
         return {
             'video_match_start': video_match_start,
             'video_first_half_end': video_first_half_end,
@@ -428,7 +444,8 @@ def extract_timeline_data(session):
             'second_half_start_game_minute': second_half_start_game_minute,
             'second_half_end_game_minute': second_half_end_game_minute
         }
-        
+
     except Exception as e:
-        logger.exception(f"Error extracting timeline data from session {session.session_id}: {e}")
+        logger.exception(
+            f"Error extracting timeline data from session {session.session_id}: {e}")
         return None
