@@ -1074,12 +1074,6 @@ class TraceVisionAggregationService:
                 # Add all involved players to the many-to-many relationship
                 if involved_players:
                     clip_reel.involved_players.set(involved_players)
-
-                # if created:
-                #     self.logger.info(f"Created clip reel for highlight {h.highlight_id} with video type {video_type}")
-                # else:
-                #     self.logger.info(f"Updated clip reel for highlight {h.highlight_id} with video type {video_type}")
-
         return True
 
     def _get_video_variant_name(self, video_type, primary_player):
@@ -1157,3 +1151,20 @@ class TraceVisionAggregationService:
         if h:
             return f"{h}:{m:02d}:{s:02d}.{int(ms % 1000):03d}"
         return f"{m}:{s:02d}.{int(ms % 1000):03d}"
+
+    def convert_game_time_to_video_milliseconds(self, session, game_minute, game_second=0):
+        """
+        Convert game time (minute:second) to video milliseconds using session timeline data.
+        
+        This method delegates to the centralized utility function in utils.py.
+        
+        Args:
+            session (TraceSession): Session with timeline data
+            game_minute (int): Game minute (0-90+)
+            game_second (int): Game second (0-59)
+        
+        Returns:
+            int: Milliseconds from video start, or 0 if conversion fails
+        """
+        from .utils import convert_game_time_to_video_milliseconds as utils_convert
+        return utils_convert(session, game_minute, game_second)

@@ -35,6 +35,14 @@ class TraceSessionAdmin(admin.ModelAdmin):
         ('Video & Data', {
             'fields': ('video_url', 'blob_video_url', 'start_time', 'status')
         }),
+        ('Match Timing', {
+            'fields': ('match_start_time', 'first_half_end_time', 'second_half_start_time', 'match_end_time'),
+            'classes': ('collapse',)
+        }),
+        ('Game Statistics', {
+            'fields': ('basic_game_stats',),
+            'classes': ('collapse',)
+        }),
         ('Results & Storage', {
             'fields': ('result', 'result_blob_url')
         }),
@@ -79,16 +87,23 @@ class TracePlayerAdmin(admin.ModelAdmin):
 class TraceHighlightAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'highlight_id', 'video_id', 'session', 'player',
-        'start_offset', 'duration', 'created_at'
+        'event_type', 'match_time', 'start_offset', 'duration', 'created_at'
     ]
     search_fields = ['highlight_id', 'session__session_id', 'player__name']
-    list_filter = ['session__match_date', 'created_at']
+    list_filter = ['event_type', 'source', 'session__match_date', 'created_at']
     readonly_fields = ['id', 'created_at', 'updated_at']
     date_hierarchy = 'created_at'
 
     fieldsets = (
         ('Highlight Information', {
             'fields': ('id', 'highlight_id', 'video_id', 'start_offset', 'duration')
+        }),
+        ('Event Details', {
+            'fields': ('event_type', 'source', 'match_time', 'half', 'event_metadata')
+        }),
+        ('Performance Impact', {
+            'fields': ('performance_impact', 'team_impact'),
+            'classes': ('collapse',)
         }),
         ('Relationships', {
             'fields': ('session', 'player')
@@ -105,12 +120,12 @@ class TraceHighlightAdmin(admin.ModelAdmin):
 
 class TraceObjectAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'object_id', 'type', 'side', 'session', 'player',
+        'id', 'object_id', 'type', 'side', 'role', 'session', 'player',
         'tracking_processed', 'created_at'
     ]
-    search_fields = ['object_id', 'type', 'side',
+    search_fields = ['object_id', 'type', 'side', 'role',
                      'session__session_id', 'player__name']
-    list_filter = ['type', 'side', 'tracking_processed',
+    list_filter = ['type', 'side', 'role', 'tracking_processed',
                    'session__match_date', 'created_at']
     readonly_fields = ['id', 'created_at', 'updated_at']
     date_hierarchy = 'created_at'
@@ -228,22 +243,65 @@ class TraceVisionSessionStatsAdmin(admin.ModelAdmin):
 class TraceCoachReportTeamAdmin(admin.ModelAdmin):
     list_display = ['session', 'side', 'goals', 'shots',
                     'passes', 'possession_time_s', 'created_at']
-    list_filter = ['side']
+    list_filter = ['side', 'created_at']
     search_fields = ['session__session_id']
+    readonly_fields = ['id', 'created_at']
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('Team Information', {
+            'fields': ('id', 'session', 'side')
+        }),
+        ('Match Statistics', {
+            'fields': ('goals', 'shots', 'passes', 'possession_time_s')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        })
+    )
 
 
 class TraceTouchLeaderboardAdmin(admin.ModelAdmin):
     list_display = ['session', 'player',
                     'object_side', 'touches', 'created_at']
-    list_filter = ['object_side']
+    list_filter = ['object_side', 'created_at']
     search_fields = ['session__session_id', 'player__name']
+    readonly_fields = ['id', 'created_at']
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('Touch Information', {
+            'fields': ('id', 'session', 'player', 'object_side', 'touches')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        })
+    )
 
 
 class TracePossessionSegmentAdmin(admin.ModelAdmin):
     list_display = ['session', 'side', 'start_ms',
                     'end_ms', 'count', 'duration_s', 'created_at']
-    list_filter = ['side']
+    list_filter = ['side', 'created_at']
     search_fields = ['session__session_id']
+    readonly_fields = ['id', 'created_at']
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('Possession Information', {
+            'fields': ('id', 'session', 'side', 'start_ms', 'end_ms', 'count', 'duration_s')
+        }),
+        ('Clock Times', {
+            'fields': ('start_clock', 'end_clock'),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        })
+    )
 
 
 class TraceClipReelAdmin(admin.ModelAdmin):
@@ -300,18 +358,22 @@ class TraceClipReelAdmin(admin.ModelAdmin):
 
 class TracePassAdmin(admin.ModelAdmin):
     list_display = ['session', 'side', 'from_player',
-                    'to_player', 'start_ms', 'duration_ms']
-    list_filter = ['side']
+                    'to_player', 'start_ms', 'duration_ms', 'created_at']
+    list_filter = ['side', 'created_at']
     search_fields = ['session__session_id',
                      'from_player__name', 'to_player__name']
+    readonly_fields = ['id', 'created_at']
+    date_hierarchy = 'created_at'
 
 
 class TracePassingNetworkAdmin(admin.ModelAdmin):
     list_display = ['session', 'side',
-                    'from_player', 'to_player', 'passes_count']
-    list_filter = ['side']
+                    'from_player', 'to_player', 'passes_count', 'created_at']
+    list_filter = ['side', 'created_at']
     search_fields = ['session__session_id',
                      'from_player__name', 'to_player__name']
+    readonly_fields = ['id', 'created_at']
+    date_hierarchy = 'created_at'
 
 
 # Register all models with custom admin_site

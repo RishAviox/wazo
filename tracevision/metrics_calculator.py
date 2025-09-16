@@ -73,10 +73,26 @@ def _download_tracking_data_from_azure_blob(blob_url: str, cache_key: str = None
         # Production mode - download from Azure blob storage
         logger.info(f"Downloading tracking data from Azure blob: {blob_url}")
 
+        # Extract relative path from full blob URL for default_storage operations
+        if blob_url.startswith("https://"):
+            # Extract relative path from full Azure blob URL
+            # URL format: https://videostoragewajo.blob.core.windows.net/media/sessions/...
+            # We need: sessions/...
+            if "/media/" in blob_url:
+                relative_path = blob_url.split("/media/", 1)[1]
+            else:
+                logger.error(f"Unexpected blob URL format: {blob_url}")
+                return []
+        else:
+            # Already a relative path
+            relative_path = blob_url
+
+        logger.info(f"Using relative path for storage operations: {relative_path}")
+
         # Use Django's default storage to download the file
-        if default_storage.exists(blob_url):
+        if default_storage.exists(relative_path):
             # Read the file content
-            with default_storage.open(blob_url, 'r') as f:
+            with default_storage.open(relative_path, 'r') as f:
                 data = json.load(f)
 
             # Extract spotlights data
@@ -97,7 +113,7 @@ def _download_tracking_data_from_azure_blob(blob_url: str, cache_key: str = None
                 f"Successfully downloaded {len(tracking_data)} tracking points from Azure blob")
             return tracking_data
         else:
-            logger.error(f"Blob file not found: {blob_url}")
+            logger.error(f"Blob file not found: {relative_path} (original URL: {blob_url})")
             return []
 
     except Exception as e:
@@ -186,7 +202,20 @@ def is_tracking_data_available_in_azure(player_obj) -> bool:
             return exists
 
         # Production mode - check Azure blob storage
-        return default_storage.exists(trace_object.tracking_blob_url)
+        # Extract relative path from full blob URL for default_storage operations
+        blob_url = trace_object.tracking_blob_url
+        if blob_url.startswith("https://"):
+            # Extract relative path from full Azure blob URL
+            if "/media/" in blob_url:
+                relative_path = blob_url.split("/media/", 1)[1]
+            else:
+                logger.error(f"Unexpected blob URL format: {blob_url}")
+                return False
+        else:
+            # Already a relative path
+            relative_path = blob_url
+        
+        return default_storage.exists(relative_path)
 
     except Exception as e:
         logger.exception(
@@ -570,21 +599,26 @@ class TraceVisionMetricsCalculator:
                 player_highlights, tracking_data, session)
             defensive_metrics = self._calculate_defensive_skills(
                 player_highlights, tracking_data, session)
+            disciplinary_metrics = self._count_disciplinary_actions(player_highlights)
             rpe_metrics = self._calculate_rpe_metrics(
                 tracking_data, player_highlights, session)
 
             # Determine match duration for context
             match_duration = self._estimate_match_duration(session)
 
-            return {
+            data = {
                 'gps_athletic_skills': gps_athletic_metrics,
                 'gps_football_abilities': gps_football_metrics,
                 'attacking_skills': attacking_metrics,
                 'defensive_skills': defensive_metrics,
+                'disciplinary_actions': disciplinary_metrics,
                 'rpe_metrics': rpe_metrics,
                 'match_duration_minutes': match_duration,
                 'tracking_data_points': len(tracking_data)
             }
+
+            logger.info(f"Calculate Player Metrics: {data}")
+            return data
 
         except Exception as e:
             self.logger.exception(
@@ -1141,7 +1175,7 @@ class TraceVisionMetricsCalculator:
 
 
     def _count_attacking_actions(self, highlights: List[Dict]) -> Dict[str, int]:
-        """Count attacking actions from highlights (legacy method for backward compatibility)"""
+        """Count attacking actions from highlights using both event types and tags"""
         actions = {
             'goals': 0, 'shots': 0, 'assists': 0, 'offsides': 0,
             'key_passes': 0, 'shots_in_pa': 0, 'shots_outside_pa': 0,
@@ -1150,19 +1184,117 @@ class TraceVisionMetricsCalculator:
         }
 
         for highlight in highlights:
+            event_type = highlight.get('event_type', '')
             tags = highlight.get('tags', [])
+            metadata = highlight.get('event_metadata', {})
+            
+            # Count goals - check both event_type and tags
+            if event_type == 'goal' or 'goal' in tags:
+                actions['goals'] += 1
+                self.logger.info(f"Goal found: event_type={event_type}, tags={tags}, metadata={metadata}")
+            
+            # Count shots
+            elif event_type == 'shot' or 'shot' in tags:
+                actions['shots'] += 1
+                # Check if shot is in penalty area
+                if metadata.get('in_penalty_area', False):
+                    actions['shots_in_pa'] += 1
+                else:
+                    actions['shots_outside_pa'] += 1
+            
+            # Count assists
+            elif metadata.get('assist', False) or 'assist' in tags:
+                actions['assists'] += 1
+            
+            # Count offsides
+            elif event_type == 'offside' or 'offside' in tags:
+                actions['offsides'] += 1
+            
+            # Count key passes
+            elif event_type == 'pass' or 'key_pass' in tags or 'pass' in tags:
+                actions['key_passes'] += 1
+                # Check if it's a final third pass
+                if metadata.get('final_third', False) or 'final_third' in tags:
+                    actions['final_third_passes'] += 1
+            
+            # Count take-ons/dribbles
+            elif event_type == 'dribble' or 'take_on' in tags or 'dribble' in tags:
+                actions['take_ons'] += 1
+            
+            # Count crosses
+            elif event_type == 'cross' or 'cross' in tags:
+                actions['crosses'] += 1
+            
+            # Count pressure controls
+            elif metadata.get('pressure_control', False) or 'pressure_control' in tags:
+                actions['pressure_controls'] += 1
+            
+            # Count shots blocked (defensive action but tracked in attacking highlights)
+            elif event_type == 'save' or 'shot_blocked' in tags:
+                actions['shots_blocked'] += 1
 
+        self.logger.info(f"Attacking actions counted: {actions}")
         return actions
 
     def _calculate_passing_stats(self, highlights: List[Dict], session) -> Dict[str, int]:
-        """Calculate passing statistics from highlights"""
+        """Calculate passing statistics from highlights using both event types and tags"""
         completed = 0
         attempted = 0
 
+        for highlight in highlights:
+            event_type = highlight.get('event_type', '')
+            tags = highlight.get('tags', [])
+            metadata = highlight.get('event_metadata', {})
+            
+            # Count passes - check both event_type and tags
+            if event_type == 'pass' or 'pass' in tags or 'touch-chain' in tags:
+                attempted += 1
+                # Assume completed if tracked (could be improved with metadata)
+                completed += 1
+                self.logger.info(f"Pass found: event_type={event_type}, tags={tags}")
+            
+            # Count touch chains as successful passes
+            elif event_type == 'touch-chain' or 'touch-chain' in tags:
+                attempted += 1
+                completed += 1
+
         percentage = (completed / attempted * 100) if attempted > 0 else 0
+        self.logger.info(f"Passing stats: {completed}/{attempted} ({percentage:.1f}%)")
 
         return {
             'completed': completed,
             'attempted': attempted,
             'percentage': percentage
         }
+
+    def _count_disciplinary_actions(self, highlights: List[Dict]) -> Dict[str, int]:
+        """Count disciplinary actions (cards) from highlights"""
+        actions = {
+            'yellow_cards': 0,
+            'red_cards': 0,
+            'total_cards': 0
+        }
+
+        for highlight in highlights:
+            event_type = highlight.get('event_type', '')
+            tags = highlight.get('tags', [])
+            metadata = highlight.get('event_metadata', {})
+            
+            # Count cards - check both event_type and tags
+            if event_type == 'card' or 'card' in tags or 'yellow_card' in tags or 'red_card' in tags:
+                actions['total_cards'] += 1
+                
+                # Check card type from event_type, tags, or metadata
+                if event_type == 'yellow_card' or 'yellow' in tags or metadata.get('card_type', '').lower() == 'yellow':
+                    actions['yellow_cards'] += 1
+                    self.logger.info(f"Yellow card found: event_type={event_type}, tags={tags}, metadata={metadata}")
+                elif event_type == 'red_card' or 'red' in tags or metadata.get('card_type', '').lower() == 'red':
+                    actions['red_cards'] += 1
+                    self.logger.info(f"Red card found: event_type={event_type}, tags={tags}, metadata={metadata}")
+                else:
+                    # Default to yellow if type is unclear
+                    actions['yellow_cards'] += 1
+                    self.logger.info(f"Card found (defaulting to yellow): event_type={event_type}, tags={tags}, metadata={metadata}")
+
+        self.logger.info(f"Disciplinary actions counted: {actions}")
+        return actions

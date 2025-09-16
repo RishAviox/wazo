@@ -1,67 +1,27 @@
 import re
 import os
+import math
 import json
-import logging
 import time
+import logging
 import requests
-import mimetypes
 import tempfile
+import mimetypes
 import pandas as pd
-from datetime import datetime, timedelta
 from celery import shared_task
+from django.conf import settings
 from django.db import transaction
-from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from azure.storage.blob import BlobServiceClient, BlobType, ContentSettings
-import uuid
-from tracevision.models import TraceSession, TraceObject, TraceHighlight, TraceHighlightObject, TracePlayer
+
 from tracevision.services import TraceVisionService
 from tracevision.notification_service import NotificationService
-from django.conf import settings
-
-from tracevision.utils import TraceVisionStoragePaths
+from tracevision.models import TraceSession, TraceObject, TraceHighlight, TraceHighlightObject, TracePlayer
+from tracevision.utils import TraceVisionStoragePaths, convert_game_time_to_video_milliseconds, determine_game_half_from_minute
 
 logger = logging.getLogger(__name__)
 
-import math
-
-# def clean_record(record: dict) -> dict:
-#     cleaned = {}
-#     for k, v in record.items():
-#         if v is None:
-#             cleaned[k] = None
-#         elif isinstance(v, float) and math.isnan(v):
-#             cleaned[k] = None
-#         else:
-#             cleaned[k] = v
-#     return cleaned
-# import math
-
-# def clean_record(record: dict) -> dict:
-#     cleaned = {}
-#     for k, v in record.items():
-#         # Handle NaN and None
-#         if v is None or (isinstance(v, float) and math.isnan(v)):
-#             cleaned[k] = None
-#         elif k.lower() == "goals":
-#             # Always return list
-#             if v in (None, "", []):
-#                 cleaned[k] = []
-#             elif isinstance(v, str):
-#                 cleaned[k] = [s.strip() for s in v.split(",") if s.strip()]
-#             else:
-#                 cleaned[k] = v
-#         elif k.lower() == "cards":
-#             # Always return null if missing
-#             if v in (None, "", []):
-#                 cleaned[k] = None
-#             else:
-#                 cleaned[k] = str(v).strip()
-#         else:
-#             cleaned[k] = v
-#     return cleaned
-import math
-import re
 
 def clean_record(record: dict) -> dict:
     cleaned = {}
@@ -79,7 +39,8 @@ def clean_record(record: dict) -> dict:
                 cleaned[k] = [int(m) for m in minutes]
             elif isinstance(v, list):
                 # Convert possible ["16'", "77'"] → [16, 77]
-                cleaned[k] = [int(re.sub(r"\D", "", str(m))) for m in v if str(m).strip()]
+                cleaned[k] = [int(re.sub(r"\D", "", str(m)))
+                              for m in v if str(m).strip()]
             else:
                 cleaned[k] = [int(v)] if str(v).isdigit() else []
 
@@ -370,9 +331,11 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
                     total_size += len(chunk)
                     chunk_count += 1
                     if chunk_count % 1000 == 0:
-                        logger.info(f"Downloaded {total_size / (1024*1024):.1f} MB for session {session.session_id}")
+                        logger.info(
+                            f"Downloaded {total_size / (1024*1024):.1f} MB for session {session.session_id}")
 
-        logger.info(f"Download complete. Total size: {total_size / (1024*1024):.1f} MB")
+        logger.info(
+            f"Download complete. Total size: {total_size / (1024*1024):.1f} MB")
 
         # Upload to Azure Blob Storage using SDK with retry logic
         blob_service_client = None
@@ -1173,10 +1136,10 @@ def compute_aggregates_task(session_id):
         except Exception as e:
             logger.exception(
                 f"Failed to enqueue overlay highlights generation for session {session_id}: {e}")
-
+        
         return {"success": True, "details": {k: True for k in result.keys()}}
     except Exception as e:
-        logger.exception(
+        logger.error(
             f"Error computing aggregates for session {session_id}: {e}")
         return {"success": False, "error": str(e)}
 
@@ -1490,7 +1453,6 @@ def map_players_to_users_task(session_id):
         from accounts.models import WajoUser
         from teams.models import Team
 
-        # Get the session
         try:
             session = TraceSession.objects.get(session_id=session_id)
         except TraceSession.DoesNotExist:
@@ -1703,87 +1665,8 @@ def calculate_metrics_for_unmapped_players_task(session_id=None, lookback_days=7
         error_msg = f"Error in calculate_metrics_for_unmapped_players_task: {str(e)}"
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}
-import re
-import pandas as pd
 
-# ---------------------- Add this ABOVE parse_excel_match_data ----------------------
-# def extract_player_events(player: dict, session, source: str) -> list:
-#     """
-#     Extract events (goals, cards, substitutions) from a single player row.
-#     """
-#     events = []
-#     team_side = determine_team_side(player['Team'], session)
-#     jersey_number = player.get('Number')
-#     player_name = player.get('Name', '').strip()
 
-#     # Skip invalid rows
-#     if not player_name or not jersey_number:
-#         return events
-
-#     # Convert jersey number to int if possible
-#     try:
-#         jersey_number = int(jersey_number)
-#     except:
-#         pass
-
-#     # ---- Goals ----
-#     if player.get('Goals') and isinstance(player['Goals'], list):
-#         for g in player['Goals']:
-#             try:
-#                 minute = int(str(g).replace("'", "").strip())
-#                 events.append({
-#                     "type": "goal",
-#                     "player_name": player_name,
-#                     "jersey_number": jersey_number,
-#                     "minute": minute,
-#                     "team_side": team_side,
-#                     "source": source
-#                 })
-#             except:
-#                 continue
-
-#     # ---- Cards ----
-#     if player.get('Cards') and isinstance(player['Cards'], str):
-#         events.append({
-#             "type": "card",
-#             "player_name": player_name,
-#             "jersey_number": jersey_number,
-#             "card": player['Cards'],
-#             "team_side": team_side,
-#             "source": source
-#         })
-
-#     # ---- Substitution off ----
-#     if player.get('SubOffMinute') is not None:
-#         try:
-#             minute = int(player['SubOffMinute'])
-#             events.append({
-#                 "type": "substitution_off",
-#                 "player_name": player_name,
-#                 "jersey_number": jersey_number,
-#                 "minute": minute,
-#                 "team_side": team_side,
-#                 "source": source
-#             })
-#         except:
-#             pass
-
-#     # ---- Substitution on ---- (from replacements sheet)
-#     if player.get('ReplacerMinute') is not None:
-#         try:
-#             minute = int(player['ReplacerMinute'])
-#             events.append({
-#                 "type": "substitution_on",
-#                 "player_name": player_name,
-#                 "jersey_number": jersey_number,
-#                 "minute": minute,
-#                 "team_side": team_side,
-#                 "source": source
-#             })
-#         except:
-#             pass
-
-#     return events
 def extract_player_events(player: dict, session, source: str) -> list:
     """
     Extract events (goals, cards, substitutions) from a single player row.
@@ -1816,6 +1699,7 @@ def extract_player_events(player: dict, session, source: str) -> list:
                     "player_name": player_name,
                     "jersey_number": jersey_number,
                     "minute": minute,
+                    "match_time": parse_match_time(minute),
                     "team_side": team_side,
                     "team_name": team_name,
                     "source": source
@@ -1825,12 +1709,31 @@ def extract_player_events(player: dict, session, source: str) -> list:
 
     # ---- Cards ----
     if player.get('Cards') and isinstance(player['Cards'], str):
+        # Parse card string format like "Yellow 41'" or "Red 67'"
+        card_str = player['Cards'].strip()
+        minute = 0
+        card_type = card_str
+
+        # Extract minute from card string (e.g., "Yellow 41'" -> minute=41, card_type="Yellow")
+        # Handle both regular minutes and extra time (e.g., "Yellow 90+3'" -> minute=93)
+        import re
+        minute_match = re.search(r"(\d+)(?:\+(\d+))?'", card_str)
+        if minute_match:
+            minute = int(minute_match.group(1))
+            # Add extra time if present
+            if minute_match.group(2):
+                minute += int(minute_match.group(2))
+            # Extract card type (everything before the minute)
+            card_type = card_str[:minute_match.start()].strip().lower()
+
         events.append({
-            "type": "card",
+            "type": f"{card_type}_card",
             "category": "discipline",
             "player_name": player_name,
             "jersey_number": jersey_number,
-            "card": player['Cards'],
+            "card": card_type,
+            "minute": minute,
+            "match_time": parse_match_time(minute),
             "team_side": team_side,
             "team_name": team_name,
             "source": source
@@ -1846,6 +1749,7 @@ def extract_player_events(player: dict, session, source: str) -> list:
                 "player_name": player_name,
                 "jersey_number": jersey_number,
                 "minute": minute,
+                "match_time": parse_match_time(minute),
                 "team_side": team_side,
                 "team_name": team_name,
                 "source": source
@@ -1863,6 +1767,7 @@ def extract_player_events(player: dict, session, source: str) -> list:
                 "player_name": player_name,
                 "jersey_number": jersey_number,
                 "minute": minute,
+                "match_time": parse_match_time(minute),
                 "team_side": team_side,
                 "team_name": team_name,
                 "source": source
@@ -1871,8 +1776,6 @@ def extract_player_events(player: dict, session, source: str) -> list:
             pass
 
     return events
-
-# ---------------------- END HELPER ----------------------
 
 
 @shared_task
@@ -1996,11 +1899,11 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
 def determine_team_side(excel_team_name, session):
     """
     Determine if an Excel team name belongs to home or away team based on TraceSession
-    
+
     Args:
         excel_team_name (str): Team name from Excel data
         session (TraceSession): The session with home_team and away_team
-        
+
     Returns:
         str: 'home' or 'away'
     """
@@ -2008,57 +1911,59 @@ def determine_team_side(excel_team_name, session):
         # Get team names from session
         home_team_name = session.home_team.name if session.home_team else None
         away_team_name = session.away_team.name if session.away_team else None
-        
+
         if not excel_team_name or not isinstance(excel_team_name, str):
-            logger.warning(f"Invalid team name: '{excel_team_name}'. Defaulting to 'away'.")
+            logger.warning(
+                f"Invalid team name: '{excel_team_name}'. Defaulting to 'away'.")
             return 'away'
-        
+
         excel_team_clean = excel_team_name.strip().lower()
-        
+
         # Try exact match first
         if home_team_name and excel_team_clean == home_team_name.lower():
             return 'home'
         elif away_team_name and excel_team_clean == away_team_name.lower():
             return 'away'
-        
+
         # Try partial match (in case of slight differences)
         if home_team_name and home_team_name.lower() in excel_team_clean:
             return 'home'
         elif away_team_name and away_team_name.lower() in excel_team_clean:
             return 'away'
-        
+
         # Try reverse partial match
         if home_team_name and excel_team_clean in home_team_name.lower():
             return 'home'
         elif away_team_name and excel_team_clean in away_team_name.lower():
             return 'away'
-        
+
         # If no match found, log warning and default to 'away'
         logger.warning(f"Could not determine team side for '{excel_team_name}'. "
-                      f"Session teams: home='{home_team_name}', away='{away_team_name}'. "
-                      f"Defaulting to 'away'.")
+                       f"Session teams: home='{home_team_name}', away='{away_team_name}'. "
+                       f"Defaulting to 'away'.")
         return 'away'
-        
+
     except Exception as e:
-        logger.error(f"Error determining team side for '{excel_team_name}': {e}")
+        logger.error(
+            f"Error determining team side for '{excel_team_name}': {e}")
         return 'away'
 
 
 def parse_excel_match_data(excel_file_path, session):
     """
     Parse Excel file containing match data and extract events (goals, cards, etc.)
-    
+
     Args:
         excel_file_path (str): Path to the Excel file
         session (TraceSession): The session to determine team sides
-        
+
     Returns:
         dict: Parsed match data with events
     """
     try:
         # Read all sheets from Excel file
         excel_data = pd.read_excel(excel_file_path, sheet_name=None)
-        
+
         match_data = {
             'match_summary': {},
             'starting_lineups': [],
@@ -2069,96 +1974,85 @@ def parse_excel_match_data(excel_file_path, session):
             'events': [],
             'player_mappings': {}  # New field for player name mappings
         }
-        
+
         # Parse Match Summary sheet
         if 'Match Summary' in excel_data:
             summary_df = excel_data['Match Summary']
             summary_df = summary_df.where(pd.notna(summary_df), None)
             if not summary_df.empty:
                 match_data['match_summary'] = summary_df.iloc[0].to_dict()
-        
-        
+
         if 'Starting Lineups' in excel_data:
-          lineups_df = excel_data['Starting Lineups']
-          lineups_df = lineups_df.where(pd.notna(lineups_df), None)
-        #   lineups = lineups_df.to_dict('records')
-          lineups = [clean_record(player) for player in lineups_df.to_dict('records')]
+            lineups_df = excel_data['Starting Lineups']
+            lineups_df = lineups_df.where(pd.notna(lineups_df), None)
+            lineups = [clean_record(player)
+                       for player in lineups_df.to_dict('records')]
 
-    # Fix Goals and Cards: convert None/'' → []
-          for player in lineups:
-            if 'Goals' in player and (player['Goals'] is None or str(player['Goals']).strip() == ''):
-              player['Goals'] = []
-            if 'Cards' in player and (player['Cards'] is None or str(player['Cards']).strip() == ''):
-              player['Cards'] = None
-            if 'SubOffMinute' in player and player['SubOffMinute'] is None:
-              player['SubOffMinute'] = None  
+            # Fix Goals and Cards: convert None/'' → []
+            for player in lineups:
+                if 'Goals' in player and (player['Goals'] is None or str(player['Goals']).strip() == ''):
+                    player['Goals'] = []
+                if 'Cards' in player and (player['Cards'] is None or str(player['Cards']).strip() == ''):
+                    player['Cards'] = None
+                if 'SubOffMinute' in player and player['SubOffMinute'] is None:
+                    player['SubOffMinute'] = None
 
-          match_data['starting_lineups'] = lineups
+            match_data['starting_lineups'] = lineups
 
-
-            
-        
-        
         if 'Replacements' in excel_data:
-         replacements_df = excel_data['Replacements']
-         replacements_df = replacements_df.where(pd.notna(replacements_df), None)
-         replacements = [clean_record(player) for player in replacements_df.to_dict('records')]
+            replacements_df = excel_data['Replacements']
+            replacements_df = replacements_df.where(
+                pd.notna(replacements_df), None)
+            replacements = [clean_record(
+                player) for player in replacements_df.to_dict('records')]
 
+            # Fix Goals and Cards: convert None/'' → []
+            for player in replacements:
+                if 'Goals' in player and (player['Goals'] is None or str(player['Goals']).strip() == ''):
+                    player['Goals'] = []
+                if 'Cards' in player and (player['Cards'] is None or str(player['Cards']).strip() == ''):
+                    player['Cards'] = None
+                if 'ReplacerMinute' in player and player['ReplacerMinute'] is None:
+                    player['ReplacerMinute'] = None
+                match_data['replacements'] = replacements
 
-    # Fix Goals and Cards: convert None/'' → []
-         for player in replacements:
-          if 'Goals' in player and (player['Goals'] is None or str(player['Goals']).strip() == ''):
-            player['Goals'] = []
-          if 'Cards' in player and (player['Cards'] is None or str(player['Cards']).strip() == ''):
-            player['Cards'] = None
-          if 'ReplacerMinute' in player and player['ReplacerMinute'] is None:
-            player['ReplacerMinute'] = None
-          match_data['replacements'] = replacements
-
-        
         # Parse Bench sheet
         if 'Bench' in excel_data:
             bench_df = excel_data['Bench']
-            # Replace NaN values with empty strings
-            # bench_df = bench_df.fillna('')
             bench_df = bench_df.where(pd.notna(bench_df), None)
             match_data['bench'] = bench_df.to_dict('records')
-        
+
         # Parse Coaches sheet
         if 'Coaches' in excel_data:
             coaches_df = excel_data['Coaches']
-            # Replace NaN values with empty strings
-            # coaches_df = coaches_df.fillna('')
             coaches_df = coaches_df.where(pd.notna(coaches_df), None)
             match_data['coaches'] = coaches_df.to_dict('records')
-        
+
         # Parse Referees sheet
         if 'Referees' in excel_data:
             referees_df = excel_data['Referees']
-            # Replace NaN values with empty strings
-            # referees_df = referees_df.fillna('')
             referees_df = referees_df.where(pd.notna(referees_df), None)
             match_data['referees'] = referees_df.to_dict('records')
-        
+
         # Create player mappings from all player data
         player_mappings = {}
-        
+
         # Map starting lineups
         for player in match_data['starting_lineups']:
             # Skip invalid entries (empty values, headers, etc.)
             logger.info(f"Player: {player}")
-            if (not player.get('Team') or 
-                not player.get('Number') or 
+            if (not player.get('Team') or
+                not player.get('Number') or
                 not player.get('Name') or
                 player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
-                player.get('Team').strip() in ['', 'no.']):
+                    player.get('Team').strip() in ['', 'no.']):
                 continue
-                
+
             # Determine team side by comparing with session teams
             team_side = determine_team_side(player['Team'], session)
             jersey_number = int(player['Number'])
             player_name = player['Name'].strip()
-            
+
             # Skip if player name is empty or invalid
             if not player_name or len(player_name) < 2:
                 continue
@@ -2170,31 +2064,28 @@ def parse_excel_match_data(excel_file_path, session):
                 'jersey_number': jersey_number,
                 'team_side': team_side,
                 'team_name': player['Team'],
-                # 'role': player.get('Role', '') or '',
-               
                 'role': '' if role_val is None or (isinstance(role_val, float) and pd.isna(role_val)) else str(role_val),
-
                 'source': 'starting_lineup'
             }
-        
+
         # Map replacements
         for player in match_data['replacements']:
             # Skip invalid entries (empty values, headers, etc.)
-            if (not player.get('Team') or 
-                not player.get('Number') or 
+            if (not player.get('Team') or
+                not player.get('Number') or
                 not player.get('Name') or
                 player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
-                player.get('Team').strip() in ['', 'no.']):
+                    player.get('Team').strip() in ['', 'no.']):
                 continue
-                
+
             team_side = determine_team_side(player['Team'], session)
             jersey_number = int(player['Number'])
             player_name = player['Name'].strip()
-            
+
             # Skip if player name is empty or invalid
             if not player_name or len(player_name) < 2:
                 continue
-            
+
             # Create mapping key
             mapping_key = f"{team_side}_{jersey_number}"
             if mapping_key not in player_mappings:  # Only add if not already in starting lineup
@@ -2206,25 +2097,25 @@ def parse_excel_match_data(excel_file_path, session):
                     'role': player.get('Role', '') or '',
                     'source': 'replacement'
                 }
-        
+
         # Map bench players
         for player in match_data['bench']:
             # Skip invalid entries (empty values, headers, etc.)
-            if (not player.get('Team') or 
-                not player.get('Number') or 
+            if (not player.get('Team') or
+                not player.get('Number') or
                 not player.get('Name') or
                 player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
-                player.get('Team').strip() in ['', 'no.']):
+                    player.get('Team').strip() in ['', 'no.']):
                 continue
-                
+
             team_side = determine_team_side(player['Team'], session)
             jersey_number = int(player['Number'])
             player_name = player['Name'].strip()
-            
+
             # Skip if player name is empty or invalid
             if not player_name or len(player_name) < 2:
                 continue
-            
+
             # Create mapping key
             mapping_key = f"{team_side}_{jersey_number}"
             if mapping_key not in player_mappings:  # Only add if not already mapped
@@ -2236,87 +2127,51 @@ def parse_excel_match_data(excel_file_path, session):
                     'role': '',
                     'source': 'bench'
                 }
-        
+
         match_data['player_mappings'] = player_mappings
-        
+
         # Extract events from match data
         events = []
 
         # From starting lineups
         for player in match_data['starting_lineups']:
-            events.extend(extract_player_events(player, session, source="starting_lineup"))
+            events.extend(extract_player_events(
+                player, session, source="starting_lineup"))
 
-# From replacements
+        # From replacements
         for player in match_data['replacements']:
-            events.extend(extract_player_events(player, session, source="replacement"))
+            events.extend(extract_player_events(
+                player, session, source="replacement"))
 
-# From bench 
+        # From bench
         for player in match_data['bench']:
-            events.extend(extract_player_events(player, session, source="bench"))
-        
+            events.extend(extract_player_events(
+                player, session, source="bench"))
 
         for event in events:
-    # If 'minute' is missing, provide a default or skip
-           if 'minute' not in event or event['minute'] is None:
-             event['minute'] = 0  # or any default value you want
-    
-    # Now safely add match_time
-           if 'match_time' not in event:
-             event['match_time'] = f"{event['minute']}:00"
+            # If 'minute' is missing, provide a default or skip
+            if 'minute' not in event or event['minute'] is None:
+                event['minute'] = 0  # or any default value you want
 
-           if 'event_metadata' not in event:
-             event['event_metadata'] = {
-            'player_name': event.get('player_name', ''),
-            'minute': event['minute'],
-            'match_time': event['match_time'],
-            'team_side': event.get('team_side', ''),
-            'team_name': event.get('team_name', ''),
-            'category': event.get('category', event.get('type', ''))
-        } 
+            # Now safely add match_time
+            if 'match_time' not in event:
+                event['match_time'] = f"{event['minute']}:00"
 
-        # for event in events:
-        #   if 'match_time' not in event:
-        #       event['match_time'] = f"{event['minute']}:00"  # or any format you need
-    
+            if 'event_metadata' not in event:
+                event['event_metadata'] = {
+                    'player_name': event.get('player_name', ''),
+                    'minute': event['minute'],
+                    'match_time': event['match_time'],
+                    'team_side': event.get('team_side', ''),
+                    'team_name': event.get('team_name', ''),
+                    'category': event.get('category', event.get('type', ''))
+                }
 
         match_data['events'] = events
-
-        
-        # TODO: Process the 'Starting Lineups' sheet to generates the Events for goals, cards and replacements
-        # +++++++++++++++++++++++++++++++++++++Events processing code blocks++++++++++++++++++++++++++++++++++++
-        # Extract goals from match summary
-        # if 'Home Goals' in match_data['match_summary']:
-        #     home_goals = match_data['match_summary'].get('Home Goals', '')
-        #     if pd.notna(home_goals) and home_goals:
-        #         goals = parse_goals_from_text(str(home_goals), 'home')
-        #         events.extend(goals)
-        
-        # if 'Away Goals' in match_data['match_summary']:
-        #     away_goals = match_data['match_summary'].get('Away Goals', '')
-        #     if pd.notna(away_goals) and away_goals:
-        #         goals = parse_goals_from_text(str(away_goals), 'away')
-        #         events.extend(goals)
-        
-        # Extract cards from starting lineups
-        # for player in match_data['starting_lineups']:
-        #     # Skip invalid entries
-        #     if (not player.get('Team') or 
-        #         not player.get('Number') or 
-        #         not player.get('Name') or
-        #         player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
-        #         player.get('Team').strip() in ['', 'no.']):
-        #         continue
-                
-        #     if 'Cards' in player and player['Cards'] and player['Cards'].strip():
-        #         cards = parse_cards_from_text(str(player['Cards']), player, 'starting', session)
-        #         events.extend(cards)
-        # +++++++++++++++++++++++++++++++++++++Events processing code blocks end++++++++++++++++++++++++++++++++++++
-        
-        match_data['events'] = events
-        
-        logger.info(f"Parsed {len(events)} events and {len(player_mappings)} player mappings from Excel file")
+        logger.info(
+            f"Parsed {len(events)} events and {len(player_mappings)} player mappings from Excel file")
         return match_data
-        
+
     except Exception as e:
         logger.error(f"Error parsing Excel file {excel_file_path}: {e}")
         raise
@@ -2325,25 +2180,25 @@ def parse_excel_match_data(excel_file_path, session):
 def parse_goals_from_text(goals_text, team_side):
     """
     Parse goals from text like "LEVI Omri 16', 77'" or "MENACHEM Ofek 56', 85'"
-    
+
     Args:
         goals_text (str): Text containing goal information
         team_side (str): 'home' or 'away'
-        
+
     Returns:
         list: List of goal events
     """
     events = []
-    
+
     # Pattern to match player name and minutes: "NAME 16', 77'"
     pattern = r'([A-Z\s]+?)\s+(\d+)(?:\'|min)'
     matches = re.findall(pattern, goals_text)
-    
+
     for match in matches:
         player_name = match[0].strip()
         minute = int(match[1])
         match_time = parse_match_time(minute)
-        
+
         events.append({
             'type': 'goal',
             'player_name': player_name,
@@ -2357,37 +2212,37 @@ def parse_goals_from_text(goals_text, team_side):
                 'team_side': team_side
             }
         })
-    
+
     return events
 
 
 def parse_cards_from_text(cards_text, player_data, player_type, session):
     """
     Parse cards from text like "Yellow 41'" or "Red 27'"
-    
+
     Args:
         cards_text (str): Text containing card information
         player_data (dict): Player information from lineup
         player_type (str): 'starting' or 'replacement'
         session (TraceSession): The session to determine team sides
-        
+
     Returns:
         list: List of card events
     """
     events = []
-    
+
     # Pattern to match card type and minute: "Yellow 41'" or "Red 27'"
     pattern = r'(Yellow|Red)\s+(\d+)(?:\'|min)'
     matches = re.findall(pattern, cards_text)
-    
+
     for match in matches:
         card_type = match[0].lower()
         minute = int(match[1])
         match_time = parse_match_time(minute)
-        
+
         # Determine team side using session teams
         team_side = determine_team_side(player_data.get('Team', ''), session)
-        
+
         events.append({
             'type': f'{card_type}_card',
             'player_name': player_data.get('Name', 'Unknown'),
@@ -2405,18 +2260,18 @@ def parse_cards_from_text(cards_text, player_data, player_type, session):
                 'player_type': player_type
             }
         })
-    
+
     return events
 
 
 def update_trace_player_names(session, player_mappings):
     """
     Update TracePlayer names from Excel data mappings
-    
+
     Args:
         session (TraceSession): The session to update
         player_mappings (dict): Player mappings from Excel data
-        
+
     Returns:
         dict: Update results with counts and details
     """
@@ -2424,7 +2279,7 @@ def update_trace_player_names(session, player_mappings):
         updated_count = 0
         not_found_count = 0
         update_details = []
-        
+
         for mapping_key, player_data in player_mappings.items():
             try:
                 # Find TracePlayer by object_id pattern
@@ -2432,14 +2287,15 @@ def update_trace_player_names(session, player_mappings):
                     session=session,
                     object_id=mapping_key
                 ).first()
-                
+
                 if trace_player:
                     # Update player name and other details
                     old_name = trace_player.name
                     trace_player.name = player_data['name']
-                    trace_player.position = player_data.get('role', trace_player.position)
+                    trace_player.position = player_data.get(
+                        'role', trace_player.position)
                     trace_player.save()
-                    
+
                     updated_count += 1
                     update_details.append({
                         'object_id': mapping_key,
@@ -2449,23 +2305,25 @@ def update_trace_player_names(session, player_mappings):
                         'team_side': player_data['team_side'],
                         'source': player_data['source']
                     })
-                    
-                    logger.info(f"Updated player {mapping_key}: '{old_name}' -> '{player_data['name']}'")
+
+                    logger.info(
+                        f"Updated player {mapping_key}: '{old_name}' -> '{player_data['name']}'")
                 else:
                     not_found_count += 1
-                    logger.warning(f"TracePlayer not found for mapping key: {mapping_key}")
-                    
+                    logger.warning(
+                        f"TracePlayer not found for mapping key: {mapping_key}")
+
             except Exception as e:
                 logger.error(f"Error updating player {mapping_key}: {e}")
                 continue
-        
+
         return {
             'updated_count': updated_count,
             'not_found_count': not_found_count,
             'total_mappings': len(player_mappings),
             'update_details': update_details
         }
-        
+
     except Exception as e:
         logger.error(f"Error in update_trace_player_names: {e}")
         return {
@@ -2480,53 +2338,54 @@ def update_trace_player_names(session, player_mappings):
 def map_player_to_trace_player(player_name, jersey_number, team_side, session):
     """
     Map Excel player data to TracePlayer objects based on name, jersey number, and team
-    
+
     Args:
         player_name (str): Player name from Excel
         jersey_number (int): Jersey number from Excel
         team_side (str): 'home' or 'away'
         session (TraceSession): The session to search in
-        
+
     Returns:
         TracePlayer or None: Matching TracePlayer object
     """
     try:
         # Get the team based on side
         team = session.home_team if team_side == 'home' else session.away_team
-        
+
         # Try to find by jersey number and team first
         trace_player = TracePlayer.objects.filter(
             session=session,
             jersey_number=jersey_number,
             team=team
         ).first()
-        
+
         if trace_player:
             return trace_player
-        
+
         # Try to find by name similarity and team
         trace_player = TracePlayer.objects.filter(
             session=session,
             team=team,
             name__icontains=player_name.split()[0]  # First name match
         ).first()
-        
+
         if trace_player:
             return trace_player
-        
+
         # Try to find by object_id pattern (home_X or away_X)
         object_id_pattern = f"{team_side}_{jersey_number}"
         trace_object = TraceObject.objects.filter(
             session=session,
             object_id=object_id_pattern
         ).first()
-        
+
         if trace_object and trace_object.player:
             return trace_object.player
-        
-        logger.warning(f"Could not map player {player_name} (#{jersey_number}) from {team_side} team")
+
+        logger.warning(
+            f"Could not map player {player_name} (#{jersey_number}) from {team_side} team")
         return None
-        
+
     except Exception as e:
         logger.error(f"Error mapping player {player_name}: {e}")
         return None
@@ -2535,10 +2394,10 @@ def map_player_to_trace_player(player_name, jersey_number, team_side, session):
 def parse_match_time(time_input):
     """
     Parse various time formats and return MM:SS format
-    
+
     Args:
         time_input: Can be int (minutes), str "MM:SS", or str "MM'"
-        
+
     Returns:
         str: Time in MM:SS format
     """
@@ -2560,67 +2419,15 @@ def parse_match_time(time_input):
     return "00:00"
 
 
-def convert_match_time_to_milliseconds(match_time, half=None):
-    """
-    Convert match time (MM:SS format) to video milliseconds
-    
-    Args:
-        match_time (str): Match time in MM:SS format (e.g., "16:30", "77:15")
-        half (int, optional): Match half (1 or 2)
-        
-    Returns:
-        int: Milliseconds from video start
-    """
-    try:
-        if not match_time:
-            return 0
-            
-        # Parse MM:SS format
-        parts = match_time.split(':')
-        minutes = int(parts[0])
-        seconds = int(parts[1]) if len(parts) > 1 else 0
-        
-        # Convert to total seconds
-        total_seconds = minutes * 60 + seconds
-        
-        # Convert to milliseconds
-        return total_seconds * 1000
-        
-    except (ValueError, IndexError):
-        logger.warning(f"Invalid match_time format: {match_time}")
-        return 0
-
-
-def convert_minute_to_milliseconds(minute, half=None):
-    """
-    Convert match minute to video milliseconds (legacy function for backward compatibility)
-    
-    Args:
-        minute (int): Match minute
-        half (int, optional): Match half (1 or 2)
-        
-    Returns:
-        int: Milliseconds from video start
-    """
-    # Convert minutes to milliseconds
-    # Assuming 45 minutes per half for calculation
-    if half and half == 2:
-        # Second half starts at 45 minutes
-        return (45 + minute) * 60 * 1000
-    else:
-        # First half or no half specified
-        return minute * 60 * 1000
-
-
 @shared_task
 def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko_vs_MaccabiHaifa_AllInfo.xlsx"):
     """
     Process Excel match data and create highlights for goals, cards, and other events
-    
+
     Args:
         session_id (str): TraceSession ID
         excel_file_path (str, optional): Path to Excel file. If None, uses session's basic_game_stats
-        
+
     Returns:
         dict: Task results with success status and details
     """
@@ -2632,15 +2439,16 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
             error_msg = f"Session with ID {session_id} not found"
             logger.error(error_msg)
             return {"success": False, "error": error_msg}
-        
-        logger.info(f"Starting Excel highlights processing for session: {session_id}")
-        
+
+        logger.info(
+            f"Starting Excel highlights processing for session: {session_id}")
+
         # Check if session is processed
         if session.status != "processed":
             error_msg = f"Session {session_id} is not processed yet. Current status: {session.status}"
             logger.warning(error_msg)
             return {"success": False, "error": error_msg}
-        
+
         # Determine Excel file path
         if not excel_file_path:
             if not session.basic_game_stats:
@@ -2648,7 +2456,7 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
                 logger.error(error_msg)
                 return {"success": False, "error": error_msg}
             excel_file_path = session.basic_game_stats.path
-        
+
         # Parse Excel data
         try:
             match_data = parse_excel_match_data(excel_file_path, session)
@@ -2658,80 +2466,87 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
             return {"success": False, "error": error_msg}
         # Update TracePlayer names from Excel data
         logger.info(f"Updating TracePlayer names from Excel data...")
-        player_update_result = update_trace_player_names(session, match_data.get('player_mappings', {}))
-        
-        logger.info(f"Player name updates: {player_update_result['updated_count']}/{player_update_result['total_mappings']} players updated")
-        
-        # Process events and create highlights
-        import json
-        import os
+        player_update_result = update_trace_player_names(
+            session, match_data.get('player_mappings', {}))
 
+        logger.info(
+            f"Player name updates: {player_update_result['updated_count']}/{player_update_result['total_mappings']} players updated")
         # Write match_data to a JSON file with proper spacing
-        output_dir = os.path.dirname(excel_file_path)
-        output_json_path = os.path.join(output_dir, f"{session_id}_parsed_match_data.json")
         try:
+            output_dir = os.path.dirname(excel_file_path)
+            output_json_path = os.path.join(
+                output_dir, f"{session_id}_parsed_match_data.json")
             with open(output_json_path, "w", encoding="utf-8") as f:
                 json.dump(match_data, f, indent=2, ensure_ascii=False)
             logger.info(f"Parsed match data written to {output_json_path}")
         except Exception as e:
             logger.error(f"Failed to write match_data to JSON: {e}")
-        
+
         events_processed = 0
         highlights_created = 0
         errors = []
-        
+
         with transaction.atomic():
             for event in match_data.get('events', []):
                 try:
                     # Map player to TracePlayer
-                    
                     trace_player = map_player_to_trace_player(
                         event['player_name'],
                         event.get('jersey_number', 0),
                         event['team_side'],
                         session
                     )
-                    
+
                     if not trace_player:
-                        logger.warning(f"Skipping event for unmapped player: {event['player_name']}")
+                        logger.warning(
+                            f"Skipping event for unmapped player: {event['player_name']}")
                         continue
-                    
-                    # Convert match time to milliseconds
-                    start_offset = convert_match_time_to_milliseconds(
-                        event['match_time'],
-                        event.get('half')
+
+                    # Convert game time to video milliseconds using session timeline
+                    start_offset = convert_game_time_to_video_milliseconds(
+                        session,
+                        event['minute'],
+                        event.get('second', 0)
                     )
-                    
+
                     # Determine highlight duration based on event type
                     duration = 10000  # 10 seconds default
                     if event['type'] == 'goal':
                         duration = 15000  # 15 seconds for goals
                     elif event['type'] in ['red_card', 'yellow_card']:
                         duration = 8000   # 8 seconds for cards
-                    
+
                     # Create unique highlight ID
                     highlight_id = f"excel-{event['type']}-{session_id}-{event['match_time'].replace(':', '')}-{trace_player.object_id}"
-                    
+
                     # Check if highlight already exists
                     if TraceHighlight.objects.filter(highlight_id=highlight_id).exists():
-                        logger.info(f"Highlight {highlight_id} already exists, skipping")
+                        logger.info(
+                            f"Highlight {highlight_id} already exists, skipping")
                         continue
-                  
 
-# Convert session ID to UUID
-                    
+                    # Determine half dynamically based on session timeline
+                    half = determine_game_half_from_minute(
+                        session, event['minute'])
+
+                    tags = [event['team_side'], event['type'],
+                              f"{event['match_time']}"]
+
+                    if "card" in event.get('type', ''):
+                        tags.append("card")
+
                     # Create TraceHighlight
                     highlight = TraceHighlight.objects.create(
                         highlight_id=highlight_id,
                         video_id=0,  # Will be updated with actual video ID
                         start_offset=start_offset,
                         duration=duration,
-                        tags=[event['team_side'], event['type'], f"{event['match_time']}"],
+                        tags=tags,
                         video_stream=session.video_url,
                         event_type=event['type'],
                         source='excel_import',
                         match_time=event['match_time'],
-                        half=1 if event['minute'] <= 45 else 2,
+                        half=half,
                         event_metadata=event['event_metadata'],
                         session=session,
                         player=trace_player
@@ -2740,15 +2555,17 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
                     logger.info(f"Highlight: {highlight}")
                     # Calculate performance impact
                     highlight.performance_impact = highlight.calculate_performance_impact()
-                    highlight.team_impact = abs(highlight.performance_impact) * 0.5  # Team impact is half of player impact
+                    # Team impact is half of player impact
+                    highlight.team_impact = abs(
+                        highlight.performance_impact) * 0.5
                     highlight.save()
-                    
+
                     # Create highlight-object relationship if trace object exists
                     trace_object = TraceObject.objects.filter(
                         session=session,
                         player=trace_player
                     ).first()
-                    
+
                     if trace_object:
                         TraceHighlightObject.objects.create(
                             highlight=highlight,
@@ -2758,23 +2575,22 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
                     logger.info(f"TraceObject: {trace_object}")
                     highlights_created += 1
                     events_processed += 1
-                    
-                    logger.info(f"Created highlight {highlight_id} for {event['type']} by {event['player_name']} at {event['match_time']}")
-                    
+
+                    logger.info(
+                        f"Created highlight {highlight_id} for {event['type']} by {event['player_name']} at {event['match_time']}")
+
                 except Exception as e:
                     error_msg = f"Error processing event {event}: {str(e)}"
                     logger.error(error_msg)
                     errors.append(error_msg)
                     continue
-        
+
         # Update session with Excel processing status
         session.result['excel_highlights_processed'] = True
         session.result['excel_highlights_count'] = highlights_created
         session.result['excel_events_processed'] = events_processed
         session.save()
-        
-        # Note: Player stats recalculation is handled by the main process_trace_sessions_task flow
-        
+
         result = {
             "success": True,
             "session_id": session_id,
@@ -2789,13 +2605,8 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
                 "total_player_mappings": len(match_data.get('player_mappings', {})),
             }
         }
-        
-        # logger.info(f"Excel highlights processing completed for session {session_id}. "
-        #            f"Events processed: {events_processed}, Highlights created: {highlights_created}, "
-        #            f"Players updated: {player_update_result['updated_count']}")
-        
         return result
-        
+
     except Exception as e:
         error_msg = f"Error in process_excel_match_highlights_task for session {session_id}: {str(e)}"
         logger.exception(error_msg)
