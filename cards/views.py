@@ -209,6 +209,14 @@ class CardSuggestedActionsAPI(APIView):
                             }
                         ]
                     },
+                    "Wajo Intelligence": {
+                        "actions": [
+                            {
+                                "name": "מודיעין פוסט-משחק",
+                                "postback": "post_match_intelligence"
+                            }
+                        ]
+                    },
                     "Locker Room": {
                         "actions": [
                             {
@@ -341,6 +349,14 @@ class CardSuggestedActionsAPI(APIView):
                         {
                             "name": "Add Post Match Analysis",
                             "postback": "post_match_analysis"
+                        }
+                    ]
+                },
+                "Wajo Intelligence": {
+                    "actions": [
+                        {
+                            "name": "Postmatch Intelligence",
+                            "postback": "post_match_intelligence"
                         }
                     ]
                 },
