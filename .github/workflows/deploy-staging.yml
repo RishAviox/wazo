@@ -53,7 +53,7 @@ jobs:
         az containerapp update \
           --name wajo-celery-worker-staging \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-          --image $IMAGE_NAME \
+          --image $IMAGE_NAME 
 
 
     - name: Update Celery Beat
@@ -62,7 +62,7 @@ jobs:
         az containerapp update \
           --name wajo-celery-beat-staging \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-          --image $IMAGE_NAME \
+          --image $IMAGE_NAME
         
     - name: Cleanup old Docker images
       run: |
