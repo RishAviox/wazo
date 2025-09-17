@@ -113,7 +113,7 @@ CACHES = {
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-PROD_DATABASES = {
+DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("wajo-db-name"),
@@ -123,15 +123,6 @@ PROD_DATABASES = {
         "PASSWORD": os.environ.get("wajo-db-password"),
     }
 }
-
-LOCAL_DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / 'db_pilot.sqlite3',
-    },
-}
-
-DATABASES = LOCAL_DATABASES
 
 
 
