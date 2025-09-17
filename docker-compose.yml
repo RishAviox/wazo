@@ -44,6 +44,7 @@ services:
   wajo-celery-beat:
     image: wajo-app:latest
     container_name: wajo-celery-beat
+    entrypoint: ""
     command: celery -A wajo_backend beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - .:/app

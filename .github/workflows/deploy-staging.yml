@@ -54,6 +54,8 @@ jobs:
           --name wajo-celery-worker-staging \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
           --image $IMAGE_NAME \
+          --command "celery" \
+          --args "-A wajo_backend worker --loglevel=INFO"
 
 
     - name: Update Celery Beat
@@ -63,6 +65,8 @@ jobs:
           --name wajo-celery-beat-staging \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
           --image $IMAGE_NAME \
+          --command "celery" \
+          --args "-A wajo_backend beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler"
         
     - name: Cleanup old Docker images
       run: |
