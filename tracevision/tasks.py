@@ -344,8 +344,9 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
         # Retry blob client creation for network issues
         for client_attempt in range(3):
             try:
-                blob_service_client = BlobServiceClient.from_connection_string(
-                    settings.AZURE_CONNECTION_STRING)
+                # blob_service_client = BlobServiceClient.from_connection_string(
+                #     settings.AZURE_CONNECTION_STRING)
+                blob_service_client = BlobServiceClient(account_url=f"https://{settings.AZURE_CUSTOM_DOMAIN}", account_key=settings.AZURE_ACCOUNT_KEY)
                 blob_client = blob_service_client.get_blob_client(
                     container=settings.AZURE_CONTAINER_NAME, blob=blob_path)
                 logger.info(
