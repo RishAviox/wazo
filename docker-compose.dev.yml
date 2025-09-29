@@ -2,12 +2,29 @@ version: '3.9'
 
 services:
 
+  wajo-postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: wajo_dev
+      POSTGRES_USER: wajo_user
+      POSTGRES_PASSWORD: wajo_password
+    ports:
+      - "5433:5432"  # Using port 5433 to avoid conflicts with other PostgreSQL instances
+    volumes:
+      - wajo_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wajo_user -d wajo_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   wajo-redis:
     ports: []
 
   django:
     environment:
       - django-settings-module=wajo_backend.settings
+      - DJANGO_DATABASE=docker
     entrypoint: ""
     # command: python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000
     command: python manage.py runserver 0.0.0.0:8000 --settings=wajo_backend.settings_dev
@@ -15,14 +32,21 @@ services:
       - "8003:8000"
     volumes:
       - .:/app
+    depends_on:
+      wajo-postgres:
+        condition: service_healthy
 
   wajo-celery-worker:
     environment:
       - django-settings-module=wajo_backend.settings
+      - DJANGO_DATABASE=docker
     entrypoint: ""
     command: celery -A wajo_backend worker --loglevel=INFO
     volumes:
       - .:/app
+    depends_on:
+      wajo-postgres:
+        condition: service_healthy
 
   wajo-celery-beat:
     # environment:
@@ -32,3 +56,6 @@ services:
     # volumes:
     #   - .:/app
     profiles: ["dont-run"]
+
+volumes:
+  wajo_postgres_data:
