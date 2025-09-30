@@ -979,26 +979,16 @@ def process_trace_sessions_task(trace_session_id=None):
                                     logger.exception(
                                         f"Failed to enqueue Excel highlights processing for session {session.session_id}: {e}")
 
-                                # Enqueue aggregates computation (idempotent)
-                                try:
-                                    from tracevision.tasks import compute_aggregates_task
-                                    compute_aggregates_task.delay(
-                                        session.session_id)
-                                    logger.info(
-                                        f"Queued aggregates computation for session {session.session_id}")
-                                except Exception as e:
-                                    logger.exception(
-                                        f"Failed to enqueue aggregates for session {session.session_id}: {e}")
-
-                                # Enqueue card metrics calculation (tracking data already downloaded inline)
-                                try:
-                                    calculate_card_metrics_task.delay(
-                                        session.session_id)
-                                    logger.info(
-                                        f"Queued card metrics calculation for session {session.session_id}")
-                                except Exception as e:
-                                    logger.exception(
-                                        f"Failed to enqueue card metrics calculation for session {session.session_id}: {e}")
+                                # # Enqueue aggregates computation (idempotent)
+                                # try:
+                                    # from tracevision.tasks import compute_aggregates_task
+                                #     compute_aggregates_task.delay(
+                                #         session.session_id)
+                                #     logger.info(
+                                #         f"Queued aggregates computation for session {session.session_id}")
+                                # except Exception as e:
+                                #     logger.exception(
+                                #         f"Failed to enqueue aggregates for session {session.session_id}: {e}")
                             else:
                                 logger.error(
                                     f"Failed to parse structured data for session {session.session_id}. Not updating session status.")
@@ -1146,299 +1136,6 @@ def compute_aggregates_task(session_id):
 
 
 @shared_task
-def reconcile_aggregates_for_processed_sessions(lookback_hours=24, batch_limit=50):
-    """Scan recently processed sessions and ensure aggregates exist; enqueue if missing."""
-    try:
-        from django.utils import timezone
-        from datetime import timedelta
-        from tracevision.models import TraceCoachReportTeam
-
-        cutoff = timezone.now() - timedelta(hours=lookback_hours)
-        qs = TraceSession.objects.filter(
-            status='processed', updated_at__gte=cutoff).order_by('-updated_at')[:batch_limit]
-        enqueued = 0
-        for session in qs:
-            # If no coach report rows exist, assume aggregates missing and enqueue
-            if not TraceCoachReportTeam.objects.filter(session=session).exists():
-                compute_aggregates_task.delay(session.session_id)
-                enqueued += 1
-        return {"success": True, "checked": qs.count(), "enqueued": enqueued}
-    except Exception as e:
-        logger.exception(f"Error reconciling aggregates: {e}")
-        return {"success": False, "error": str(e)}
-
-
-@shared_task
-def calculate_card_metrics_task(session_id, user_mapping=None):
-    """
-    Calculate card metrics (GPS Athletic/Football, Attacking, Defensive, RPE) 
-    from TraceVision session data and update card models.
-
-    Args:
-        session_id (str): TraceSession ID to process
-        user_mapping (dict, optional): Mapping of object_id to WajoUser ID
-            Format: {"home_1": user_id, "away_2": user_id, ...}
-
-    Returns:
-        dict: Task results with success status and details
-    """
-    try:
-        from tracevision.metrics_calculator import TraceVisionMetricsCalculator
-        from tracevision.models import TraceSession
-        from accounts.models import WajoUser
-        from cards.models import AttackingSkills, VideoCardDefensive, GPSAthleticSkills, GPSFootballAbilities
-        from games.models import Game
-        from django.utils import timezone
-
-        # Get the session
-        try:
-            session = TraceSession.objects.get(session_id=session_id)
-        except TraceSession.DoesNotExist:
-            error_msg = f"Session with ID {session_id} not found"
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
-
-        logger.info(
-            f"Starting card metrics calculation for session {session_id}")
-
-        # Check if session is processed
-        if session.status != "processed":
-            error_msg = f"Session {session_id} is not processed yet. Current status: {session.status}"
-            logger.warning(error_msg)
-            return {"success": False, "error": error_msg}
-
-        # Initialize metrics calculator
-        calculator = TraceVisionMetricsCalculator()
-
-        # Calculate metrics for all players in session
-        metrics_result = calculator.calculate_metrics_for_session(session)
-
-        if not metrics_result['success']:
-            logger.error(
-                f"Failed to calculate metrics for session {session_id}")
-            return {"success": False, "error": "Metrics calculation failed", "details": metrics_result}
-
-        # Save metrics to card models - only for mapped users
-        saved_metrics = []
-        errors = []
-        skipped_unmapped = []
-
-        for player_metrics in metrics_result['metrics_calculated']:
-            try:
-                object_id = player_metrics['object_id']
-                side = player_metrics['side']
-                metrics = player_metrics['metrics']
-
-                # Find the trace player to check if they're mapped to a user
-                try:
-                    trace_player = session.trace_players.get(
-                        object_id=object_id)
-                    user = trace_player.user
-
-                    # Skip if player is not mapped to a user
-                    if not user:
-                        skipped_unmapped.append({
-                            'object_id': object_id,
-                            'player_name': trace_player.name,
-                            'jersey_number': trace_player.jersey_number,
-                            'reason': 'Player not mapped to user'
-                        })
-                        logger.info(
-                            f"Skipping metrics calculation for unmapped player {object_id} ({trace_player.name})")
-                        continue
-
-                except TracePlayer.DoesNotExist:
-                    # If trace player doesn't exist, skip this player
-                    logger.warning(
-                        f"TracePlayer not found for object_id {object_id}, skipping")
-                    skipped_unmapped.append({
-                        'object_id': object_id,
-                        'reason': 'TracePlayer not found'
-                    })
-                    continue
-
-                game_id = f"TV_{session.session_id}"
-                game, _ = Game.objects.get_or_create(
-                    id=game_id,
-                    defaults={
-                        'type': 'match',
-                        'name': f"TraceVision Session {session.session_id}",
-                        'date': session.match_date,
-                    }
-                )
-
-                # Save Attacking Skills metrics
-                if 'attacking_skills' in metrics:
-                    AttackingSkills.objects.update_or_create(
-                        user=user,
-                        game=game,
-                        defaults={
-                            'metrics': metrics['attacking_skills'],
-                            'updated_on': timezone.now()
-                        }
-                    )
-                    saved_metrics.append(
-                        f"AttackingSkills for {object_id} ({trace_player.name})")
-
-                # Save Defensive Skills metrics
-                if 'defensive_skills' in metrics:
-                    VideoCardDefensive.objects.update_or_create(
-                        user=user,
-                        game=game,
-                        defaults={
-                            'metrics': metrics['defensive_skills'],
-                            'updated_on': timezone.now()
-                        }
-                    )
-                    saved_metrics.append(
-                        f"VideoCardDefensive for {object_id} ({trace_player.name})")
-
-                # Save GPS Athletic Skills metrics
-                if 'gps_athletic_skills' in metrics:
-                    GPSAthleticSkills.objects.update_or_create(
-                        user=user,
-                        game=game,
-                        defaults={
-                            'metrics': metrics['gps_athletic_skills'],
-                            'updated_on': timezone.now()
-                        }
-                    )
-                    saved_metrics.append(
-                        f"GPSAthleticSkills for {object_id} ({trace_player.name})")
-
-                # Save GPS Football Abilities metrics
-                if 'gps_football_abilities' in metrics:
-                    GPSFootballAbilities.objects.update_or_create(
-                        user=user,
-                        game=game,
-                        defaults={
-                            'metrics': metrics['gps_football_abilities'],
-                            'updated_on': timezone.now()
-                        }
-                    )
-                    saved_metrics.append(
-                        f"GPSFootballAbilities for {object_id} ({trace_player.name})")
-
-                logger.info(
-                    f"Saved metrics for player {object_id} ({trace_player.name}) -> user: {user.phone_no}")
-
-            except Exception as e:
-                error_msg = f"Error saving metrics for {object_id}: {str(e)}"
-                logger.exception(error_msg)
-                errors.append(error_msg)
-
-        # Create success notification if any metrics were saved
-        if saved_metrics:
-            try:
-                create_silent_notification(session)
-            except Exception as e:
-                logger.exception(
-                    f"Error creating notification for session {session_id}: {e}")
-
-        result = {
-            "success": True,
-            "session_id": session_id,
-            "total_players": len(metrics_result['metrics_calculated']),
-            "mapped_players_processed": len(saved_metrics),
-            "unmapped_players_skipped": len(skipped_unmapped),
-            "metrics_saved": saved_metrics,
-            "skipped_unmapped": skipped_unmapped,
-            "errors": errors,
-            "calculation_details": metrics_result
-        }
-
-        logger.info(f"Card metrics calculation completed for session {session_id}. "
-                    f"Total players: {len(metrics_result['metrics_calculated'])}, "
-                    f"Mapped players processed: {len(saved_metrics)}, "
-                    f"Unmapped players skipped: {len(skipped_unmapped)}, "
-                    f"Errors: {len(errors)}")
-
-        return result
-
-    except Exception as e:
-        error_msg = f"Error in calculate_card_metrics_task for session {session_id}: {str(e)}"
-        logger.exception(error_msg)
-        return {"success": False, "error": error_msg}
-
-
-@shared_task
-def bulk_calculate_card_metrics_task(session_ids=None, lookback_days=7):
-    """
-    Bulk calculate card metrics for multiple sessions.
-    Useful for backfilling metrics or processing multiple sessions at once.
-
-    Args:
-        session_ids (list, optional): Specific session IDs to process
-        lookback_days (int): Days to look back for unprocessed sessions
-
-    Returns:
-        dict: Bulk processing results
-    """
-    try:
-        from django.utils import timezone
-        from datetime import timedelta
-        from tracevision.models import TraceSession
-
-        if session_ids:
-            # Process specific sessions
-            sessions = TraceSession.objects.filter(
-                session_id__in=session_ids, status='processed')
-            logger.info(
-                f"Bulk processing {len(session_ids)} specific sessions")
-        else:
-            # Find recent processed sessions
-            cutoff = timezone.now() - timedelta(days=lookback_days)
-            sessions = TraceSession.objects.filter(
-                status='processed',
-                updated_at__gte=cutoff
-            ).order_by('-updated_at')
-            logger.info(
-                f"Bulk processing sessions from last {lookback_days} days")
-
-        if not sessions.exists():
-            return {"success": True, "message": "No sessions found to process"}
-
-        # Process each session
-        results = []
-        total_processed = 0
-        total_errors = 0
-
-        for session in sessions:
-            try:
-                # Enqueue individual task
-                result = calculate_card_metrics_task.delay(session.session_id)
-                results.append({
-                    'session_id': session.session_id,
-                    'task_id': result.id,
-                    'status': 'enqueued'
-                })
-                total_processed += 1
-
-            except Exception as e:
-                logger.exception(
-                    f"Error enqueuing metrics calculation for session {session.session_id}: {e}")
-                results.append({
-                    'session_id': session.session_id,
-                    'status': 'error',
-                    'error': str(e)
-                })
-                total_errors += 1
-
-        return {
-            "success": True,
-            "total_sessions": sessions.count(),
-            "processed": total_processed,
-            "errors": total_errors,
-            "results": results
-        }
-
-    except Exception as e:
-        error_msg = f"Error in bulk_calculate_card_metrics_task: {str(e)}"
-        logger.exception(error_msg)
-        return {"success": False, "error": error_msg}
-
-
-@shared_task
 def map_players_to_users_task(session_id):
     """
     Map TracePlayer objects to WajoUser objects based on jersey numbers, names, etc.
@@ -1555,16 +1252,6 @@ def map_players_to_users_task(session_id):
         logger.info(
             f"Successfully mapped {mapped_count}/{unmapped_players.count()} players to users")
 
-        # Trigger card metrics calculation for newly mapped players
-        if mapped_count > 0:
-            try:
-                calculate_card_metrics_task.delay(session_id)
-                logger.info(
-                    f"Queued card metrics calculation for session {session_id} after mapping {mapped_count} players")
-            except Exception as e:
-                logger.exception(
-                    f"Failed to enqueue card metrics calculation for session {session_id}: {e}")
-
         return {
             "success": True,
             "session_id": session_id,
@@ -1577,93 +1264,6 @@ def map_players_to_users_task(session_id):
 
     except Exception as e:
         error_msg = f"Error in map_players_to_users_task for session {session_id}: {str(e)}"
-        logger.exception(error_msg)
-        return {"success": False, "error": error_msg}
-
-
-@shared_task
-def calculate_metrics_for_unmapped_players_task(session_id=None, lookback_days=7):
-    """
-    Calculate card metrics for players that were previously unmapped but are now mapped.
-    This task can be run periodically or triggered when new player mappings are created.
-
-    Args:
-        session_id (str, optional): Specific session ID to process
-        lookback_days (int): Days to look back for sessions with unmapped players
-
-    Returns:
-        dict: Task results with success status and details
-    """
-    try:
-        from django.utils import timezone
-        from datetime import timedelta
-        from tracevision.models import TraceSession, TracePlayer
-
-        if session_id:
-            # Process specific session
-            sessions = TraceSession.objects.filter(
-                session_id=session_id, status='processed')
-            logger.info(
-                f"Processing specific session {session_id} for unmapped player metrics")
-        else:
-            # Find recent sessions with unmapped players
-            cutoff = timezone.now() - timedelta(days=lookback_days)
-            sessions = TraceSession.objects.filter(
-                status='processed',
-                updated_at__gte=cutoff
-            ).order_by('-updated_at')
-            logger.info(
-                f"Processing sessions from last {lookback_days} days for unmapped player metrics")
-
-        if not sessions.exists():
-            return {"success": True, "message": "No sessions found to process"}
-
-        total_processed = 0
-        total_errors = 0
-        results = []
-
-        for session in sessions:
-            try:
-                # Find players that are now mapped but might not have metrics calculated
-                newly_mapped_players = session.trace_players.filter(
-                    user__isnull=False,
-                    # You could add additional criteria here to identify players that need metrics
-                )
-
-                if newly_mapped_players.exists():
-                    # Trigger card metrics calculation for this session
-                    result = calculate_card_metrics_task.delay(
-                        session.session_id)
-                    results.append({
-                        'session_id': session.session_id,
-                        'mapped_players_count': newly_mapped_players.count(),
-                        'task_id': result.id,
-                        'status': 'enqueued'
-                    })
-                    total_processed += 1
-                    logger.info(
-                        f"Queued metrics calculation for session {session.session_id} with {newly_mapped_players.count()} mapped players")
-
-            except Exception as e:
-                logger.exception(
-                    f"Error processing session {session.session_id}: {e}")
-                results.append({
-                    'session_id': session.session_id,
-                    'status': 'error',
-                    'error': str(e)
-                })
-                total_errors += 1
-
-        return {
-            "success": True,
-            "total_sessions": sessions.count(),
-            "processed": total_processed,
-            "errors": total_errors,
-            "results": results
-        }
-
-    except Exception as e:
-        error_msg = f"Error in calculate_metrics_for_unmapped_players_task: {str(e)}"
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}
 
@@ -2131,46 +1731,61 @@ def parse_excel_match_data(excel_file_path, session):
 
         match_data['player_mappings'] = player_mappings
 
+
+        # INSERT_YOUR_CODE
+        # Write match_data to a JSON file for inspection
+        try:
+            import os
+            import json
+            output_dir = os.path.dirname(excel_file_path)
+            output_json_path = os.path.join(
+                output_dir, f"{getattr(session, 'session_id', 'session')}_parsed_match_data.json")
+            with open(output_json_path, "w", encoding="utf-8") as f:
+                json.dump(match_data, f, indent=2, ensure_ascii=False)
+            logger.info(f"Parsed match data written to {output_json_path}")
+        except Exception as e:
+            logger.error(f"Failed to write match_data to JSON: {e}")
+
         # Extract events from match data
-        events = []
+        # events = []
 
-        # From starting lineups
-        for player in match_data['starting_lineups']:
-            events.extend(extract_player_events(
-                player, session, source="starting_lineup"))
+        # # From starting lineups
+        # for player in match_data['starting_lineups']:
+        #     events.extend(extract_player_events(
+        #         player, session, source="starting_lineup"))
 
-        # From replacements
-        for player in match_data['replacements']:
-            events.extend(extract_player_events(
-                player, session, source="replacement"))
+        # # From replacements
+        # for player in match_data['replacements']:
+        #     events.extend(extract_player_events(
+        #         player, session, source="replacement"))
 
-        # From bench
-        for player in match_data['bench']:
-            events.extend(extract_player_events(
-                player, session, source="bench"))
+        # # From bench
+        # for player in match_data['bench']:
+        #     events.extend(extract_player_events(
+        #         player, session, source="bench"))
 
-        for event in events:
-            # If 'minute' is missing, provide a default or skip
-            if 'minute' not in event or event['minute'] is None:
-                event['minute'] = 0  # or any default value you want
+        # for event in events:
+        #     # If 'minute' is missing, provide a default or skip
+        #     if 'minute' not in event or event['minute'] is None:
+        #         event['minute'] = 0  # or any default value you want
 
-            # Now safely add match_time
-            if 'match_time' not in event:
-                event['match_time'] = f"{event['minute']}:00"
+        #     # Now safely add match_time
+        #     if 'match_time' not in event:
+        #         event['match_time'] = f"{event['minute']}:00"
 
-            if 'event_metadata' not in event:
-                event['event_metadata'] = {
-                    'player_name': event.get('player_name', ''),
-                    'minute': event['minute'],
-                    'match_time': event['match_time'],
-                    'team_side': event.get('team_side', ''),
-                    'team_name': event.get('team_name', ''),
-                    'category': event.get('category', event.get('type', ''))
-                }
+        #     if 'event_metadata' not in event:
+        #         event['event_metadata'] = {
+        #             'player_name': event.get('player_name', ''),
+        #             'minute': event['minute'],
+        #             'match_time': event['match_time'],
+        #             'team_side': event.get('team_side', ''),
+        #             'team_name': event.get('team_name', ''),
+        #             'category': event.get('category', event.get('type', ''))
+        #         }
 
-        match_data['events'] = events
-        logger.info(
-            f"Parsed {len(events)} events and {len(player_mappings)} player mappings from Excel file")
+        # match_data['events'] = events
+        # logger.info(
+        #     f"Parsed {len(events)} events and {len(player_mappings)} player mappings from Excel file")
         return match_data
 
     except Exception as e:

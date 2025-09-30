@@ -20,10 +20,6 @@ app.conf.timezone = 'UTC'
 
 # Periodic schedules
 app.conf.beat_schedule = getattr(settings, 'CELERY_BEAT_SCHEDULE', {
-    # 'tracevision-aggregate-reconcile-every-15m': {
-    #     'task': 'tracevision.reconcile_aggregates_for_processed_sessions',
-    #     'schedule': 15 * 60,  # seconds
-    # },
     # Process TraceVision sessions every 2 hours, starting immediately
     'tracevision-process-sessions-every-2h': {
         'task': 'tracevision.tasks.process_trace_sessions_task',

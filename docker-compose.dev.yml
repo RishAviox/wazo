@@ -2,6 +2,8 @@ version: '3.9'
 
 services:
 
+  wajo-redis:
+    ports: !reset []
   wajo-postgres:
     image: postgres:15
     environment:
@@ -18,9 +20,6 @@ services:
       timeout: 5s
       retries: 5
 
-  wajo-redis:
-    ports: []
-
   django:
     environment:
       - django-settings-module=wajo_backend.settings
@@ -28,7 +27,7 @@ services:
     entrypoint: ""
     # command: python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000
     command: python manage.py runserver 0.0.0.0:8000 --settings=wajo_backend.settings_dev
-    ports:
+    ports: !override
       - "8003:8000"
     volumes:
       - .:/app

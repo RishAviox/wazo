@@ -11,7 +11,7 @@ from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
 from tracevision.tasks import download_video_and_save_to_azure_blob, generate_overlay_highlights_task
-from datetime import datetime 
+from datetime import datetime
 from datetime import timedelta
 
 
@@ -34,10 +34,10 @@ GRAPHQL_URL = settings.TRACEVISION_GRAPHQL_URL
 class TraceVisionProcessesList(ListAPIView):
     serializer_class = TraceSessionListSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         return TraceSession.objects.filter(user=self.request.user).order_by('-updated_at', '-created_at')
-    
+
     def get_paginated_response(self, data):
         """
         Override to add custom response format
@@ -86,7 +86,7 @@ class TraceVisionProcessView(APIView):
 
             # Extract validated data
             video_link = serializer.validated_data.get('video_link')
-            video_file = serializer.validated_data.get('video_file')
+            # video_file = serializer.validated_data.get('video_file') # TODO: For video upload instead of video URL.
             home_team = serializer.validated_data['home_team_name']
             away_team = serializer.validated_data['away_team_name']
             home_color = serializer.validated_data['home_team_jersey_color']
@@ -95,43 +95,52 @@ class TraceVisionProcessView(APIView):
             start_time = serializer.validated_data.get('start_time')
             # Get age_group with SENIOR as fallback
             age_group = serializer.validated_data.get('age_group') or 'SENIOR'
-            
+
             # Handle custom pitch dimensions
             pitch_length = serializer.validated_data.get('pitch_length')
             pitch_width = serializer.validated_data.get('pitch_width')
-            match_start_time = serializer.validated_data.get('match_start_time')
-            first_half_end_time = serializer.validated_data.get('first_half_end_time')
-            second_half_start_time = serializer.validated_data.get('second_half_start_time')
+            match_start_time = serializer.validated_data.get(
+                'match_start_time')
+            first_half_end_time = serializer.validated_data.get(
+                'first_half_end_time')
+            second_half_start_time = serializer.validated_data.get(
+                'second_half_start_time')
             match_end_time = serializer.validated_data.get('match_end_time')
-            basic_game_stats = serializer.validated_data.get('basic_game_stats')
+            basic_game_stats = serializer.validated_data.get(
+                'basic_game_stats')
             print(type(basic_game_stats))
-            
+
             # Set pitch size (custom or default based on age group)
             if pitch_length and pitch_width:
                 pitch_size = {'length': pitch_length, 'width': pitch_width}
             else:
                 # Use default pitch size for the age group
                 from tracevision.models import TraceSession
-                pitch_size = TraceSession.DEFAULT_PITCH_SIZES.get(age_group, TraceSession.DEFAULT_PITCH_SIZES['SENIOR'])
-            
+                pitch_size = TraceSession.DEFAULT_PITCH_SIZES.get(
+                    age_group, TraceSession.DEFAULT_PITCH_SIZES['SENIOR'])
+
             # Parse the final score to get individual team scores
             home_score, away_score = map(int, final_score_str.split('-'))
 
-            logger.info("Getting or creating Team objects...")          
-            # Get or create home team using name and jersey color as unique identifier
+            logger.info("Getting or creating Team objects...")
+            # Generate team IDs based on team names (first 10 chars, uppercase, alphanumeric only)
+            home_team_id = ''.join(
+                c for c in home_team.upper() if c.isalnum())[:10]
+            away_team_id = ''.join(
+                c for c in away_team.upper() if c.isalnum())[:10]
+
+            # Get or create home team using generated ID
             home_team_obj, _ = Team.objects.get_or_create(
-                name=home_team,
-                jersey_color=home_color,
+                id=home_team_id,
                 defaults={
                     'name': home_team,
                     'jersey_color': home_color
                 }
             )
-            
-            # Get or create team
+
+            # Get or create away team using generated ID
             away_team_obj, _ = Team.objects.get_or_create(
-                name=away_team,
-                jersey_color=away_color,
+                id=away_team_id,
                 defaults={
                     'name': away_team,
                     'jersey_color': away_color
@@ -139,7 +148,7 @@ class TraceVisionProcessView(APIView):
             )
 
             # Step 2: Create TraceVision session
-            logger.info("Creating TraceVision session...")
+            # logger.info("Creating TraceVision session...")
             # session_payload = {
             #     "query": """
             #         mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
@@ -178,7 +187,7 @@ class TraceVisionProcessView(APIView):
             #     GRAPHQL_URL, headers={"Content-Type": "application/json"}, json=session_payload)
             # session_json = session_response.json()
             # logger.debug("Session response: %s", session_json)
-             
+
             # if session_response.status_code != 200 or not session_json.get("data", {}).get("createSession", {}).get("success"):
             #     return Response({
             #         "error": "TraceVision session creation failed",
@@ -278,8 +287,6 @@ class TraceVisionProcessView(APIView):
 
             #     video_url_for_db = upload_url
 
-                    
-
             # Save session to DB
             logger.info("Saving session data to DB...")
             session = TraceSession.objects.create(
@@ -295,7 +302,7 @@ class TraceVisionProcessView(APIView):
                 final_score=final_score_str,
                 start_time=start_time,
                 video_url="video_url_for_db",
-                status="waiting_for_data", # Set initial status
+                status="waiting_for_data",  # Set initial status
                 match_start_time=match_start_time,
                 first_half_end_time=first_half_end_time,
                 second_half_start_time=second_half_start_time,
@@ -528,7 +535,8 @@ class TraceVisionSessionResultView(APIView):
                 "details": "No TraceVision session found with the given ID for this user"
             }, status=http_status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.exception(f"Error while fetching TraceVision session result: {str(e)}")
+            logger.exception(
+                f"Error while fetching TraceVision session result: {str(e)}")
             return Response({
                 "error": "Internal server error",
                 "details": str(e)
@@ -548,25 +556,25 @@ class TraceVisionPlayerStatsView(APIView):
         try:
             # Get the session for the authenticated user
             session = TraceSession.objects.get(id=pk, user=request.user)
-            
+
             # Check if session is processed
             if session.status != "processed":
                 return Response({
                     "error": "Session is not processed yet",
                     "details": f"Current status: {session.status}. Wait for processing to complete."
                 }, status=http_status.HTTP_400_BAD_REQUEST)
-            
+
             # Check if session has trace objects
             if not session.trace_objects.exists():
                 return Response({
                     "error": "No trace objects found",
                     "details": "Session must have trace objects before calculating stats."
                 }, status=http_status.HTTP_400_BAD_REQUEST)
-            
+
             # Trigger async stats calculation
             from tracevision.tasks import calculate_player_stats_task
             task = calculate_player_stats_task.delay(session.session_id)
-            
+
             return Response({
                 "success": True,
                 "message": "Player stats calculation started",
@@ -574,14 +582,15 @@ class TraceVisionPlayerStatsView(APIView):
                 "session_id": session.session_id,
                 "status": "processing"
             }, status=http_status.HTTP_202_ACCEPTED)
-                
+
         except TraceSession.DoesNotExist:
             return Response({
                 "error": "Session not found",
                 "details": "No TraceVision session found with the given ID for this user"
             }, status=http_status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.exception(f"Error starting stats calculation for session {pk}: {str(e)}")
+            logger.exception(
+                f"Error starting stats calculation for session {pk}: {str(e)}")
             return Response({
                 "error": "Internal server error",
                 "details": str(e)
@@ -594,60 +603,61 @@ class TraceVisionPlayerStatsView(APIView):
         try:
             # Get the session for the authenticated user
             session = TraceSession.objects.get(id=pk, user=request.user)
-            
+
             # Get player stats
             from tracevision.models import TraceVisionPlayerStats
             player_stats = TraceVisionPlayerStats.objects.filter(
                 session=session
             ).order_by('-performance_score')
-            
+
             if not player_stats.exists():
                 return Response({
                     "success": False,
                     "error": "No player stats found",
                     "details": "Player statistics have not been calculated yet. Use POST to trigger calculation."
                 }, status=http_status.HTTP_404_NOT_FOUND)
-            
+
             # Get session stats
             from tracevision.models import TraceVisionSessionStats
-            session_stats = TraceVisionSessionStats.objects.filter(session=session).first()
-            
+            session_stats = TraceVisionSessionStats.objects.filter(
+                session=session).first()
+
             # Format player stats for response
             stats_data = []
             for stats in player_stats:
                 stats_data.append({
                     'object_id': stats.object_id,
                     'side': stats.side,
-                    
+
                     # Movement stats
                     'total_distance_meters': stats.total_distance_meters,
                     'avg_speed_mps': stats.avg_speed_mps,
                     'max_speed_mps': stats.max_speed_mps,
                     'total_time_seconds': stats.total_time_seconds,
                     'distance_per_minute': stats.distance_per_minute,
-                    
+
                     # Sprint stats
                     'sprint_count': stats.sprint_count,
                     'sprint_distance_meters': stats.sprint_distance_meters,
                     'sprint_time_seconds': stats.sprint_time_seconds,
                     'sprint_percentage': stats.sprint_percentage,
-                    
+
                     # Position stats
                     'avg_position_x': stats.avg_position_x,
                     'avg_position_y': stats.avg_position_y,
                     'position_variance': stats.position_variance,
-                    
+
                     # Performance metrics
                     'performance_score': stats.performance_score,
                     'stamina_rating': stats.stamina_rating,
                     'work_rate': stats.work_rate,
-                    
+
                     # Metadata
                     'calculation_method': stats.calculation_method,
                     'calculation_version': stats.calculation_version,
                     'last_calculated': stats.last_calculated.isoformat() if stats.last_calculated else None
                 })
-            
+
             # Format session stats
             session_stats_data = None
             if session_stats:
@@ -659,7 +669,7 @@ class TraceVisionPlayerStatsView(APIView):
                     'home_team_stats': session_stats.home_team_stats,
                     'away_team_stats': session_stats.away_team_stats
                 }
-            
+
             return Response({
                 "success": True,
                 "session_id": session.session_id,
@@ -668,14 +678,15 @@ class TraceVisionPlayerStatsView(APIView):
                 "session_stats": session_stats_data,
                 "fetched_at": datetime.now().isoformat()
             }, status=http_status.HTTP_200_OK)
-                
+
         except TraceSession.DoesNotExist:
             return Response({
                 "error": "Session not found",
                 "details": "No TraceVision session found with the given ID for this user"
             }, status=http_status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.exception(f"Error getting player stats for session {pk}: {str(e)}")
+            logger.exception(
+                f"Error getting player stats for session {pk}: {str(e)}")
             return Response({
                 "error": "Internal server error",
                 "details": str(e)
@@ -695,7 +706,7 @@ class TraceVisionPlayerStatsDetailView(APIView):
         try:
             # Get the session for the authenticated user
             session = TraceSession.objects.get(id=pk, user=request.user)
-            
+
             # Get player stats
             from tracevision.models import TraceVisionPlayerStats
             try:
@@ -708,10 +719,10 @@ class TraceVisionPlayerStatsDetailView(APIView):
                     "error": "Player stats not found",
                     "details": f"No statistics found for player {player_id} in session {session.session_id}"
                 }, status=http_status.HTTP_404_NOT_FOUND)
-            
+
             # Get heatmap data
             heatmap_data = player_stats.heatmap_data
-            
+
             # Format detailed response
             detailed_stats = {
                 'player_id': player_stats.player.id,
@@ -720,7 +731,7 @@ class TraceVisionPlayerStatsDetailView(APIView):
                 'team_name': player_stats.team.name,
                 'jersey_number': player_stats.player_mapping.jersey_number,
                 'side': player_stats.player_mapping.side,
-                
+
                 # Comprehensive movement analysis
                 'movement_analysis': {
                     'total_distance_meters': player_stats.total_distance_meters,
@@ -734,7 +745,7 @@ class TraceVisionPlayerStatsDetailView(APIView):
                         'speed_efficiency': (player_stats.avg_speed_mps / player_stats.max_speed_mps * 100) if player_stats.max_speed_mps > 0 else 0
                     }
                 },
-                
+
                 # Sprint analysis
                 'sprint_analysis': {
                     'sprint_count': player_stats.sprint_count,
@@ -744,7 +755,7 @@ class TraceVisionPlayerStatsDetailView(APIView):
                     'avg_sprint_distance': player_stats.sprint_distance_meters / player_stats.sprint_count if player_stats.sprint_count > 0 else 0,
                     'avg_sprint_duration': player_stats.sprint_time_seconds / player_stats.sprint_count if player_stats.sprint_count > 0 else 0
                 },
-                
+
                 # Position and tactical analysis
                 'position_analysis': {
                     'avg_position_x': player_stats.avg_position_x,
@@ -755,7 +766,7 @@ class TraceVisionPlayerStatsDetailView(APIView):
                         'y_range': player_stats.position_variance * 2
                     }
                 },
-                
+
                 # Performance metrics
                 'performance_metrics': {
                     'overall_score': player_stats.performance_score,
@@ -763,10 +774,10 @@ class TraceVisionPlayerStatsDetailView(APIView):
                     'work_rate': player_stats.work_rate,
                     'fitness_index': (player_stats.stamina_rating + player_stats.work_rate) / 2
                 },
-                
+
                 # Heatmap visualization data
                 'heatmap_data': heatmap_data,
-                
+
                 # Metadata
                 'calculation_info': {
                     'method': player_stats.calculation_method,
@@ -774,31 +785,25 @@ class TraceVisionPlayerStatsDetailView(APIView):
                     'last_calculated': player_stats.last_calculated.isoformat() if player_stats.last_calculated else None
                 }
             }
-            
+
             return Response({
                 "success": True,
                 "session_id": session.session_id,
                 "player_stats": detailed_stats
             }, status=http_status.HTTP_200_OK)
-                
+
         except TraceSession.DoesNotExist:
             return Response({
                 "error": "Session not found",
                 "details": "No TraceVision session found with the given ID for this user"
             }, status=http_status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.exception(f"Error getting detailed player stats for session {pk}, player {player_id}: {str(e)}")
+            logger.exception(
+                f"Error getting detailed player stats for session {pk}, player {player_id}: {str(e)}")
             return Response({
                 "error": "Internal server error",
                 "details": str(e)
             }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-
-     
-
-
-    
-
 
 
 class GetTracePlayerReelsView(APIView):
@@ -936,7 +941,7 @@ class GetTracePlayerReelsView(APIView):
                 "second_half_start_time": session.second_half_start_time,
                 "match_end_time": session.match_end_time,
                 "basic_game_stats": session.basic_game_stats.url if session.basic_game_stats else None,
-               
+
             })
 
         # ---------- Pagination ----------
@@ -944,7 +949,8 @@ class GetTracePlayerReelsView(APIView):
         paginator.page_size = 10
         paginated_clipreels = paginator.paginate_queryset(clipreels, request)
 
-        data["count"] = paginator.page.paginator.count if paginator.page else len(clipreels)
+        data["count"] = paginator.page.paginator.count if paginator.page else len(
+            clipreels)
         data["next"] = paginator.get_next_link()
         data["previous"] = paginator.get_previous_link()
 
@@ -955,32 +961,36 @@ class CoachViewSpecificTeamPlayers(APIView):
     def get(self, request):
         if not request.user.is_authenticated:
             return Response(
-                {"error": "Unauthorized", "details": "You are not authorized to access this resource"},
-                
+                {"error": "Unauthorized",
+                    "details": "You are not authorized to access this resource"},
+
             )
         role = request.user.role
         if role == 'Coach':
             team = request.user.team
             players = team.players.all()
             print(players)
-            serializer = CoachViewSpecificTeamPlayersSerializer(players, many=True)
+            serializer = CoachViewSpecificTeamPlayersSerializer(
+                players, many=True)
             return Response(
                 {"success": True, "players": serializer.data},
-                
+
             )
         else:
             return Response(
-                {"error": "Unauthorized", "details": "You are not authorized to access this resource"},
-                
+                {"error": "Unauthorized",
+                    "details": "You are not authorized to access this resource"},
+
             )
-        
+
 
 class GeneratingAgainClipReelsView(APIView):
     def post(self, request):
         if not request.user.is_authenticated:
             return Response(
-                {"error": "Unauthorized", "details": "You are not authorized to access this resource"},
-                
+                {"error": "Unauthorized",
+                    "details": "You are not authorized to access this resource"},
+
             )
         role = request.user.role
         if role == 'User':
@@ -991,7 +1001,7 @@ class GeneratingAgainClipReelsView(APIView):
             clip_reel.save()
             return Response(
                 {"success": True, "message": "Clip reel generation started"},
-                
+
             )
         if role == 'Coach':
             team = request.user.team
@@ -1000,9 +1010,10 @@ class GeneratingAgainClipReelsView(APIView):
                 clip_reels = player.primary_clip_reels.all()
                 for clip_reel in clip_reels:
                     clip_reel.generation_status = 'pending'
-                    generate_overlay_highlights_task.delay(None, [clip_reel.id])
+                    generate_overlay_highlights_task.delay(
+                        None, [clip_reel.id])
                     clip_reel.save()
             return Response(
                 {"success": True, "message": "Clip reel generation started"},
-                
+                status=http_status.HTTP_200_OK
             )

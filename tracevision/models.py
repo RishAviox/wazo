@@ -1,4 +1,3 @@
-import uuid
 from django.db import models
 from teams.models import Team
 from accounts.models import WajoUser
@@ -28,7 +27,7 @@ class TraceSession(models.Model):
         'SENIOR': {'length': 105, 'width': 68},  # Standard FIFA pitch size
     }
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     user = models.ForeignKey(WajoUser, on_delete=models.CASCADE)
     session_id = models.CharField(max_length=250)
     match_date = models.DateField()
@@ -132,7 +131,7 @@ class TraceSession(models.Model):
 
 
 class TracePlayer(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     object_id = models.CharField(
         max_length=100,
         help_text="Unique identifier from TraceVision API",
@@ -242,7 +241,7 @@ class TraceHighlight(models.Model):
         ('ai_detection', 'AI Detection'),
     ]
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     highlight_id = models.CharField(
         max_length=100, unique=True, help_text="Unique identifier for the highlight")
     video_id = models.PositiveIntegerField(
@@ -419,7 +418,7 @@ class TraceObject(models.Model):
     """
     Model to store object data from the TraceVision API
     """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     object_id = models.CharField(
         max_length=120, help_text="Unique identifier for the object")
     type = models.CharField(max_length=100, help_text="Type of the object")
@@ -467,7 +466,7 @@ class TraceHighlightObject(models.Model):
     """
     Many-to-many relationship between highlights and objects
     """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     highlight = models.ForeignKey(
         TraceHighlight, on_delete=models.CASCADE, related_name='highlight_objects')
     trace_object = models.ForeignKey(
@@ -497,7 +496,7 @@ class TraceVisionPlayerStats(models.Model):
     Calculated performance statistics for individual players in a session
     Generated from tracking data and highlights analysis
     """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
 
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='session_player_stats', null=True, blank=True)
@@ -586,7 +585,7 @@ class TraceVisionSessionStats(models.Model):
     """
     Aggregated statistics for entire session (team-level insights)
     """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='session_stats')
 
@@ -633,7 +632,7 @@ class TraceVisionSessionStats(models.Model):
 
 
 class TraceCoachReportTeam(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='coach_report_team')
     side = models.CharField(max_length=10)
@@ -653,7 +652,7 @@ class TraceCoachReportTeam(models.Model):
 
 
 class TraceTouchLeaderboard(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='touch_leaderboard')
     player = models.ForeignKey(
@@ -673,7 +672,7 @@ class TraceTouchLeaderboard(models.Model):
 
 
 class TracePossessionSegment(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='possession_segments')
     side = models.CharField(max_length=10)
@@ -720,7 +719,7 @@ class TraceClipReel(models.Model):
         ('skipped', 'Skipped'),
     ]
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
 
     # Core highlight information
     session = models.ForeignKey(
@@ -961,7 +960,7 @@ class TraceClipReel(models.Model):
 
 
 class TracePass(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='passes')
     side = models.CharField(max_length=10)
@@ -985,7 +984,7 @@ class TracePass(models.Model):
 
 
 class TracePassingNetwork(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     session = models.ForeignKey(
         TraceSession, on_delete=models.CASCADE, related_name='passing_network')
     side = models.CharField(max_length=10)
@@ -1005,3 +1004,80 @@ class TracePassingNetwork(models.Model):
         ]
         verbose_name = 'Passing Network Edge'
         verbose_name_plural = 'Passing Network Edges'
+
+
+class TracePossessionStats(models.Model):
+    """
+    Unified model to store possession statistics for both teams and players.
+    Uses 'type' field to distinguish between team and player stats.
+    All metrics are stored in a single JSON field for maximum flexibility.
+    For a game: 1 row per team + 1 row per player = multiple rows per session.
+    """
+    POSSESSION_TYPE_CHOICES = [
+        ('team', 'Team'),
+        ('player', 'Player'),
+    ]
+    
+    id = models.AutoField(primary_key=True)
+    session = models.ForeignKey(
+        TraceSession, on_delete=models.CASCADE, related_name='possession_stats')
+    possession_type = models.CharField(max_length=10, choices=POSSESSION_TYPE_CHOICES)
+    
+    # For team stats
+    team = models.ForeignKey(
+        'teams.Team', on_delete=models.CASCADE, related_name='possession_stats', 
+        null=True, blank=True)
+    side = models.CharField(max_length=10, choices=[('home', 'Home'), ('away', 'Away')], 
+                           null=True, blank=True)
+    
+    # For player stats
+    player = models.ForeignKey(
+        TracePlayer, on_delete=models.CASCADE, related_name='possession_stats',
+        null=True, blank=True)
+    
+    # Single JSON field for all metrics - maximum flexibility
+    metrics = models.JSONField(
+        default=dict, 
+        help_text="All possession metrics stored in JSON format. Structure varies by type: team metrics include possession_percentage, total_possessions, etc. Player metrics include touches_in_possession, involvement_percentage, etc."
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [
+            ['session', 'possession_type', 'team', 'side'],  # For team stats
+            ['session', 'possession_type', 'player']         # For player stats
+        ]
+        indexes = [
+            models.Index(fields=['session', 'possession_type']),
+            models.Index(fields=['session', 'possession_type', 'team']),
+            models.Index(fields=['session', 'possession_type', 'player']),
+        ]
+        verbose_name = 'Possession Stats'
+        verbose_name_plural = 'Possession Stats'
+
+    def __str__(self):
+        if self.possession_type == 'team':
+            possession_pct = self.metrics.get('possession_percentage', 0.0)
+            return f"{self.team.name} ({self.side}) - {possession_pct:.1f}% possession"
+        else:
+            involvement_pct = self.metrics.get('involvement_percentage', 0.0)
+            return f"{self.player.name} - {involvement_pct:.1f}% involvement"
+    
+    # Helper methods for easy access to common metrics
+    def get_possession_percentage(self):
+        """Get possession percentage for team stats"""
+        return self.metrics.get('possession_percentage', 0.0)
+    
+    def get_total_possessions(self):
+        """Get total possessions for team stats"""
+        return self.metrics.get('total_possessions', 0)
+    
+    def get_involvement_percentage(self):
+        """Get involvement percentage for player stats"""
+        return self.metrics.get('involvement_percentage', 0.0)
+    
+    def get_possessions_involved(self):
+        """Get possessions involved for player stats"""
+        return self.metrics.get('possessions_involved', 0)

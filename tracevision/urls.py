@@ -15,11 +15,11 @@ from .views import (
 
 urlpatterns = [
     path("processes/", TraceVisionProcessesList.as_view(), name="tracevision-processes-list"),
-    path("processes/<uuid:pk>/", TraceVisionProcessDetail.as_view(), name="tracevision-processes-detail"),
+    path("processes/<int:pk>/", TraceVisionProcessDetail.as_view(), name="tracevision-processes-detail"),
     path("process/", TraceVisionProcessView.as_view(), name="tracevision-process"),
-    path("process/result/<uuid:pk>/", TraceVisionProcessResultView.as_view(), name="tracevision-process-result"),
-    path("process/poll-status/<uuid:pk>/", TraceVisionPollStatusView.as_view(), name="tracevision-poll-status"),
-    path("session/result/<uuid:pk>/", TraceVisionSessionResultView.as_view(), name="tracevision-session-result"), # TODO: Remove this on prod
+    path("process/result/<int:pk>/", TraceVisionProcessResultView.as_view(), name="tracevision-process-result"),
+    path("process/poll-status/<int:pk>/", TraceVisionPollStatusView.as_view(), name="tracevision-poll-status"),
+    path("session/result/<int:pk>/", TraceVisionSessionResultView.as_view(), name="tracevision-session-result"), # TODO: Remove this on prod
     path("scheduler/status/", TraceVisionSchedulerStatusView.as_view(), name="tracevision-scheduler-status"),
     
     # Player stats endpoints

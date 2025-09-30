@@ -1168,3 +1168,76 @@ class TraceVisionAggregationService:
         """
         from .utils import convert_game_time_to_video_milliseconds as utils_convert
         return utils_convert(session, game_minute, game_second)
+
+
+def save_possession_calculation_results(session, team_possession_data, player_possession_data):
+    """
+    Save possession calculation results from your existing functions to the database.
+    Uses the unified TracePossessionStats model with single metrics JSON field.
+    Creates multiple rows per session: 1 per team + 1 per player.
+    
+    Args:
+        session: TraceSession instance
+        team_possession_data: dict with team possession stats
+        player_possession_data: dict with player involvement stats
+        
+    Returns:
+        dict: Save results with success status
+    """
+    try:
+        from .models import TracePossessionStats
+        logger = logging.getLogger(__name__)
+        
+        saved_team_stats = []
+        saved_player_stats = []
+        
+        # Save team possession stats (1 row per team)
+        for side, team_data in team_possession_data.items():
+            team = session.home_team if side == 'home' else session.away_team
+            if not team:
+                continue
+                
+            team_stats, created = TracePossessionStats.objects.update_or_create(
+                session=session,
+                possession_type='team',
+                team=team,
+                side=side,
+                defaults={
+                    'metrics': team_data  # Store all team data in single JSON field
+                }
+            )
+            saved_team_stats.append(team_stats)
+        
+        # Save player possession involvement stats (1 row per player)
+        for player_id, player_data in player_possession_data.items():
+            try:
+                player = session.trace_players.get(id=player_id)
+                
+                player_stats, created = TracePossessionStats.objects.update_or_create(
+                    session=session,
+                    possession_type='player',
+                    player=player,
+                    defaults={
+                        'metrics': player_data  # Store all player data in single JSON field
+                    }
+                )
+                saved_player_stats.append(player_stats)
+                
+            except Exception as e:
+                logger.warning(f"Error saving player possession stats for player {player_id}: {e}")
+                continue
+        
+        return {
+            'success': True,
+            'team_stats_saved': len(saved_team_stats),
+            'player_stats_saved': len(saved_player_stats),
+            'session_id': session.session_id
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error saving possession calculation results: {e}")
+        return {
+            'success': False,
+            'error': str(e),
+            'session_id': session.session_id
+        }
