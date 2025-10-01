@@ -37,7 +37,7 @@ services:
 
   wajo-celery-worker:
     environment:
-      - django-settings-module=wajo_backend.settings
+      - django-settings-module=wajo_backend.settings_dev
       - DJANGO_DATABASE=docker
     entrypoint: ""
     command: celery -A wajo_backend worker --loglevel=INFO

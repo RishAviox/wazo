@@ -18,9 +18,81 @@ from azure.storage.blob import BlobServiceClient, BlobType, ContentSettings
 from tracevision.services import TraceVisionService
 from tracevision.notification_service import NotificationService
 from tracevision.models import TraceSession, TraceObject, TraceHighlight, TraceHighlightObject, TracePlayer
-from tracevision.utils import TraceVisionStoragePaths, convert_game_time_to_video_milliseconds, determine_game_half_from_minute
+from tracevision.utils import TraceVisionStoragePaths, cleanup_temp_files, convert_game_time_to_video_milliseconds, determine_game_half_from_minute, determine_game_half_from_highlight_offset, download_excel_file_from_storage, parse_time_to_seconds
 
 logger = logging.getLogger(__name__)
+
+
+def should_include_highlight(highlight_data, session, player_map):
+    """
+    Determine if a highlight should be included based on relevance criteria.
+
+    Args:
+        highlight_data: Highlight data from TraceVision API
+        session: TraceSession instance
+        player_map: Dictionary mapping object_id to TracePlayer
+
+    Returns:
+        bool: True if highlight should be included, False otherwise
+    """
+
+    # Must have valid timing data
+    start_offset = highlight_data.get('start_offset', 0)
+    duration = highlight_data.get('duration', 0)
+    if start_offset < 0 or duration <= 0:
+        logger.debug(
+            f"Filtered out highlight {highlight_data.get('highlight_id')} - invalid timing")
+        return False
+
+    # Must have meaningful tags (not empty or generic)
+    # tags = highlight_data.get('tags', [])
+    # if not tags or len(tags) == 0:
+    #     logger.debug(f"Filtered out highlight {highlight_data.get('highlight_id')} - no tags")
+    #     return False
+
+    # Exclude highlights with very short duration (less than 1 second)
+    if duration < 1000:  # 1000ms = 1 second
+        logger.debug(
+            f"Filtered out highlight {highlight_data.get('highlight_id')} - too short ({duration}ms)")
+        return False
+
+    # Check if highlight is within game time bounds (if session has timing data)
+    if (session.match_start_time and session.match_end_time and
+            session.first_half_end_time and session.second_half_start_time):
+        game_start_ms = parse_time_to_seconds(
+            session.match_start_time) * 1000 if session.match_start_time else 0
+        game_end_ms = parse_time_to_seconds(
+            session.match_end_time) * 1000 if session.match_end_time else float('inf')
+        first_half_end_ms = parse_time_to_seconds(
+            session.first_half_end_time) * 1000 if session.first_half_end_time else float('inf')
+        second_half_start_ms = parse_time_to_seconds(
+            session.second_half_start_time) * 1000 if session.second_half_start_time else 0
+
+        # Check if highlight is before game start
+        if start_offset < game_start_ms:
+            logger.debug(
+                f"Filtered out highlight {highlight_data.get('highlight_id')} - before game start")
+            return False
+
+        # Check if highlight is after game end
+        if start_offset > game_end_ms:
+            logger.debug(
+                f"Filtered out highlight {highlight_data.get('highlight_id')} - after game end")
+            return False
+
+        # Check if highlight is during half-time break
+        if first_half_end_ms <= start_offset < second_half_start_ms:
+            logger.debug(
+                f"Filtered out highlight {highlight_data.get('highlight_id')} - during half-time")
+            return False
+
+    # Exclude highlights with suspicious or invalid data
+    highlight_id = highlight_data.get('highlight_id', '')
+    if not highlight_id or highlight_id.strip() == '':
+        logger.debug("Filtered out highlight - no highlight_id")
+        return False
+
+    return True
 
 
 def clean_record(record: dict) -> dict:
@@ -346,7 +418,8 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
             try:
                 # blob_service_client = BlobServiceClient.from_connection_string(
                 #     settings.AZURE_CONNECTION_STRING)
-                blob_service_client = BlobServiceClient(account_url=f"https://{settings.AZURE_CUSTOM_DOMAIN}", account_key=settings.AZURE_ACCOUNT_KEY)
+                blob_service_client = BlobServiceClient(
+                    account_url=f"https://{settings.AZURE_CUSTOM_DOMAIN}", account_key=settings.AZURE_ACCOUNT_KEY)
                 blob_client = blob_service_client.get_blob_client(
                     container=settings.AZURE_CONTAINER_NAME, blob=blob_path)
                 logger.info(
@@ -759,7 +832,20 @@ def parse_and_store_session_data(session, result_data):
 
             logger.info(f"Processing {len(highlights_data)} highlights")
 
+            # Filter highlights to remove non-related videos
+            filtered_highlights = []
             for highlight_data in highlights_data:
+                # Apply filtering criteria
+                if should_include_highlight(highlight_data, session, player_map):
+                    filtered_highlights.append(highlight_data)
+                else:
+                    logger.debug(
+                        f"Filtered out highlight {highlight_data.get('highlight_id')} - not relevant")
+
+            logger.info(
+                f"After filtering: {len(filtered_highlights)} relevant highlights out of {len(highlights_data)}")
+
+            for highlight_data in filtered_highlights:
                 # Try to find the primary player involved in this highlight
                 highlight_objects = highlight_data.get('objects', [])
                 primary_player = None
@@ -768,6 +854,15 @@ def parse_and_store_session_data(session, result_data):
                 if highlight_objects:
                     first_object_id = highlight_objects[0].get('object_id')
                     primary_player = player_map.get(first_object_id)
+
+                # Calculate which half this highlight belongs to
+                half = determine_game_half_from_highlight_offset(
+                    highlight_data.get('start_offset', 0),
+                    session.match_start_time,
+                    session.first_half_end_time,
+                    session.second_half_start_time,
+                    session.match_end_time
+                )
 
                 # Create TraceHighlight linked to player
                 trace_highlight = TraceHighlight(
@@ -780,7 +875,8 @@ def parse_and_store_session_data(session, result_data):
                     event_type='touch',  # Default for TraceVision highlights
                     source='tracevision',
                     session=session,
-                    player=primary_player  # Link to TracePlayer instead of user
+                    player=primary_player,  # Link to TracePlayer instead of user
+                    half=half  # Set the calculated half
                 )
                 trace_highlights.append(trace_highlight)
 
@@ -792,7 +888,7 @@ def parse_and_store_session_data(session, result_data):
                     f"Created {len(created_highlights)} trace highlights")
 
                 # Create highlight-object relationships
-                for i, highlight_data in enumerate(highlights_data):
+                for i, highlight_data in enumerate(filtered_highlights):
                     highlight_objects = highlight_data.get('objects', [])
                     created_highlight = created_highlights[i]
 
@@ -959,7 +1055,6 @@ def process_trace_sessions_task(trace_session_id=None):
 
                                 # Enqueue player-to-user mapping task
                                 try:
-                                    from tracevision.tasks import map_players_to_users_task
                                     map_players_to_users_task.delay(
                                         session.session_id)
                                     logger.info(
@@ -970,7 +1065,6 @@ def process_trace_sessions_task(trace_session_id=None):
 
                                 # Enqueue Excel highlights processing FIRST (before other calculations)
                                 try:
-                                    from tracevision.tasks import process_excel_match_highlights_task
                                     process_excel_match_highlights_task.delay(
                                         session.session_id)
                                     logger.info(
@@ -980,15 +1074,14 @@ def process_trace_sessions_task(trace_session_id=None):
                                         f"Failed to enqueue Excel highlights processing for session {session.session_id}: {e}")
 
                                 # # Enqueue aggregates computation (idempotent)
-                                # try:
-                                    # from tracevision.tasks import compute_aggregates_task
-                                #     compute_aggregates_task.delay(
-                                #         session.session_id)
-                                #     logger.info(
-                                #         f"Queued aggregates computation for session {session.session_id}")
-                                # except Exception as e:
-                                #     logger.exception(
-                                #         f"Failed to enqueue aggregates for session {session.session_id}: {e}")
+                                try:
+                                    compute_aggregates_task.delay(
+                                        session.session_id)
+                                    logger.info(
+                                        f"Queued aggregates computation for session {session.session_id}")
+                                except Exception as e:
+                                    logger.exception(
+                                        f"Failed to enqueue aggregates for session {session.session_id}: {e}")
                             else:
                                 logger.error(
                                     f"Failed to parse structured data for session {session.session_id}. Not updating session status.")
@@ -1024,76 +1117,6 @@ def process_trace_sessions_task(trace_session_id=None):
     except Exception as e:
         logger.exception(f"Error in process_trace_sessions_task: {e}")
         raise
-
-
-@shared_task
-def calculate_player_stats_task(session_id):
-    """
-    Celery task to calculate comprehensive player performance statistics from TraceVision data.
-    This task runs after session processing is completed and generates all performance metrics.
-
-    Args:
-        session_id (str): Session ID to calculate stats for
-
-    Returns:
-        dict: Task results with success status and details
-    """
-    try:
-        from tracevision.services import TraceVisionStatsService
-
-        # Get the session
-        try:
-            session = TraceSession.objects.get(session_id=session_id)
-        except TraceSession.DoesNotExist:
-            error_msg = f"Session with ID {session_id} not found"
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
-
-        logger.info(
-            f"Starting player stats calculation for session: {session_id}")
-
-        # Check if session is processed
-        if session.status != "processed":
-            error_msg = f"Session {session_id} is not processed yet. Current status: {session.status}"
-            logger.warning(error_msg)
-            return {"success": False, "error": error_msg}
-
-        # Check if session has trace players
-        if not session.trace_players.exists():
-            error_msg = f"Session {session_id} has no trace players. Run data parsing first."
-            logger.warning(error_msg)
-            return {"success": False, "error": error_msg}
-
-        # Initialize stats service
-        stats_service = TraceVisionStatsService()
-
-        # Calculate all statistics
-        result = stats_service.calculate_session_stats(session)
-
-        if result['success']:
-            logger.info(f"Successfully calculated stats for session {session_id}: "
-                        f"{result['player_stats_count']} players processed")
-
-            # Create success notification
-            create_silent_notification(session)
-
-            return {
-                "success": True,
-                "session_id": session_id,
-                "player_stats_count": result['player_stats_count'],
-                "team_stats": result['team_stats'],
-                "session_stats": result['session_stats'],
-                "message": f"Stats calculation completed for {result['player_stats_count']} players"
-            }
-        else:
-            error_msg = f"Stats calculation failed for session {session_id}: {result.get('error', 'Unknown error')}"
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
-
-    except Exception as e:
-        error_msg = f"Error in calculate_player_stats_task for session {session_id}: {str(e)}"
-        logger.exception(error_msg)
-        return {"success": False, "error": error_msg}
 
 
 @shared_task
@@ -1383,6 +1406,7 @@ def extract_player_events(player: dict, session, source: str) -> list:
 def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_size=5):
     """
     Generate overlay highlight videos for TraceClipReel objects with video_type='with_overlay' and status='pending'.
+    Processes clip reels session-wise to avoid redundant video downloads.
 
     Args:
         session_id (str, optional): Process specific session
@@ -1393,107 +1417,226 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
         dict: Task results with success status and details
     """
     try:
-        from .video_generator import TrackingDataCache, create_clip_reel_overlay_video, upload_video_to_storage
-        from .models import TraceClipReel
+        from .video_generator import TrackingDataCache, create_clip_reel_overlay_video, upload_video_to_storage, download_video_from_storage
+        from .models import TraceClipReel, TraceSession
+        from tracevision.utils import cleanup_temp_files
+        from django.db.models import Prefetch
 
-        # Query target clip reels
-        clip_reels = TraceClipReel.objects.filter(
-            video_type='with_overlay',
-            generation_status__in=['pending', 'failed'],
-            primary_player__user__isnull=False,
-        ).select_related('session', 'highlight').prefetch_related('involved_players')
+        # Build base filter for clip reels
+        clip_reel_filter = {
+            'video_type': 'with_overlay',
+            'generation_status__in': ['pending', 'failed'],
+            # 'primary_player__user__isnull': False,
+
+        }
 
         if session_id:
-            clip_reels = clip_reels.filter(session__session_id=session_id)
+            clip_reel_filter['session__session_id'] = session_id
         if clip_reel_ids:
-            clip_reels = clip_reels.filter(id__in=clip_reel_ids)
+            clip_reel_filter['id__in'] = clip_reel_ids
 
-        if not clip_reels.exists():
+        # Get sessions with prefetched clip reels using database-level grouping
+        sessions = TraceSession.objects.filter(
+            clip_reels__video_type='with_overlay',
+            clip_reels__generation_status__in=['pending', 'failed'],
+            # clip_reels__primary_player__user__isnull=False,
+        ).prefetch_related(
+            Prefetch(
+                'clip_reels',
+                queryset=TraceClipReel.objects.filter(**clip_reel_filter)
+                .select_related('highlight')
+                .prefetch_related('involved_players'),
+                to_attr='pending_clip_reels'
+            )
+        ).distinct()
+
+        logger.info(f"Sessions: {sessions}")
+
+        # Convert to sessions_data format, only including sessions with clip reels
+        sessions_data = {}
+        total_clip_reels = 0
+        
+        for session in sessions:
+            if session.pending_clip_reels:  # Only include sessions with clip reels
+                logger.info(f"TraceClipReel: {session.pending_clip_reels} for session: {session.session_id}")
+                sessions_data[session.session_id] = {
+                    'session': session,
+                    'clip_reels': session.pending_clip_reels
+                }
+                total_clip_reels += len(session.pending_clip_reels)
+
+        if not sessions_data:
             logger.info("No clip reels to process")
             return {"success": True, "message": "No clip reels to process"}
 
-        logger.info(f"Found {clip_reels.count()} clip reels to process")
+        logger.info(f"Found {len(sessions_data)} sessions with {total_clip_reels} total clip reels to process")
 
         # Initialize tracking data cache
         tracking_cache = TrackingDataCache()
 
-        processed_count = 0
-        failed_count = 0
-        results = []
+        # Track all temporary files for cleanup
+        temp_files_to_cleanup = []
 
-        for clip_reel in clip_reels:
+        total_processed = 0
+        total_failed = 0
+        all_results = []
+
+        # Process each session
+        for session_key, session_data in sessions_data.items():
+            session = session_data['session']
+            session_clip_reels = session_data['clip_reels']
+            
+            logger.info(f"Processing session {session_key} with {len(session_clip_reels)} clip reels")
+            
+            # Download video once per session and cache it
+            session_video_path = None
             try:
-                logger.info(
-                    f"Processing clip reel {clip_reel.id} for highlight {clip_reel.highlight.highlight_id}")
+                if session.blob_video_url:
+                    logger.info(f"Downloading video for session {session_key} from Azure Blob: {session.blob_video_url}")
+                    session_video_path = download_video_from_storage(session.blob_video_url)
+                    temp_files_to_cleanup.append(session_video_path)
+                elif session.video_url:
+                    logger.info(f"Downloading video for session {session_key} from URL: {session.video_url}")
+                    session_video_path = download_video_from_storage(session.video_url)
+                    temp_files_to_cleanup.append(session_video_path)
+                else:
+                    logger.error(f"No video URL available for session {session_key}")
+                    # Mark all clip reels for this session as failed
+                    for clip_reel in session_clip_reels:
+                        clip_reel.mark_generation_failed("No video URL available")
+                        total_failed += 1
+                        all_results.append({
+                            'clip_reel_id': str(clip_reel.id),
+                            'highlight_id': clip_reel.highlight.highlight_id,
+                            'video_type': clip_reel.video_type,
+                            'status': 'failed',
+                            'error': 'No video URL available'
+                        })
+                    continue
 
-                # Mark as generating
-                clip_reel.mark_generation_started()
+                # Process all clip reels for this session
+                session_processed = 0
+                session_failed = 0
+                
+                for clip_reel in session_clip_reels:
+                    # Skip clip reels without primary players as they can't be processed for overlay videos
+                    # if not clip_reel.primary_player:
+                    #     logger.warning(f"Skipping clip reel {clip_reel.id} - no primary player")
+                    #     clip_reel.mark_generation_failed("No primary player available")
+                    #     total_failed += 1
+                    #     all_results.append({
+                    #         'clip_reel_id': str(clip_reel.id),
+                    #         'highlight_id': clip_reel.highlight.highlight_id,
+                    #         'video_type': clip_reel.video_type,
+                    #         'status': 'failed',
+                    #         'error': 'No primary player available'
+                    #     })
+                    #     continue
+                    
+                    try:
+                        logger.info(f"Processing clip reel {clip_reel.id} for highlight {clip_reel.highlight.highlight_id}")
 
-                # Generate overlay video
-                temp_video_path = create_clip_reel_overlay_video(
-                    clip_reel, tracking_cache
-                )
+                        # Mark as generating
+                        clip_reel.mark_generation_started()
 
-                # Upload to storage
-                video_blob_url = upload_video_to_storage(
-                    temp_video_path, clip_reel
-                )
+                        # Generate overlay video using the cached session video
+                        temp_video_path = create_clip_reel_overlay_video(
+                            clip_reel, tracking_cache, session_video_path
+                        )
+                        temp_files_to_cleanup.append(temp_video_path)
 
-                # Calculate video file size
-                video_size_mb = os.path.getsize(
-                    temp_video_path) / (1024 * 1024)
+                        # Upload to storage
+                        video_blob_url = upload_video_to_storage(
+                            temp_video_path, clip_reel
+                        )
 
-                # Mark as completed
-                clip_reel.mark_generation_completed(
-                    video_url=video_blob_url,
-                    video_size_mb=video_size_mb,
-                    video_duration_seconds=clip_reel.duration_ms / 1000.0
-                )
+                        # Calculate video file size
+                        video_size_mb = os.path.getsize(temp_video_path) / (1024 * 1024)
 
-                # Clean up temporary file
-                os.unlink(temp_video_path)
+                        # Mark as completed
+                        clip_reel.mark_generation_completed(
+                            video_url=video_blob_url,
+                            video_size_mb=video_size_mb,
+                            video_duration_seconds=clip_reel.duration_ms / 1000.0
+                        )
 
-                processed_count += 1
-                results.append({
-                    'clip_reel_id': str(clip_reel.id),
-                    'highlight_id': clip_reel.highlight.highlight_id,
-                    'video_type': clip_reel.video_type,
-                    'status': 'completed',
-                    'video_url': video_blob_url,
-                    'video_size_mb': video_size_mb
-                })
+                        # Clean up the generated overlay video immediately
+                        if os.path.exists(temp_video_path):
+                            os.unlink(temp_video_path)
+                            temp_files_to_cleanup.remove(temp_video_path)
 
-                logger.info(f"Successfully processed clip reel {clip_reel.id}")
+                        session_processed += 1
+                        all_results.append({
+                            'clip_reel_id': str(clip_reel.id),
+                            'highlight_id': clip_reel.highlight.highlight_id,
+                            'video_type': clip_reel.video_type,
+                            'status': 'completed',
+                            'video_url': video_blob_url,
+                            'video_size_mb': video_size_mb
+                        })
+
+                        logger.info(f"Successfully processed clip reel {clip_reel.id}")
+
+                    except Exception as e:
+                        logger.exception(f"Error processing clip reel {clip_reel.id}: {e}")
+                        clip_reel.mark_generation_failed(str(e))
+                        session_failed += 1
+                        all_results.append({
+                            'clip_reel_id': str(clip_reel.id),
+                            'highlight_id': clip_reel.highlight.highlight_id,
+                            'video_type': clip_reel.video_type,
+                            'status': 'failed',
+                            'error': str(e)
+                        })
+
+                # Clean up session video after processing all clip reels
+                if session_video_path and os.path.exists(session_video_path):
+                    os.unlink(session_video_path)
+                    temp_files_to_cleanup.remove(session_video_path)
+                    logger.info(f"Cleaned up session video for {session_key}")
+
+                total_processed += session_processed
+                total_failed += session_failed
+                
+                logger.info(f"Completed session {session_key}: {session_processed} processed, {session_failed} failed")
 
             except Exception as e:
-                logger.exception(
-                    f"Error processing clip reel {clip_reel.id}: {e}")
-                clip_reel.mark_generation_failed(str(e))
-                failed_count += 1
-                results.append({
-                    'clip_reel_id': str(clip_reel.id),
-                    'highlight_id': clip_reel.highlight.highlight_id,
-                    'video_type': clip_reel.video_type,
-                    'status': 'failed',
-                    'error': str(e)
-                })
+                logger.exception(f"Error processing session {session_key}: {e}")
+                # Mark all remaining clip reels for this session as failed
+                for clip_reel in session_clip_reels:
+                    if clip_reel.generation_status == 'generating':
+                        clip_reel.mark_generation_failed(f"Session processing error: {str(e)}")
+                        total_failed += 1
+                        all_results.append({
+                            'clip_reel_id': str(clip_reel.id),
+                            'highlight_id': clip_reel.highlight.highlight_id,
+                            'video_type': clip_reel.video_type,
+                            'status': 'failed',
+                            'error': f"Session processing error: {str(e)}"
+                        })
 
         # Clear tracking cache
         tracking_cache.clear_cache()
 
-        logger.info(
-            f"Overlay highlights generation completed. Processed: {processed_count}, Failed: {failed_count}")
+        # Clean up any remaining temporary files
+        cleanup_temp_files(temp_files_to_cleanup)
+
+        logger.info(f"Overlay highlights generation completed. Processed: {total_processed}, Failed: {total_failed}")
 
         return {
             "success": True,
-            "processed": processed_count,
-            "failed": failed_count,
-            "total": processed_count + failed_count,
-            "results": results
+            "processed": total_processed,
+            "failed": total_failed,
+            "total": total_processed + total_failed,
+            "sessions_processed": len(sessions_data),
+            "results": all_results
         }
 
     except Exception as e:
         logger.exception(f"Error in generate_overlay_highlights_task: {e}")
+        # Clean up any remaining temporary files on error
+        if 'temp_files_to_cleanup' in locals():
+            cleanup_temp_files(temp_files_to_cleanup)
         return {"success": False, "error": str(e)}
 
 
@@ -1576,15 +1719,15 @@ def parse_excel_match_data(excel_file_path, session):
             'player_mappings': {}  # New field for player name mappings
         }
 
-        # Parse Match Summary sheet
-        if 'Match Summary' in excel_data:
-            summary_df = excel_data['Match Summary']
+        # Parse Match_Summary sheet
+        if 'Match_Summary' in excel_data:
+            summary_df = excel_data['Match_Summary']
             summary_df = summary_df.where(pd.notna(summary_df), None)
             if not summary_df.empty:
                 match_data['match_summary'] = summary_df.iloc[0].to_dict()
 
-        if 'Starting Lineups' in excel_data:
-            lineups_df = excel_data['Starting Lineups']
+        if 'Starting_Lineups' in excel_data:
+            lineups_df = excel_data['Starting_Lineups']
             lineups_df = lineups_df.where(pd.notna(lineups_df), None)
             lineups = [clean_record(player)
                        for player in lineups_df.to_dict('records')]
@@ -1638,7 +1781,7 @@ def parse_excel_match_data(excel_file_path, session):
         # Create player mappings from all player data
         player_mappings = {}
 
-        # Map starting lineups
+        # Map Starting_Lineups
         for player in match_data['starting_lineups']:
             # Skip invalid entries (empty values, headers, etc.)
             logger.info(f"Player: {player}")
@@ -1731,25 +1874,10 @@ def parse_excel_match_data(excel_file_path, session):
 
         match_data['player_mappings'] = player_mappings
 
-
-        # INSERT_YOUR_CODE
-        # Write match_data to a JSON file for inspection
-        try:
-            import os
-            import json
-            output_dir = os.path.dirname(excel_file_path)
-            output_json_path = os.path.join(
-                output_dir, f"{getattr(session, 'session_id', 'session')}_parsed_match_data.json")
-            with open(output_json_path, "w", encoding="utf-8") as f:
-                json.dump(match_data, f, indent=2, ensure_ascii=False)
-            logger.info(f"Parsed match data written to {output_json_path}")
-        except Exception as e:
-            logger.error(f"Failed to write match_data to JSON: {e}")
-
         # Extract events from match data
         # events = []
 
-        # # From starting lineups
+        # # From Starting_Lineups
         # for player in match_data['starting_lineups']:
         #     events.extend(extract_player_events(
         #         player, session, source="starting_lineup"))
@@ -2034,9 +2162,8 @@ def parse_match_time(time_input):
             return f"{minute:02d}:00"
     return "00:00"
 
-
 @shared_task
-def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko_vs_MaccabiHaifa_AllInfo.xlsx"):
+def process_excel_match_highlights_task(session_id, excel_file_path=None):
     """
     Process Excel match data and create highlights for goals, cards, and other events
 
@@ -2065,21 +2192,40 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
             logger.warning(error_msg)
             return {"success": False, "error": error_msg}
 
-        # Determine Excel file path
-        if not excel_file_path:
-            if not session.basic_game_stats:
-                error_msg = f"No Excel file provided and session {session_id} has no basic_game_stats file"
-                logger.error(error_msg)
-                return {"success": False, "error": error_msg}
-            excel_file_path = session.basic_game_stats.path
+        # Determine Excel file path and download if needed
+        temp_excel_path = None
+        temp_files_to_cleanup = []  # Track all temporary files for cleanup
 
-        # Parse Excel data
         try:
-            match_data = parse_excel_match_data(excel_file_path, session)
+            if not excel_file_path:
+                if not session.basic_game_stats:
+                    error_msg = f"No Excel file provided and session {session_id} has no basic_game_stats file"
+                    logger.error(error_msg)
+                    return {"success": False, "error": error_msg}
+
+                # Download Excel file from Azure Blob storage
+                logger.info(
+                    f"Downloading Excel file from session's basic_game_stats: {session.basic_game_stats.url}")
+                temp_excel_path = download_excel_file_from_storage(
+                    session.basic_game_stats.url)
+                excel_file_path = temp_excel_path
+                temp_files_to_cleanup.append(temp_excel_path)
+            else:
+                # Use provided file path (for testing or direct file access)
+                logger.info(
+                    f"Using provided Excel file path: {excel_file_path}")
+
+            # Parse Excel data
+            try:
+                match_data = parse_excel_match_data(excel_file_path, session)
+            except Exception as e:
+                error_msg = f"Failed to parse Excel file: {str(e)}"
+                logger.error(error_msg, stack_info=True, exc_info=True)
+                return {"success": False, "error": error_msg}
         except Exception as e:
-            error_msg = f"Failed to parse Excel file: {str(e)}"
-            logger.error(error_msg, stack_info=True, exc_info=True)
-            return {"success": False, "error": error_msg}
+            # If there's an error during setup, clean up and re-raise
+            cleanup_temp_files(temp_files_to_cleanup)
+            raise
         # Update TracePlayer names from Excel data
         logger.info(f"Updating TracePlayer names from Excel data...")
         player_update_result = update_trace_player_names(
@@ -2088,15 +2234,19 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
         logger.info(
             f"Player name updates: {player_update_result['updated_count']}/{player_update_result['total_mappings']} players updated")
         # Write match_data to a JSON file with proper spacing
-        try:
-            output_dir = os.path.dirname(excel_file_path)
-            output_json_path = os.path.join(
-                output_dir, f"{session_id}_parsed_match_data.json")
-            with open(output_json_path, "w", encoding="utf-8") as f:
-                json.dump(match_data, f, indent=2, ensure_ascii=False)
-            logger.info(f"Parsed match data written to {output_json_path}")
-        except Exception as e:
-            logger.error(f"Failed to write match_data to JSON: {e}")
+        # output_json_path = None
+        # try:
+        #     output_dir = os.path.dirname(excel_file_path)
+        #     output_json_path = os.path.join(
+        #         output_dir, f"{session_id}_parsed_match_data.json")
+        #     with open(output_json_path, "w", encoding="utf-8") as f:
+        #         json.dump(match_data, f, indent=2, ensure_ascii=False)
+        #     logger.info(f"Parsed match data written to {output_json_path}")
+        #     # Add JSON file to cleanup list if it's in a temporary directory
+        #     if temp_excel_path and output_json_path.startswith(os.path.dirname(temp_excel_path)):
+        #         temp_files_to_cleanup.append(output_json_path)
+        # except Exception as e:
+        #     logger.error(f"Failed to write match_data to JSON: {e}")
 
         events_processed = 0
         highlights_created = 0
@@ -2207,6 +2357,9 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
         session.result['excel_events_processed'] = events_processed
         session.save()
 
+        # Clean up all temporary files before returning
+        cleanup_temp_files(temp_files_to_cleanup)
+
         result = {
             "success": True,
             "session_id": session_id,
@@ -2224,6 +2377,8 @@ def process_excel_match_highlights_task(session_id, excel_file_path="./HapoelAko
         return result
 
     except Exception as e:
+        # Clean up temporary files even if there's an error
+        cleanup_temp_files(temp_files_to_cleanup)
         error_msg = f"Error in process_excel_match_highlights_task for session {session_id}: {str(e)}"
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}

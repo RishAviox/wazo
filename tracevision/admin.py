@@ -3,7 +3,7 @@ from .models import (
     TraceSession, TracePlayer, TraceHighlight, TraceObject, TraceHighlightObject,
     TraceVisionPlayerStats, TraceVisionSessionStats, TraceCoachReportTeam,
     TraceTouchLeaderboard, TracePossessionSegment, TraceClipReel, TracePass,
-    TracePassingNetwork
+    TracePassingNetwork, TracePossessionStats
 )
 from core.admin import admin_site
 
@@ -87,10 +87,10 @@ class TracePlayerAdmin(admin.ModelAdmin):
 class TraceHighlightAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'highlight_id', 'video_id', 'session', 'player',
-        'event_type', 'match_time', 'start_offset', 'duration', 'created_at'
+        'event_type', 'match_time', 'half', 'start_offset', 'duration', 'created_at'
     ]
     search_fields = ['highlight_id', 'session__session_id', 'player__name']
-    list_filter = ['event_type', 'source', 'session__match_date', 'created_at']
+    list_filter = ['event_type', 'source', 'half', 'session__match_date', 'created_at']
     readonly_fields = ['id', 'created_at', 'updated_at']
     date_hierarchy = 'created_at'
 
@@ -247,7 +247,7 @@ class TraceCoachReportTeamAdmin(admin.ModelAdmin):
     search_fields = ['session__session_id']
     readonly_fields = ['id', 'created_at']
     date_hierarchy = 'created_at'
-    
+
     fieldsets = (
         ('Team Information', {
             'fields': ('id', 'session', 'side')
@@ -269,7 +269,7 @@ class TraceTouchLeaderboardAdmin(admin.ModelAdmin):
     search_fields = ['session__session_id', 'player__name']
     readonly_fields = ['id', 'created_at']
     date_hierarchy = 'created_at'
-    
+
     fieldsets = (
         ('Touch Information', {
             'fields': ('id', 'session', 'player', 'object_side', 'touches')
@@ -288,7 +288,7 @@ class TracePossessionSegmentAdmin(admin.ModelAdmin):
     search_fields = ['session__session_id']
     readonly_fields = ['id', 'created_at']
     date_hierarchy = 'created_at'
-    
+
     fieldsets = (
         ('Possession Information', {
             'fields': ('id', 'session', 'side', 'start_ms', 'end_ms', 'count', 'duration_s')
@@ -377,6 +377,43 @@ class TracePassingNetworkAdmin(admin.ModelAdmin):
 
 
 # Register all models with custom admin_site
+class TracePossessionStatsAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'session', 'possession_type', 'side', 'team', 'player',
+        'created_at'
+    ]
+    list_filter = [
+        'possession_type', 'side', 'created_at', 'session__match_date'
+    ]
+    search_fields = [
+        'session__session_id', 'team__name', 'player__name', 'player__jersey_number'
+    ]
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    date_hierarchy = 'created_at'
+
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('session', 'possession_type', 'side', 'team', 'player')
+        }),
+        ('Possession Data', {
+            'fields': ('start_ms', 'end_ms', 'count', 'duration_s', 'start_clock', 'end_clock')
+        }),
+        ('Metrics', {
+            'fields': ('metrics',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'session', 'team', 'player'
+        )
+
+
 admin_site.register(TraceSession, TraceSessionAdmin)
 admin_site.register(TracePlayer, TracePlayerAdmin)
 admin_site.register(TraceHighlight, TraceHighlightAdmin)
@@ -390,3 +427,4 @@ admin_site.register(TracePossessionSegment, TracePossessionSegmentAdmin)
 admin_site.register(TraceClipReel, TraceClipReelAdmin)
 admin_site.register(TracePass, TracePassAdmin)
 admin_site.register(TracePassingNetwork, TracePassingNetworkAdmin)
+admin_site.register(TracePossessionStats, TracePossessionStatsAdmin)

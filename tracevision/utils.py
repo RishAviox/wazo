@@ -1,8 +1,92 @@
+import os
 import webcolors
 import logging
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+def parse_time_to_seconds(time_str: str) -> int:
+    """Parse time string (HH:MM:SS or MM:SS) to total seconds."""
+    if not time_str:
+        return None
+    try:
+        parts = time_str.split(':')
+        if len(parts) == 3:
+            hours, minutes, seconds = map(int, parts)
+            return hours * 3600 + minutes * 60 + seconds
+        elif len(parts) == 2:
+            minutes, seconds = map(int, parts)
+            return minutes * 60 + seconds
+        else:
+            logger.warning(
+                f"Invalid time format '{time_str}'. Expected HH:MM:SS or MM:SS")
+            return None
+    except ValueError:
+        logger.warning(
+            f"Could not parse time '{time_str}'. Expected HH:MM:SS or MM:SS")
+        return None
+
+
+def is_highlight_in_game_time(highlight: dict, game_start_time: int, first_half_end_time: int,
+                              second_half_start_time: int, game_end_time: int) -> bool:
+    """Check if highlight occurs during actual game time."""
+    start_offset = highlight.get('start_offset', 0)
+    # Convert milliseconds to seconds
+    highlight_time_seconds = start_offset / 1000
+
+    # Filter 1: Before game start time
+    if game_start_time is not None and highlight_time_seconds < game_start_time:
+        return False
+
+    # Filter 2: Between first half end and second half start (half-time)
+    if (first_half_end_time is not None and second_half_start_time is not None and
+            first_half_end_time <= highlight_time_seconds < second_half_start_time):
+        return False
+
+    # Filter 3: After game end time
+    if game_end_time is not None and highlight_time_seconds > game_end_time:
+        return False
+
+    return True
+
+
+def filter_highlights_by_game_time(highlights: list, game_start_time: int, first_half_end_time: int,
+                                   second_half_start_time: int, game_end_time: int):
+    """Filter highlights based on game time constraints."""
+    if not any([game_start_time, first_half_end_time, second_half_start_time, game_end_time]):
+        logger.info("No game time filters provided - using all highlights")
+        return highlights
+
+    original_count = len(highlights)
+    filtered_highlights = [h for h in highlights if is_highlight_in_game_time(
+        h, game_start_time, first_half_end_time, second_half_start_time, game_end_time)]
+    filtered_count = len(filtered_highlights)
+    removed_count = original_count - filtered_count
+
+    logger.info(f"Game time filtering applied:")
+    logger.info(f"  Original highlights: {original_count}")
+    logger.info(f"  Filtered highlights: {filtered_count}")
+    logger.info(f"  Removed highlights: {removed_count}")
+
+    if game_start_time is not None:
+        logger.info(f"  Game start: {game_start_time}s")
+    if first_half_end_time is not None:
+        logger.info(f"  First half end: {first_half_end_time}s")
+    if second_half_start_time is not None:
+        logger.info(f"  Second half start: {second_half_start_time}s")
+    if game_end_time is not None:
+        logger.info(f"  Game end: {game_end_time}s")
+
+    return filtered_highlights
+
+
+def ms_to_clock(ms: int) -> str:
+    """Convert milliseconds to clock format (MM:SS)."""
+    total_seconds = ms // 1000
+    minutes = total_seconds // 60
+    seconds = total_seconds % 60
+    return f"{minutes:02d}:{seconds:02d}"
 
 
 def get_hex_from_color_name(color_name):
@@ -310,6 +394,75 @@ def convert_game_time_to_video_milliseconds(session, game_minute, game_second=0)
         return 0
 
 
+def determine_game_half_from_highlight_offset(start_offset_ms, match_start_time, first_half_end_time, second_half_start_time, match_end_time):
+    """
+    Determine which half a highlight belongs to based on its start offset and session timing data.
+
+    Args:
+        start_offset_ms (int): Highlight start offset in milliseconds
+        match_start_time (str): Match start time in HH:MM:SS or MM:SS format
+        first_half_end_time (str): First half end time in HH:MM:SS or MM:SS format
+        second_half_start_time (str): Second half start time in HH:MM:SS or MM:SS format
+        match_end_time (str): Match end time in HH:MM:SS or MM:SS format
+
+    Returns:
+        int: Half number (1 or 2), or None if cannot determine
+    """
+    try:
+        if start_offset_ms is None or start_offset_ms < 0:
+            return None
+
+        # Convert timeline strings to seconds
+        def time_to_seconds(time_str):
+            """Convert HH:MM:SS or MM:SS to total seconds"""
+            if not time_str:
+                return None
+            try:
+                parts = time_str.split(':')
+                if len(parts) == 3:  # HH:MM:SS
+                    hours, minutes, seconds = map(int, parts)
+                    return hours * 3600 + minutes * 60 + seconds
+                elif len(parts) == 2:  # MM:SS
+                    minutes, seconds = map(int, parts)
+                    return minutes * 60 + seconds
+                else:
+                    return None
+            except (ValueError, IndexError):
+                logger.warning(f"Invalid time format: {time_str}")
+                return None
+
+        # Convert highlight offset to seconds
+        highlight_time_seconds = start_offset_ms / 1000.0
+
+        # Get timeline in seconds
+        video_match_start = time_to_seconds(
+            match_start_time) if match_start_time else 0
+        video_first_half_end = time_to_seconds(
+            first_half_end_time) if first_half_end_time else None
+        video_second_half_start = time_to_seconds(
+            second_half_start_time) if second_half_start_time else None
+        video_match_end = time_to_seconds(
+            match_end_time) if match_end_time else None
+
+        # If we don't have enough timing data, return None
+        if video_first_half_end is None or video_second_half_start is None:
+            logger.warning("Insufficient timing data to determine half")
+            return None
+
+        # Determine which half the highlight occurs in
+        if highlight_time_seconds < video_first_half_end:
+            return 1  # First half
+        elif highlight_time_seconds < video_second_half_start:
+            return None  # Half-time break
+        else:
+            return 2  # Second half
+
+    except Exception as e:
+        logger.exception(
+            f"Error determining half for highlight offset {start_offset_ms}: {e}")
+        return None
+
+
 def determine_game_half_from_minute(session, game_minute):
     """
     Determine which half a game minute falls into based on session timeline data.
@@ -449,3 +602,102 @@ def extract_timeline_data(session):
         logger.exception(
             f"Error extracting timeline data from session {session.session_id}: {e}")
         return None
+
+
+def cleanup_temp_files(temp_files):
+    """
+    Clean up temporary files from server storage.
+
+    Args:
+        temp_files (list): List of temporary file paths to clean up
+    """
+    for temp_file in temp_files:
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.unlink(temp_file)
+                logger.info(f"Cleaned up temporary file: {temp_file}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to clean up temporary file {temp_file}: {e}")
+
+
+def download_excel_file_from_storage(blob_url: str) -> str:
+    """
+    Download Excel file from Azure Blob storage to a temporary file.
+
+    Args:
+        blob_url (str): Azure blob URL or local file path
+
+    Returns:
+        str: Path to temporary Excel file
+    """
+    temp_file_path = None
+    try:
+        from django.core.files.storage import default_storage
+        from django.conf import settings
+        import tempfile
+        import os
+
+        # Check if we're in development mode (local file storage)
+        if settings.DEBUG and not hasattr(settings, 'AZURE_CUSTOM_DOMAIN'):
+            logger.info(
+                f"Development mode detected - reading from local file: {blob_url}")
+
+            # Convert blob URL to local file path
+            if blob_url.startswith('/media/'):
+                # Remove /media/ prefix and join with MEDIA_ROOT
+                local_file_path = os.path.join(
+                    settings.MEDIA_ROOT, blob_url[7:])  # Remove '/media/'
+            else:
+                # Assume it's already a local path
+                local_file_path = blob_url
+
+            if os.path.exists(local_file_path):
+                logger.info(f"Using local Excel file: {local_file_path}")
+                return local_file_path
+            else:
+                raise FileNotFoundError(
+                    f"Local Excel file not found: {local_file_path}")
+
+        # Production mode - download from Azure blob storage
+        logger.info(f"Downloading Excel file from Azure blob: {blob_url}")
+
+        # Extract relative path from full blob URL for default_storage operations
+        if blob_url.startswith("https://"):
+            # Extract relative path from full Azure blob URL
+            # URL format: https://videostoragewajo.blob.core.windows.net/media/sessions/...
+            # We need: sessions/...
+            if "/media/" in blob_url:
+                relative_path = blob_url.split("/media/", 1)[1]
+            else:
+                raise ValueError(f"Unexpected blob URL format: {blob_url}")
+        else:
+            # Already a relative path
+            relative_path = blob_url
+
+        logger.info(
+            f"Using relative path for storage operations: {relative_path}")
+
+        # Use Django's default storage to download the file
+        with default_storage.open(relative_path, 'rb') as blob_file:
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as temp_file:
+                temp_file.write(blob_file.read())
+                temp_file_path = temp_file.name
+
+        logger.info(f"Successfully downloaded Excel file to: {temp_file_path}")
+        return temp_file_path
+
+    except Exception as e:
+        # Clean up temporary file if it was created but an error occurred
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+                logger.info(
+                    f"Cleaned up temporary file after error: {temp_file_path}")
+            except Exception as cleanup_error:
+                logger.warning(
+                    f"Failed to clean up temporary file {temp_file_path} after error: {cleanup_error}")
+
+        logger.error(f"Error downloading Excel file from {blob_url}: {e}")
+        raise

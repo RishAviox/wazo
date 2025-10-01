@@ -428,9 +428,9 @@ class TraceObject(models.Model):
         null=True, blank=True, help_text="Appearance feature vector")
     color_fv = models.JSONField(
         null=True, blank=True, help_text="Color feature vector")
-    tracking_url = models.URLField(help_text="URL to fetch tracking data")
+    tracking_url = models.URLField(max_length=500, help_text="URL to fetch tracking data")
     tracking_blob_url = models.URLField(
-        blank=True, null=True, help_text="Azure blob URL for downloaded tracking data")
+        max_length=500, blank=True, null=True, help_text="Azure blob URL for downloaded tracking data")
     role = models.CharField(max_length=50, null=True,
                             blank=True, help_text="Role of the object")
 
@@ -1045,9 +1045,17 @@ class TracePossessionStats(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = [
-            ['session', 'possession_type', 'team', 'side'],  # For team stats
-            ['session', 'possession_type', 'player']         # For player stats
+        constraints = [
+            models.UniqueConstraint(
+                fields=['session', 'possession_type', 'team', 'side'],
+                condition=models.Q(possession_type='team'),
+                name='unique_team_possession_stats'
+            ),
+            models.UniqueConstraint(
+                fields=['session', 'possession_type', 'player'],
+                condition=models.Q(possession_type='player'),
+                name='unique_player_possession_stats'
+            )
         ]
         indexes = [
             models.Index(fields=['session', 'possession_type']),
@@ -1081,3 +1089,4 @@ class TracePossessionStats(models.Model):
     def get_possessions_involved(self):
         """Get possessions involved for player stats"""
         return self.metrics.get('possessions_involved', 0)
+

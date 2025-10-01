@@ -316,6 +316,17 @@ def create_video_with_tracking_overlay(
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     logger.info(f"Video properties - fps: {fps}, width: {w}, height: {h}")
+    
+    # Check if video properties are valid
+    if not cap.isOpened():
+        raise ValueError(f"Failed to open video file: {video_filepath}")
+    
+    if fps is None or fps <= 0:
+        logger.warning(f"Invalid FPS ({fps}), using default FPS of 30")
+        fps = 30.0
+    
+    if w <= 0 or h <= 0:
+        raise ValueError(f"Invalid video dimensions: {w}x{h}")
 
     # Set up output video writer:
     sav = cv2.VideoWriter(
@@ -391,13 +402,14 @@ def create_video_with_tracking_overlay(
     logger.info(f"Video generation completed: {out_video_filepath}")
 
 
-def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Optional[TrackingDataCache] = None) -> str:
+def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Optional[TrackingDataCache] = None, session_video_path: Optional[str] = None) -> str:
     """
     Create overlay video for a single TraceClipReel object.
 
     Args:
         clip_reel: TraceClipReel instance
         tracking_cache: TrackingDataCache instance for performance
+        session_video_path: Optional path to already downloaded session video
 
     Returns:
         str: Path to generated video file
@@ -409,14 +421,20 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
 
     # Get session and video file
     session = clip_reel.session
-    video_file_url = session.blob_video_url or session.video_url
+    
+    # Use provided session video path if available, otherwise download
+    if session_video_path and os.path.exists(session_video_path):
+        temp_video_path = session_video_path
+        logger.info(f"Using provided session video path: {session_video_path}")
+    else:
+        video_file_url = session.blob_video_url or session.video_url
 
-    if not video_file_url:
-        raise ValueError(
-            f"No video URL available for session {session.session_id}")
+        if not video_file_url:
+            raise ValueError(
+                f"No video URL available for session {session.session_id}")
 
-    # Download video from storage to temporary file
-    temp_video_path = download_video_from_storage(video_file_url)
+        # Download video from storage to temporary file
+        temp_video_path = download_video_from_storage(video_file_url)
 
     try:
         # Get involved players and their tracking data
@@ -429,6 +447,11 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
             session=session,
             player=clip_reel.primary_player
         ).first()
+
+        logger.info(f"Looking for TraceObject for session {session.id}, player {clip_reel.primary_player.id if clip_reel.primary_player else 'None'}")
+        logger.info(f"Found TraceObject: {trace_object}")
+        if trace_object:
+            logger.info(f"TraceObject tracking_blob_url: {trace_object.tracking_blob_url}")
 
         if trace_object and trace_object.tracking_blob_url:
             # Load tracking data with caching
@@ -457,9 +480,16 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
         #     player_names = [p.object_id for p in involved_players]
         #     text_str += f" | {', '.join(player_names)}"
 
-        player_name = clip_reel.primary_player.user.name
-        if not player_name:
+        # Handle case where primary_player exists but user might be None
+        if clip_reel.primary_player and clip_reel.primary_player.user:
+            player_name = clip_reel.primary_player.user.name
+            if not player_name:
+                player_name = clip_reel.primary_player.name
+        elif clip_reel.primary_player:
             player_name = clip_reel.primary_player.name
+        else:
+            # Fallback when no primary player is available
+            player_name = "Unknown Player"
 
         # Create temporary output file
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
@@ -479,10 +509,11 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
         return output_path
 
     finally:
-        # Clean up temporary video file
-        # if os.path.exists(temp_video_path):
-        #     os.unlink(temp_video_path)
-        logger.info("TODO: Cleanup code to remove the file from local storage")
+        # Clean up temporary video file only if we downloaded it ourselves
+        # (not if it was provided as session_video_path)
+        if not session_video_path and 'temp_video_path' in locals() and os.path.exists(temp_video_path):
+            os.unlink(temp_video_path)
+            logger.info(f"Cleaned up temporary video file: {temp_video_path}")
 
 
 def upload_video_to_storage(video_file_path: str, clip_reel: TraceClipReel) -> str:

@@ -5,9 +5,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8000
 
-# Install system dependencies
+# Install system dependencies including OpenGL libraries for OpenCV
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev curl \
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libgomp1 \
+    libjpeg-dev libpng-dev libtiff-dev \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Set work directory
