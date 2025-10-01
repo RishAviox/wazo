@@ -283,9 +283,9 @@ class TraceTouchLeaderboardAdmin(admin.ModelAdmin):
 
 class TracePossessionSegmentAdmin(admin.ModelAdmin):
     list_display = ['session', 'side', 'start_ms',
-                    'end_ms', 'count', 'duration_s', 'created_at']
-    list_filter = ['side', 'created_at']
-    search_fields = ['session__session_id']
+                    'end_ms', 'count', 'duration_s', 'highlight', 'created_at']
+    list_filter = ['side', 'created_at', 'highlight__event_type']
+    search_fields = ['session__session_id', 'highlight__highlight_id']
     readonly_fields = ['id', 'created_at']
     date_hierarchy = 'created_at'
 
@@ -293,8 +293,20 @@ class TracePossessionSegmentAdmin(admin.ModelAdmin):
         ('Possession Information', {
             'fields': ('id', 'session', 'side', 'start_ms', 'end_ms', 'count', 'duration_s')
         }),
+        ('Highlight Association', {
+            'fields': ('highlight',),
+            'classes': ('collapse',)
+        }),
         ('Clock Times', {
             'fields': ('start_clock', 'end_clock'),
+            'classes': ('collapse',)
+        }),
+        ('Team Metrics', {
+            'fields': ('team_metrics',),
+            'classes': ('collapse',)
+        }),
+        ('Player Metrics', {
+            'fields': ('player_metrics',),
             'classes': ('collapse',)
         }),
         ('Timestamps', {
@@ -394,9 +406,6 @@ class TracePossessionStatsAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Basic Information', {
             'fields': ('session', 'possession_type', 'side', 'team', 'player')
-        }),
-        ('Possession Data', {
-            'fields': ('start_ms', 'end_ms', 'count', 'duration_s', 'start_clock', 'end_clock')
         }),
         ('Metrics', {
             'fields': ('metrics',),

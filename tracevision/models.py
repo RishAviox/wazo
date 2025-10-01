@@ -682,12 +682,32 @@ class TracePossessionSegment(models.Model):
     start_clock = models.CharField(max_length=20, blank=True)
     end_clock = models.CharField(max_length=20, blank=True)
     duration_s = models.FloatField(default=0.0)
+    
+    # NEW FIELDS FOR POSSESSION SEGMENTS
+    highlight = models.ForeignKey(
+        TraceHighlight, on_delete=models.CASCADE, 
+        related_name='possession_segments', null=True, blank=True
+    )
+    
+    # Team metrics for this segment (cumulative up to this point)
+    team_metrics = models.JSONField(
+        default=dict,
+        help_text="Cumulative team possession metrics up to this highlight"
+    )
+    
+    # Player metrics for this segment
+    player_metrics = models.JSONField(
+        default=dict,
+        help_text="Player involvement metrics for this highlight"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         indexes = [
             models.Index(fields=['session', 'side']),
             models.Index(fields=['session', 'start_ms']),
+            models.Index(fields=['highlight']),
         ]
         verbose_name = 'Possession Segment'
         verbose_name_plural = 'Possession Segments'

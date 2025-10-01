@@ -5,6 +5,9 @@ from django.core.cache import cache
 from django.conf import settings
 from django.db import models
 
+from tracevision.models import TraceClipReel, TraceHighlight, TracePlayer, TracePossessionSegment, TracePossessionStats
+from tracevision.utils import filter_highlights_by_game_time, parse_time_to_seconds
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +26,7 @@ def save_possession_calculation_results(session, team_possession_data, player_po
         dict: Save results with success status
     """
     try:
-        from .models import TracePossessionStats, TracePlayer
+        # from .models import TracePossessionStats, TracePlayer, TracePossessionSegment
         logger = logging.getLogger(__name__)
 
         saved_team_stats = []
@@ -413,8 +416,8 @@ class TraceVisionAggregationService:
         results = {}
         # results['coach_report'] = self._compute_coach_report(session)
         # results['touch_leaderboard'] = self._compute_touch_leaderboard(session)
-        # results['possession_segments'] = self._compute_possessions(session)
-        results['clips'] = self._compute_clips(session)
+        results['possession_segments'] = self._compute_possessions(session)
+        # results['clips'] = self._compute_clips(session)
         # results['passes'] = self._compute_passes(session)
         # results['passing_network'] = self._compute_passing_network(session)
         return results
@@ -447,7 +450,7 @@ class TraceVisionAggregationService:
             return video_type.replace('_', ' ').title()
 
     def _compute_clips(self, session):
-        from .models import TraceClipReel, TraceHighlight
+        # from .models import TraceClipReel, TraceHighlight
         hs = TraceHighlight.objects.filter(session=session)
 
         for h in hs:
@@ -512,7 +515,7 @@ class TraceVisionAggregationService:
 
     def _compute_possessions(self, session):
         """Compute possession metrics using highlights from session.result.highlights"""
-        from .utils import parse_time_to_seconds, filter_highlights_by_game_time
+        # from .utils import parse_time_to_seconds, filter_highlights_by_game_time
 
         try:
             self.logger.info(
@@ -579,6 +582,15 @@ class TraceVisionAggregationService:
             )
 
             if save_result['success']:
+                # Create possession segments using the same data as possession stats
+                segments_result = self._create_possession_segments_from_calculation(
+                    session, filtered_highlights, possession_results
+                )
+                if segments_result:
+                    self.logger.info(f"Successfully created possession segments for session {session.session_id}")
+                else:
+                    self.logger.warning(f"Failed to create possession segments for session {session.session_id}")
+                
                 self.logger.info(
                     f"Successfully computed and saved possession metrics for session {session.session_id}")
                 return True
@@ -593,7 +605,7 @@ class TraceVisionAggregationService:
             return False
 
     def _calculate_possession_metrics(self, highlights, session):
-        """Calculate possession metrics based on posession.py logic"""
+        """Calculate possession metrics based on possession.py logic"""
         # Filter only possession chains (touch-chain tags)
         chains = [h for h in highlights if 'touch-chain' in h.get('tags', [])]
 
@@ -822,6 +834,457 @@ class TraceVisionAggregationService:
             'avg_touches': 0,
             'involvement_percentage': 0
         }
+
+
+    def _create_possession_segments_from_calculation(self, session, highlights, possession_results):
+        """Create possession segments using the same data as possession calculation"""
+        try:
+            self.logger.info(f"Creating possession segments from calculation for session {session.session_id}")
+            
+            # Clear existing segments for this session
+            TracePossessionSegment.objects.filter(session=session).delete()
+            
+            # Filter only possession chains (touch-chain tags)
+            chains = [h for h in highlights if 'touch-chain' in h.get('tags', [])]
+            
+            if not chains:
+                self.logger.warning(f"No possession chains found for session {session.session_id}")
+                return False
+            
+            # Sort chains by start time
+            chains = sorted(chains, key=lambda x: x['start_offset'])
+            
+            # Group consecutive chains by the same team into possessions
+            possessions = self._group_chains_into_possessions(chains)
+            
+            # Create segments for each possession
+            segments_created = 0
+            cumulative_team_metrics = {'home': {}, 'away': {}}
+            cumulative_player_metrics = {}
+            
+            for i, possession in enumerate(possessions):
+                team_side = possession['team']
+                
+                # Calculate cumulative metrics up to this possession
+                cumulative_team_metrics[team_side] = self._calculate_cumulative_team_metrics_for_segment(
+                    possessions[:i+1], team_side, session, possessions
+                )
+                
+                # Calculate player metrics for this possession
+                player_metrics = self._calculate_player_metrics_for_possession(
+                    possession, session, cumulative_player_metrics
+                )
+                
+                # Filter out players with all zero metrics to save space
+                filtered_player_metrics = {
+                    player_id: metrics for player_id, metrics in player_metrics.items()
+                    if any(metrics.get(key, 0) != 0 for key in ['involvement_count', 'total_duration_ms', 'total_touches'])
+                }
+                
+                # Find the highlight that corresponds to this possession
+                # Use the first chain in the possession to find the highlight
+                highlight = None
+                if possession['chains']:
+                    first_chain = possession['chains'][0]
+                    # Try to find the highlight by start_offset
+                    highlight = session.highlights.filter(
+                        start_offset=first_chain['start_offset']
+                    ).first()
+                
+                # Create segment
+                segment = TracePossessionSegment.objects.create(
+                    session=session,
+                    side=team_side,
+                    start_ms=possession['start_ms'],
+                    end_ms=possession['end_ms'],
+                    count=len(possession['chains']),  # Number of chains in this possession
+                    start_clock=self._ms_to_clock(possession['start_ms']),
+                    end_clock=self._ms_to_clock(possession['end_ms']),
+                    duration_s=possession['total_duration_ms'] / 1000.0,  # Convert ms to seconds
+                    highlight=highlight,  # Link to the highlight
+                    team_metrics=cumulative_team_metrics[team_side],
+                    player_metrics=filtered_player_metrics  # Only non-zero player metrics
+                )
+                segments_created += 1
+                
+                self.logger.debug(f"Created segment {segments_created} for {team_side} team with {len(possession['chains'])} chains")
+            
+            self.logger.info(f"Successfully created {segments_created} possession segments for session {session.session_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.exception(f"Error creating possession segments for session {session.session_id}: {e}")
+            return False
+
+    def _calculate_cumulative_team_metrics_for_segment(self, possessions_up_to_now, team_side, session, all_possessions):
+        """Calculate cumulative team metrics up to a specific possession"""
+        team_possessions = [p for p in possessions_up_to_now if p['team'] == team_side]
+        
+        if not team_possessions:
+            return self._get_empty_team_metrics()
+        
+        # Calculate cumulative metrics
+        total_duration_ms = sum(p['total_duration_ms'] for p in team_possessions)
+        possession_count = len(team_possessions)
+        avg_duration_ms = total_duration_ms / possession_count if possession_count > 0 else 0
+        
+        # Calculate touches and passes
+        total_touches = sum(p['total_touches'] for p in team_possessions)
+        total_passes = max(total_touches - possession_count, 0)
+        avg_passes = total_passes / possession_count if possession_count > 0 else 0
+        
+        # Calculate turnovers using the FULL possession list, not just up to now
+        turnovers = self._calculate_team_turnovers(all_possessions, team_side)
+        
+        # Calculate longest possession
+        longest_possession_ms = max(p['total_duration_ms'] for p in team_possessions) if team_possessions else 0
+        
+        # Calculate possession percentage using full data
+        total_all_teams_duration = sum(p['total_duration_ms'] for p in all_possessions)
+        possession_percentage = (total_duration_ms / total_all_teams_duration * 100) if total_all_teams_duration > 0 else 0
+        
+        return {
+            'possession_count': possession_count,
+            'possession_time_ms': total_duration_ms,
+            'avg_duration_ms': avg_duration_ms,
+            'total_touches': total_touches,
+            'total_passes': total_passes,
+            'avg_passes': avg_passes,
+            'turnovers': turnovers,
+            'longest_possession_ms': longest_possession_ms,
+            'possession_percentage': possession_percentage
+        }
+
+    def _calculate_player_metrics_for_possession(self, possession, session, cumulative_player_metrics):
+        """Calculate player metrics for a specific possession"""
+        player_metrics = {}
+        
+        # Get all players in the session
+        players = session.trace_players.all()
+        
+        for player in players:
+            team_side = 'home' if 'home' in player.team_name.lower() else 'away'
+            player_id = f"{team_side}_{player.jersey_number}"
+            
+            # Check if this player was involved in this possession
+            if player.object_id in possession['players_involved']:
+                # Update cumulative metrics
+                if player_id not in cumulative_player_metrics:
+                    cumulative_player_metrics[player_id] = {
+                        'involvement_count': 0,
+                        'total_duration_ms': 0,
+                        'total_touches': 0
+                    }
+                
+                cumulative_player_metrics[player_id]['involvement_count'] += 1
+                cumulative_player_metrics[player_id]['total_duration_ms'] += possession['total_duration_ms']
+                cumulative_player_metrics[player_id]['total_touches'] += possession['total_touches']
+            
+            # Calculate current metrics
+            if player_id in cumulative_player_metrics:
+                cum_metrics = cumulative_player_metrics[player_id]
+                involvement_count = cum_metrics['involvement_count']
+                total_duration_ms = cum_metrics['total_duration_ms']
+                total_touches = cum_metrics['total_touches']
+                
+                avg_duration_ms = total_duration_ms / involvement_count if involvement_count > 0 else 0
+                avg_touches = total_touches / involvement_count if involvement_count > 0 else 0
+                
+                # Calculate involvement percentage (simplified - would need total team possessions)
+                involvement_percentage = 0  # This would need to be calculated with total team possessions
+                
+                player_metrics[player_id] = {
+                    'involvement_count': involvement_count,
+                    'total_duration_ms': total_duration_ms,
+                    'avg_duration_ms': avg_duration_ms,
+                    'total_touches': total_touches,
+                    'avg_touches': avg_touches,
+                    'involvement_percentage': involvement_percentage
+                }
+            else:
+                # Player not involved yet
+                player_metrics[player_id] = {
+                    'involvement_count': 0,
+                    'total_duration_ms': 0,
+                    'avg_duration_ms': 0,
+                    'total_touches': 0,
+                    'avg_touches': 0,
+                    'involvement_percentage': 0
+                }
+        
+        return player_metrics
+
+    def _compute_possession_segments(self, session):
+        """Compute possession segments for each highlight with touch-chain tags"""
+        try:
+            self.logger.info(f"Starting possession segments calculation for session {session.session_id}")
+            
+            # Get highlights with touch-chain tags, ordered by start_offset
+            highlights = session.highlights.filter(
+                tags__contains=['touch-chain']
+            ).order_by('start_offset')
+            
+            if not highlights.exists():
+                self.logger.warning(f"No touch-chain highlights found for session {session.session_id}")
+                return False
+            
+            # Clear existing segments for this session
+            TracePossessionSegment.objects.filter(session=session).delete()
+            
+            # Calculate segments for each highlight
+            segments_created = 0
+            for highlight in highlights:
+                # Determine team side from highlight tags
+                team_side = self._get_team_side_from_highlight(highlight)
+                if not team_side:
+                    continue
+                
+                # Calculate cumulative metrics up to this highlight
+                segment_metrics = self._calculate_highlight_segment_metrics(
+                    highlight, highlights, team_side, session
+                )
+                
+                # Create segment with both team and player data
+                segment = TracePossessionSegment.objects.create(
+                session=session,
+                    highlight=highlight,
+                    side=team_side,
+                    start_ms=highlight.start_offset,
+                    end_ms=highlight.start_offset + highlight.duration,
+                    team_metrics=segment_metrics['team'],
+                    player_metrics=segment_metrics['player']
+                )
+                segments_created += 1
+                
+                self.logger.debug(f"Created segment for highlight {highlight.highlight_id}: {team_side} team")
+            
+            self.logger.info(f"Successfully created {segments_created} possession segments for session {session.session_id}")
+            return True
+
+        except Exception as e:
+            self.logger.exception(f"Error computing possession segments for session {session.session_id}: {e}")
+            return False
+
+    def _get_team_side_from_highlight(self, highlight):
+        """Extract team side from highlight tags"""
+        tags = highlight.tags or []
+        if 'home' in tags:
+            return 'home'
+        elif 'away' in tags:
+            return 'away'
+            return None
+
+    def _calculate_highlight_segment_metrics(self, current_highlight, all_highlights, team_side, session):
+        """Calculate cumulative possession metrics up to this highlight"""
+        
+        # Get all previous highlights of the same team up to this point
+        previous_highlights = all_highlights.filter(
+            start_offset__lte=current_highlight.start_offset,
+            tags__contains=[team_side]
+        ).order_by('start_offset')
+        
+        # Calculate cumulative team metrics
+        team_metrics = self._calculate_cumulative_team_metrics(previous_highlights, team_side, session)
+        
+        # Calculate player metrics for this specific highlight's player
+        player_metrics = self._calculate_player_highlight_metrics(current_highlight, session)
+        
+        return {
+            'team': team_metrics,
+            'player': player_metrics
+        }
+
+    def _calculate_cumulative_team_metrics(self, highlights, team_side, session):
+        """Calculate cumulative team metrics from highlights"""
+        
+        if not highlights.exists():
+            return self._get_empty_team_metrics()
+        
+        # Group consecutive highlights into possessions
+        possessions = self._group_highlights_into_possessions(highlights, team_side)
+        
+        # Calculate metrics from possessions
+        total_duration_ms = sum(p['duration_ms'] for p in possessions)
+        possession_count = len(possessions)
+        avg_duration_ms = total_duration_ms / possession_count if possession_count > 0 else 0
+        
+        # Calculate touches and passes
+        total_touches = sum(p['touches'] for p in possessions)
+        total_passes = max(total_touches - possession_count, 0)
+        avg_passes = total_passes / possession_count if possession_count > 0 else 0
+        
+        # Calculate turnovers (number of times possession was lost)
+        turnovers = self._calculate_turnovers_from_highlights(highlights, team_side)
+        
+        # Calculate possession percentage (need total game time)
+        total_game_time_ms = self._get_total_game_time_ms(session)
+        possession_percentage = (total_duration_ms / total_game_time_ms * 100) if total_game_time_ms > 0 else 0
+        
+        return {
+            'possession_percentage': round(possession_percentage, 1),
+            'turnovers': turnovers,
+            'total_passes': total_passes,
+            'total_touches': total_touches,
+            'possession_count': possession_count,
+            'possession_time_ms': round(total_duration_ms, 1),
+            'avg_duration_ms': round(avg_duration_ms, 1),
+            'avg_passes': round(avg_passes, 2),
+            'longest_possession_ms': round(max(p['duration_ms'] for p in possessions), 1) if possessions else 0
+        }
+
+    def _calculate_player_highlight_metrics(self, highlight, session):
+        """Calculate player metrics for a specific highlight"""
+        
+        if not highlight.player:
+            return self._get_empty_highlight_player_metrics()
+        
+        # Get all possessions this player was involved in up to this point
+        player_highlights = session.highlights.filter(
+            player=highlight.player,
+            start_offset__lte=highlight.start_offset,
+            tags__contains=['touch-chain']
+        ).order_by('start_offset')
+        
+        # Calculate player involvement
+        involvement_count = player_highlights.count()
+        total_touches = sum(len(h.tags or []) for h in player_highlights)  # Approximate touches
+        avg_touches = total_touches / involvement_count if involvement_count > 0 else 0
+        
+        # Calculate involvement percentage
+        team_side = self._get_team_side_from_highlight(highlight)
+        team_highlights = session.highlights.filter(
+            tags__contains=[team_side],
+            start_offset__lte=highlight.start_offset
+        ).count()
+        involvement_percentage = (involvement_count / team_highlights * 100) if team_highlights > 0 else 0
+        
+        return {
+            'involvement_count': involvement_count,
+            'total_touches': total_touches,
+            'avg_touches': round(avg_touches, 2),
+            'involvement_percentage': round(involvement_percentage, 1)
+        }
+
+    def _group_highlights_into_possessions(self, highlights, team_side):
+        """Group consecutive highlights into possession chains"""
+        possessions = []
+        current_possession = None
+        
+        for highlight in highlights:
+            if current_possession is None:
+                # Start new possession
+                current_possession = {
+                    'duration_ms': highlight.duration,
+                    'touches': len(highlight.tags or []),
+                    'start_ms': highlight.start_offset
+                }
+            else:
+                # Check if this highlight continues the possession
+                time_gap = highlight.start_offset - (current_possession['start_ms'] + current_possession['duration_ms'])
+                if time_gap <= 5000:  # 5 second gap threshold
+                    # Continue possession
+                    current_possession['duration_ms'] += highlight.duration
+                    current_possession['touches'] += len(highlight.tags or [])
+                else:
+                    # Save current possession and start new one
+                    possessions.append(current_possession)
+                    current_possession = {
+                        'duration_ms': highlight.duration,
+                        'touches': len(highlight.tags or []),
+                        'start_ms': highlight.start_offset
+                    }
+        
+        # Add the last possession
+        if current_possession:
+            possessions.append(current_possession)
+        
+        return possessions
+
+    def _calculate_turnovers_from_highlights(self, highlights, team_side):
+        """Calculate turnovers from highlight sequence"""
+        turnovers = 0
+        highlights_list = list(highlights)
+        
+        for i, highlight in enumerate(highlights_list):
+            if i + 1 < len(highlights_list):
+                next_highlight = highlights_list[i + 1]
+                # Check if next highlight is from different team
+                next_team_side = self._get_team_side_from_highlight(next_highlight)
+                if next_team_side and next_team_side != team_side:
+                    turnovers += 1
+        
+        return turnovers
+
+    def _get_total_game_time_ms(self, session):
+        """Get total game time in milliseconds"""
+        # from .utils import parse_time_to_seconds
+        
+        if session.match_start_time and session.match_end_time:
+            start_seconds = parse_time_to_seconds(session.match_start_time)
+            end_seconds = parse_time_to_seconds(session.match_end_time)
+            return (end_seconds - start_seconds) * 1000
+        return 90 * 60 * 1000  # Default 90 minutes
+
+    def _get_empty_team_metrics(self):
+        """Return empty team metrics structure"""
+        return {
+            'possession_percentage': 0.0,
+            'turnovers': 0,
+            'total_passes': 0,
+            'total_touches': 0,
+            'possession_count': 0,
+            'possession_time_ms': 0.0,
+            'avg_duration_ms': 0.0,
+            'avg_passes': 0.0,
+            'longest_possession_ms': 0.0
+        }
+
+    def _get_empty_highlight_player_metrics(self):
+        """Return empty player metrics structure for highlights"""
+        return {
+            'involvement_count': 0,
+            'total_touches': 0,
+            'avg_touches': 0.0,
+            'involvement_percentage': 0.0
+        }
+
+    def validate_segment_totals(self, session):
+        """Validate that segment totals match final possession stats"""
+        try:
+            # from .models import TracePossessionStats, TracePossessionSegment
+            
+            # Get final possession stats
+            final_team_stats = TracePossessionStats.objects.filter(
+                session=session,
+                possession_type='team'
+            )
+            
+            # Calculate totals from segments
+            segments = TracePossessionSegment.objects.filter(session=session)
+            
+            for team_stat in final_team_stats:
+                team_side = team_stat.side
+                team_segments = segments.filter(side=team_side)
+                
+                # Calculate cumulative totals
+                cumulative_turnovers = sum(s.team_metrics.get('turnovers', 0) for s in team_segments)
+                cumulative_passes = sum(s.team_metrics.get('total_passes', 0) for s in team_segments)
+                cumulative_touches = sum(s.team_metrics.get('total_touches', 0) for s in team_segments)
+                
+                # Validate
+                final_metrics = team_stat.metrics
+                assert cumulative_turnovers == final_metrics.get('turnovers', 0), f"Turnovers mismatch for {team_side}"
+                assert cumulative_passes == final_metrics.get('total_passes', 0), f"Passes mismatch for {team_side}"
+                assert cumulative_touches == final_metrics.get('total_touches', 0), f"Touches mismatch for {team_side}"
+                
+            self.logger.info(f"Segment validation passed for session {session.session_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Segment validation failed for session {session.session_id}: {e}")
+            return False
+
+
 
     # def _compute_coach_report(self, session):
     #     from .models import TraceCoachReportTeam
