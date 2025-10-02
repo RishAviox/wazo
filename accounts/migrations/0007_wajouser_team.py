@@ -8,7 +8,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('accounts', '0006_wajouser_jersey_number'),
-        ('teams', '0005_alter_team_id'),
     ]
 
     operations = [

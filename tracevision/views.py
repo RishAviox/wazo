@@ -86,7 +86,7 @@ class TraceVisionProcessView(APIView):
 
             # Extract validated data
             video_link = serializer.validated_data.get('video_link')
-            # video_file = serializer.validated_data.get('video_file') # TODO: For video upload instead of video URL.
+            video_file = serializer.validated_data.get('video_file') # TODO: For video upload instead of video URL.
             home_team = serializer.validated_data['home_team_name']
             away_team = serializer.validated_data['away_team_name']
             home_color = serializer.validated_data['home_team_jersey_color']
@@ -147,151 +147,152 @@ class TraceVisionProcessView(APIView):
                 }
             )
 
-            # Step 2: Create TraceVision session
-            # logger.info("Creating TraceVision session...")
-            # session_payload = {
-            #     "query": """
-            #         mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
-            #             createSession(token: $token, sessionData: $sessionData) {
-            #                 session { session_id }
-            #                 success
-            #                 error
-            #             }
-            #         }
-            #     """,
-            #     "variables": {
-            #         "token": {
-            #             "customer_id": CUSTOMER_ID,
-            #             "token": API_KEY
-            #         },
-            #         "sessionData": {
-            #             "type": "soccer_game",
-            #             "game_info": {
-            #                 "home_team": {
-            #                     "name": home_team,
-            #                     "score": home_score,
-            #                     "color": home_color
-            #                 },
-            #                 "away_team": {
-            #                     "name": away_team,
-            #                     "score": away_score,
-            #                     "color": away_color
-            #                 }
-            #             },
-            #             "capabilities": ["tracking", "highlights"]
-            #         }
-            #     }
-            # }
+            # Create TraceVision session
+            logger.info("Creating TraceVision session...")
+            session_payload = {
+                "query": """
+                    mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
+                        createSession(token: $token, sessionData: $sessionData) {
+                            session { session_id }
+                            success
+                            error
+                        }
+                    }
+                """,
+                "variables": {
+                    "token": {
+                        "customer_id": CUSTOMER_ID,
+                        "token": API_KEY
+                    },
+                    "sessionData": {
+                        "type": "soccer_game",
+                        "game_info": {
+                            "home_team": {
+                                "name": home_team,
+                                "score": home_score,
+                                "color": home_color
+                            },
+                            "away_team": {
+                                "name": away_team,
+                                "score": away_score,
+                                "color": away_color
+                            }
+                        },
+                        "capabilities": ["tracking", "highlights"]
+                    }
+                }
+            }
 
-            # session_response = requests.post(
-            #     GRAPHQL_URL, headers={"Content-Type": "application/json"}, json=session_payload)
-            # session_json = session_response.json()
-            # logger.debug("Session response: %s", session_json)
+            session_response = requests.post(
+                GRAPHQL_URL, headers={"Content-Type": "application/json"}, json=session_payload)
+            session_json = session_response.json()
+            logger.debug("Session response: %s", session_json)
 
-            # if session_response.status_code != 200 or not session_json.get("data", {}).get("createSession", {}).get("success"):
-            #     return Response({
-            #         "error": "TraceVision session creation failed",
-            #         "details": session_json
-            #     }, status=http_status.HTTP_400_BAD_REQUEST)
+            if session_response.status_code != 200 or not session_json.get("data", {}).get("createSession", {}).get("success"):
+                return Response({
+                    "error": "TraceVision session creation failed",
+                    "details": session_json
+                }, status=http_status.HTTP_400_BAD_REQUEST)
 
-            # session_id = session_json["data"]["createSession"]["session"]["session_id"]
+            session_id = session_json["data"]["createSession"]["session"]["session_id"]
 
-            # # Handle video processing based on input type
-            # if video_link:
-            #     # Import video using the provided link
-            #     logger.info("Importing video from link...")
-            #     import_video_payload = {
-            #         "query": """
-            #             mutation ($token: CustomerToken!, $session_id: Int!, $video: ImportVideoInput!, $start_time: DateTime) {
-            #                 importVideo(token: $token, session_id: $session_id, video: $video, start_time: $start_time) {
-            #                     success
-            #                     error
-            #                 }
-            #             }
-            #         """,
-            #         "variables": {
-            #             "token": {
-            #                 "customer_id": CUSTOMER_ID,
-            #                 "token": API_KEY
-            #             },
-            #             "session_id": session_id,
-            #             "video": {
-            #                 "type": "url",
-            #                 "via_url": {
-            #                     "url": video_link
-            #                 }
-            #             },
-            #             "start_time": start_time.isoformat() if start_time else None
-            #         }
-            #     }
+            # Handle video processing based on input type
+            if video_link:
+                # Import video using the provided link
+                logger.info("Importing video from link...")
+                import_video_payload = {
+                    "query": """
+                        mutation ($token: CustomerToken!, $session_id: Int!, $video: ImportVideoInput!, $start_time: DateTime) {
+                            importVideo(token: $token, session_id: $session_id, video: $video, start_time: $start_time) {
+                                success
+                                error
+                            }
+                        }
+                    """,
+                    "variables": {
+                        "token": {
+                            "customer_id": CUSTOMER_ID,
+                            "token": API_KEY
+                        },
+                        "session_id": session_id,
+                        "video": {
+                            "type": "url",
+                            "via_url": {
+                                "url": video_link
+                            }
+                        },
+                        "start_time": start_time.isoformat() if start_time else None
+                    }
+                }
 
-            #     import_response = requests.post(GRAPHQL_URL, headers={
-            #                                     "Content-Type": "application/json"}, json=import_video_payload)
-            #     import_json = import_response.json()
-            #     logger.info("Video import response: %s", import_json)
+                import_response = requests.post(GRAPHQL_URL, headers={
+                                                "Content-Type": "application/json"}, json=import_video_payload)
+                
+                import_json = import_response.json()
+                logger.info("Video import response: %s", import_json)
 
-            #     if import_response.status_code != 200 or not import_json.get("data", {}).get("importVideo", {}).get("success"):
-            #         return Response({
-            #             "error": "Video import failed",
-            #             "details": import_json
-            #         }, status=http_status.HTTP_400_BAD_REQUEST)
+                if import_response.status_code != 200 or not import_json.get("data", {}).get("importVideo", {}).get("success"):
+                    return Response({
+                        "error": "Video import failed",
+                        "details": import_json
+                    }, status=http_status.HTTP_400_BAD_REQUEST)
 
-            #     video_url_for_db = video_link
-            # else:
-            #     logger.info("Processing video file upload...")
-            #     # Get upload URL for file
-            #     upload_payload = {
-            #         "query": """
-            #             mutation ($token: CustomerToken!, $session_id: Int!, $video_name: String!) {
-            #                 uploadVideo(token: $token, session_id: $session_id, video_name: $video_name) {
-            #                     success
-            #                     error
-            #                     upload_url
-            #                 }
-            #             }
-            #         """,
-            #         "variables": {
-            #             "token": {
-            #                 "customer_id": CUSTOMER_ID,
-            #                 "token": API_KEY
-            #             },
-            #             "session_id": session_id,
-            #             "video_name": video_file.name
-            #         }
-            #     }
+                video_url_for_db = video_link
+            else:
+                logger.info("Processing video file upload...")
+                # Get upload URL for file
+                upload_payload = {
+                    "query": """
+                        mutation ($token: CustomerToken!, $session_id: Int!, $video_name: String!) {
+                            uploadVideo(token: $token, session_id: $session_id, video_name: $video_name) {
+                                success
+                                error
+                                upload_url
+                            }
+                        }
+                    """,
+                    "variables": {
+                        "token": {
+                            "customer_id": CUSTOMER_ID,
+                            "token": API_KEY
+                        },
+                        "session_id": session_id,
+                        "video_name": video_file.name
+                    }
+                }
 
-            #     upload_response = requests.post(
-            #         GRAPHQL_URL, headers={"Content-Type": "application/json"}, json=upload_payload)
-            #     upload_json = upload_response.json()
-            #     logger.debug("Upload URL response: %s", upload_json)
+                upload_response = requests.post(
+                    GRAPHQL_URL, headers={"Content-Type": "application/json"}, json=upload_payload)
+                upload_json = upload_response.json()
+                logger.debug("Upload URL response: %s", upload_json)
 
-            #     if upload_response.status_code != 200 or not upload_json.get("data", {}).get("uploadVideo", {}).get("success"):
-            #         return Response({
-            #             "error": "Failed to get video upload URL",
-            #             "details": upload_json
-            #         }, status=http_status.HTTP_400_BAD_REQUEST)
+                if upload_response.status_code != 200 or not upload_json.get("data", {}).get("uploadVideo", {}).get("success"):
+                    return Response({
+                        "error": "Failed to get video upload URL",
+                        "details": upload_json
+                    }, status=http_status.HTTP_400_BAD_REQUEST)
 
-            #     upload_url = upload_json["data"]["uploadVideo"]["upload_url"]
+                upload_url = upload_json["data"]["uploadVideo"]["upload_url"]
 
-            #     # Upload video file
-            #     logger.info("Uploading video file to TraceVision...")
-            #     put_response = requests.put(
-            #         upload_url, headers={"Content-Type": "video/mp4"}, data=video_file.read())
+                # Upload video file
+                logger.info("Uploading video file to TraceVision...")
+                put_response = requests.put(
+                    upload_url, headers={"Content-Type": "video/mp4"}, data=video_file.read())
 
-            #     if put_response.status_code != 200:
-            #         return Response({
-            #             "error": "Video upload failed",
-            #             "status_code": put_response.status_code,
-            #             "text": put_response.text
-            #         }, status=http_status.HTTP_400_BAD_REQUEST)
+                if put_response.status_code != 200:
+                    return Response({
+                        "error": "Video upload failed",
+                        "status_code": put_response.status_code,
+                        "text": put_response.text
+                    }, status=http_status.HTTP_400_BAD_REQUEST)
 
-            #     video_url_for_db = upload_url
+                video_url_for_db = upload_url
 
             # Save session to DB
             logger.info("Saving session data to DB...")
             session = TraceSession.objects.create(
                 user=request.user,
-                session_id="session_id",
+                session_id=session_id,
                 match_date=datetime.now().date(),
                 home_team=home_team_obj,
                 away_team=away_team_obj,
@@ -301,7 +302,7 @@ class TraceVisionProcessView(APIView):
                 pitch_size=pitch_size,
                 final_score=final_score_str,
                 start_time=start_time,
-                video_url="video_url_for_db",
+                video_url=video_url_for_db,
                 status="waiting_for_data",  # Set initial status
                 match_start_time=match_start_time,
                 first_half_end_time=first_half_end_time,

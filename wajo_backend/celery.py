@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Set the default Django settings module for the 'celery' program.
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', os.getenv('django-settings-module', 'wajo_backend.settings_dev'))
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', os.getenv('django-settings-module', 'wajo_backend.settings'))
 
 app = Celery(settings.PROJECT_NAME)
 
