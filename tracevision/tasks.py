@@ -1020,92 +1020,98 @@ def process_trace_sessions_task(trace_session_id=None):
                 logger.info(
                     f"Updated session {session.session_id} status from {previous_status} to {new_status}")
 
+                
+
                 # Handle final status changes (processed or process_error)
-                if new_status in ["processed", "process_error"] and previous_status != new_status:
-                    status_description = "processed" if new_status == "processed" else "encountered process error"
-                    logger.info(
-                        f"Session {session.session_id} {status_description}.")
-
-                    # Fetch and save result data for both statuses (may contain error details for process_error)
-                    result_data = tracevision_service.get_session_result(
-                        session)
-                    if result_data:
-                        # Upload result data to Azure blob instead of storing in database
-                        upload_result = upload_result_data_to_azure_blob(
-                            session, result_data)
-
-                        if upload_result['success']:
-                            logger.info(
-                                f"Result data uploaded successfully for session {session.session_id}")
+                if new_status in ["processed", "process_error"]:
+                    # Check if we need to process this session
+                    should_process = False
+                    
+                    # Normal processing - old status was not processed, new status is processed
+                    if previous_status != "processed" and new_status == "processed":
+                        should_process = True
+                        logger.info(f"Normal processing: Session {session.session_id} transitioning from {previous_status} to {new_status}")
+                    
+                    # Recovery processing - old status was processed but no objects/highlights exist
+                    elif previous_status == "processed" and new_status == "processed":
+                        # Check if objects or highlights exist for this session
+                        objects_count = session.trace_objects.count()
+                        highlights_count = session.highlights.count()
+                        
+                        if objects_count == 0 and highlights_count == 0:
+                            should_process = True
+                            logger.info(f"Recovery processing: Session {session.session_id} was processed but has no objects ({objects_count}) or highlights ({highlights_count}). Reprocessing...")
                         else:
-                            logger.error(
-                                f"Failed to upload result data for session {session.session_id}: {upload_result.get('error')}")
+                            should_process = False
+                            logger.info(f"Skipping processing: Session {session.session_id} already processed with {objects_count} objects and {highlights_count} highlights")
+                    
+                    if should_process:
+                        status_description = "processed" if new_status == "processed" else "encountered process error"
+                        logger.info(f"Session {session.session_id} {status_description}.")
 
-                        # For processed sessions, parse and store structured data
-                        if new_status == "processed":
-                            logger.info(
-                                f"Parsing structured data for session {session.session_id}")
-                            parsing_success = parse_and_store_session_data(
-                                session, result_data)
+                        # Fetch and save result data for both statuses (may contain error details for process_error)
+                        result_data = tracevision_service.get_session_result(session)
+                        if result_data:
+                            # Upload result data to Azure blob instead of storing in database
+                            upload_result = upload_result_data_to_azure_blob(session, result_data)
 
-                            if parsing_success:
-                                logger.info(
-                                    f"Successfully parsed structured data for session {session.session_id}")
-                                # Only save session and create notification if parsing was successful
+                            if upload_result['success']:
+                                logger.info(f"Result data uploaded successfully for session {session.session_id}")
+                            else:
+                                logger.error(f"Failed to upload result data for session {session.session_id}: {upload_result.get('error')}")
+
+                            # For processed sessions, parse and store structured data
+                            if new_status == "processed":
+                                logger.info(f"Parsing structured data for session {session.session_id}")
+                                parsing_success = parse_and_store_session_data(session, result_data)
+
+                                if parsing_success:
+                                    logger.info(f"Successfully parsed structured data for session {session.session_id}")
+                                    # Only save session and create notification if parsing was successful
+                                    session.save()
+                                    create_silent_notification(session)
+
+                                    # Enqueue player-to-user mapping task
+                                    try:
+                                        map_players_to_users_task.delay(session.session_id)
+                                        logger.info(f"Queued player-to-user mapping for session {session.session_id}")
+                                    except Exception as e:
+                                        logger.exception(f"Failed to enqueue player mapping for session {session.session_id}: {e}")
+
+                                    # Enqueue Excel highlights processing FIRST (before other calculations)
+                                    try:
+                                        process_excel_match_highlights_task.delay(session.session_id)
+                                        logger.info(f"Queued Excel highlights processing for session {session.session_id}")
+                                    except Exception as e:
+                                        logger.exception(f"Failed to enqueue Excel highlights processing for session {session.session_id}: {e}")
+
+                                    # # Enqueue aggregates computation (idempotent)
+                                    try:
+                                        compute_aggregates_task.delay(session.session_id)
+                                        logger.info(f"Queued aggregates computation for session {session.session_id}")
+                                    except Exception as e:
+                                        logger.exception(f"Failed to enqueue aggregates for session {session.session_id}: {e}")
+                                else:
+                                    logger.error(f"Failed to parse structured data for session {session.session_id}. Not updating session status.")
+                                    # Don't update the session status if parsing failed
+                                    session.status = previous_status
+                                    session.save()
+                                    continue
+                            else:
+                                # For process_error, just save the result data
                                 session.save()
                                 create_silent_notification(session)
 
-                                # Enqueue player-to-user mapping task
-                                try:
-                                    map_players_to_users_task.delay(
-                                        session.session_id)
-                                    logger.info(
-                                        f"Queued player-to-user mapping for session {session.session_id}")
-                                except Exception as e:
-                                    logger.exception(
-                                        f"Failed to enqueue player mapping for session {session.session_id}: {e}")
-
-                                # Enqueue Excel highlights processing FIRST (before other calculations)
-                                try:
-                                    process_excel_match_highlights_task.delay(
-                                        session.session_id)
-                                    logger.info(
-                                        f"Queued Excel highlights processing for session {session.session_id}")
-                                except Exception as e:
-                                    logger.exception(
-                                        f"Failed to enqueue Excel highlights processing for session {session.session_id}: {e}")
-
-                                # # Enqueue aggregates computation (idempotent)
-                                try:
-                                    compute_aggregates_task.delay(
-                                        session.session_id)
-                                    logger.info(
-                                        f"Queued aggregates computation for session {session.session_id}")
-                                except Exception as e:
-                                    logger.exception(
-                                        f"Failed to enqueue aggregates for session {session.session_id}: {e}")
-                            else:
-                                logger.error(
-                                    f"Failed to parse structured data for session {session.session_id}. Not updating session status.")
-                                # Don't update the session status if parsing failed
-                                session.status = previous_status
-                                session.save()
-                                continue
+                            logger.info(f"Saved result data for {new_status} session {session.session_id}")
                         else:
-                            # For process_error, just save the result data
+                            logger.error(f"Failed to fetch result for {new_status} session {session.session_id}")
+
+                            # Don't update status if we couldn't fetch result data
+                            session.status = previous_status
                             session.save()
-                            create_silent_notification(session)
-
-                        logger.info(
-                            f"Saved result data for {new_status} session {session.session_id}")
+                            continue
                     else:
-                        logger.error(
-                            f"Failed to fetch result for {new_status} session {session.session_id}")
-
-                        # Don't update status if we couldn't fetch result data
-                        session.status = previous_status
-                        session.save()
-                        continue
+                        logger.info(f"Skipping processing for session {session.session_id} - no processing needed")
 
                 processed_count += 1
 

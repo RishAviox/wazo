@@ -149,8 +149,8 @@ AUTH_PASSWORD_VALIDATORS = [
 PROJECT_NAME = os.getenv("project-name", 'wajo_backend')
 CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 2 * 60 * 60  # 2 hours for large video uploads
-CELERY_TASK_SOFT_TIME_LIMIT = 90 * 60  # 90 minutes soft limit
+# CELERY_TASK_TIME_LIMIT = 2 * 60 * 60  # 2 hours for large video uploads
+# CELERY_TASK_SOFT_TIME_LIMIT = 90 * 60  # 90 minutes soft limit
 # Celery configuration - use service name for Docker, localhost for local development
 CELERY_BROKER_URL = os.getenv("celery-broker-url", "redis://wajo-redis:6379/0")
 CELERY_ACCEPT_CONTENT = ["json"]

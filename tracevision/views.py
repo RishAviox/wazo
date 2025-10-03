@@ -566,15 +566,17 @@ class TraceVisionPlayerStatsView(APIView):
                 }, status=http_status.HTTP_400_BAD_REQUEST)
 
             # Check if session has trace objects
-            if not session.trace_objects.exists():
-                return Response({
-                    "error": "No trace objects found",
-                    "details": "Session must have trace objects before calculating stats."
-                }, status=http_status.HTTP_400_BAD_REQUEST)
+            # if not session.trace_objects.exists():
+            #     return Response({
+            #         "error": "No trace objects found",
+            #         "details": "Session must have trace objects before calculating stats."
+            #     }, status=http_status.HTTP_400_BAD_REQUEST)
 
             # Trigger async stats calculation
-            from tracevision.tasks import calculate_player_stats_task
-            task = calculate_player_stats_task.delay(session.session_id)
+            from tracevision.tasks import process_trace_sessions_task
+            task = process_trace_sessions_task.delay(session.id)
+
+            logger.info(f"Queued player stats calculation for session {session.session_id}")
 
             return Response({
                 "success": True,
@@ -812,7 +814,11 @@ class GetTracePlayerReelsView(APIView):
 
     def get(self, request):
         player = request.user.trace_players.first()
-        clipreels = player.primary_clip_reels.all() if player else []
+        if player:
+            clipreels = player.primary_clip_reels.all()
+        else:
+            from tracevision.models import TraceClipReel
+            clipreels = TraceClipReel.objects.none()
 
         # ---------- filters ----------
         video_type = request.query_params.get('video_type')
