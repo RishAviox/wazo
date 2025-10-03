@@ -417,7 +417,7 @@ class TraceVisionAggregationService:
         # results['coach_report'] = self._compute_coach_report(session)
         # results['touch_leaderboard'] = self._compute_touch_leaderboard(session)
         results['possession_segments'] = self._compute_possessions(session)
-        # results['clips'] = self._compute_clips(session)
+        results['clips'] = self._compute_clips(session)
         # results['passes'] = self._compute_passes(session)
         # results['passing_network'] = self._compute_passing_network(session)
         return results

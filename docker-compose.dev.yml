@@ -22,7 +22,7 @@ services:
 
   django:
     environment:
-      - django-settings-module=wajo_backend.settings
+      - django-settings-module=wajo_backend.settings_dev
       - DJANGO_DATABASE=docker
     entrypoint: ""
     # command: python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000
