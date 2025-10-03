@@ -51,20 +51,18 @@ jobs:
       run: |
         IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/${{ secrets.WAJO_BACKEND_CONTAINER_STAGING_NAME }}:${{ github.sha }}
         az containerapp update \
-          --name wajo-celery-worker-staging \
+          --name wajo-celery-worker-staging-1 \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-          --image $IMAGE_NAME \
-          --command "celery -A wajo_backend worker --loglevel=INFO"
+          --image $IMAGE_NAME 
 
 
     - name: Update Celery Beat
       run: |
         IMAGE_NAME=${{ secrets.CONTAINER_REGISTRY_USERNAME }}.azurecr.io/${{ secrets.WAJO_BACKEND_CONTAINER_STAGING_NAME }}:${{ github.sha }}
         az containerapp update \
-          --name wajo-celery-beat-staging \
+          --name wajo-celery-beat-staging-1 \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-          --image $IMAGE_NAME \
-          --command "celery -A wajo_backend beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+          --image $IMAGE_NAME 
         
     - name: Cleanup old Docker images
       run: |
