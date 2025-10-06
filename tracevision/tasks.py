@@ -221,7 +221,7 @@ def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
 
     except requests.exceptions.RequestException as e:
         logger.error(
-            f"Failed to fetch tracking data for {trace_object.object_id} from {trace_object.tracking_url}: {e}")
+            f"Failed to fetch tracking data for {trace_object.object_id} from {trace_object.tracking_url}: {e}", exc_info=True, stack_info=True)
         return {
             'success': False,
             'data': [],
@@ -230,7 +230,7 @@ def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
         }
     except Exception as e:
         logger.error(
-            f"Error processing tracking data for {trace_object.object_id}: {e}")
+            f"Error processing tracking data for {trace_object.object_id}: {e}", exc_info=True, stack_info=True)
         return {
             'success': False,
             'data': [],
@@ -255,7 +255,7 @@ def upload_file_direct(blob_client, file_path, content_type, file_size):
             f"Successfully uploaded {file_size / (1024*1024*1024):.2f} GB using direct method")
         return True
     except Exception as e:
-        logger.error(f"Direct upload failed: {e}")
+        logger.error(f"Direct upload failed: {e}", exc_info=True, stack_info=True)
         return False
 
 
@@ -304,7 +304,7 @@ def upload_large_file_chunked(blob_client, file_path, content_type, file_size, c
                         # Ensure block_id is properly formatted
                         if not block_id or len(block_id) == 0:
                             logger.error(
-                                f"Invalid block_id for chunk {block_number}")
+                                f"Invalid block_id for chunk {block_number}", exc_info=True, stack_info=True)
                             break
 
                         # Add small delay between chunks to avoid rate limiting
@@ -322,11 +322,11 @@ def upload_large_file_chunked(blob_client, file_path, content_type, file_size, c
                             time.sleep(2 ** chunk_attempt)
                         else:
                             logger.error(
-                                f"Chunk {block_number} upload failed after 3 attempts: {chunk_error}")
+                                f"Chunk {block_number} upload failed after 3 attempts: {chunk_error}", exc_info=True, stack_info=True)
                             raise chunk_error
 
                 if not chunk_uploaded:
-                    raise Exception(f"Failed to upload chunk {block_number}")
+                    raise Exception(f"Failed to upload chunk {block_number}", exc_info=True, stack_info=True)
 
                 block_number += 1
                 total_uploaded += len(chunk)
@@ -345,11 +345,11 @@ def upload_large_file_chunked(blob_client, file_path, content_type, file_size, c
                 f"Successfully uploaded {file_size / (1024*1024*1024):.2f} GB using chunked method")
             return True
         else:
-            logger.error("No blocks to commit")
+            logger.error("No blocks to commit", exc_info=True, stack_info=True)
             return False
 
     except Exception as e:
-        logger.error(f"Chunked upload failed: {e}")
+        logger.error(f"Chunked upload failed: {e}", exc_info=True, stack_info=True)
         return False
 
 
@@ -434,7 +434,7 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
                     time.sleep(5)
                 else:
                     logger.error(
-                        f"Failed to create blob client after 3 attempts: {client_error}")
+                        f"Failed to create blob client after 3 attempts: {client_error}", exc_info=True, stack_info=True)
                     raise client_error
 
         if not blob_client:
@@ -586,7 +586,7 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
         }
 
     except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to download video for session {session_id}: {e}")
+        logger.error(f"Failed to download video for session {session_id}: {e}", exc_info=True, stack_info=True)
         return {
             'success': False,
             'blob_url': None,
@@ -661,7 +661,7 @@ def upload_result_data_to_azure_blob(session, result_data):
 
     except Exception as e:
         logger.error(
-            f"Error uploading result data for session {session.session_id}: {e}")
+            f"Error uploading result data for session {session.session_id}: {e}", exc_info=True, stack_info=True)
         return {
             'success': False,
             'blob_url': None,
@@ -941,7 +941,7 @@ def create_silent_notification(session):
 
         if not notification_service.is_available():
             logger.error(
-                "Notification service not available, cannot create notification")
+                "Notification service not available, cannot create notification", exc_info=True, stack_info=True)
             return
 
         # Prepare session data for notification
@@ -1058,7 +1058,7 @@ def process_trace_sessions_task(trace_session_id=None):
                             if upload_result['success']:
                                 logger.info(f"Result data uploaded successfully for session {session.session_id}")
                             else:
-                                logger.error(f"Failed to upload result data for session {session.session_id}: {upload_result.get('error')}")
+                                logger.error(f"Failed to upload result data for session {session.session_id}: {upload_result.get('error')}", exc_info=True, stack_info=True)
 
                             # For processed sessions, parse and store structured data
                             if new_status == "processed":
@@ -1104,7 +1104,7 @@ def process_trace_sessions_task(trace_session_id=None):
 
                             logger.info(f"Saved result data for {new_status} session {session.session_id}")
                         else:
-                            logger.error(f"Failed to fetch result for {new_status} session {session.session_id}")
+                            logger.error(f"Failed to fetch result for {new_status} session {session.session_id}", exc_info=True, stack_info=True)
 
                             # Don't update status if we couldn't fetch result data
                             session.status = previous_status
@@ -1117,8 +1117,8 @@ def process_trace_sessions_task(trace_session_id=None):
 
             except Exception as e:
                 error_count += 1
-                logger.exception(
-                    f"Error processing session {session.session_id}: {e}")
+                logger.error(
+                    f"Error processing session {session.session_id}: {e}", exc_info=True, stack_info=True)
 
         return f"Processed {processed_count} sessions, {error_count} errors"
 
@@ -1161,7 +1161,7 @@ def compute_aggregates_task(session_id):
         return {"success": True, "details": {k: True for k in result.keys()}}
     except Exception as e:
         logger.error(
-            f"Error computing aggregates for session {session_id}: {e}")
+            f"Error computing aggregates for session {session_id}: {e}", exc_info=True, stack_info=True)
         return {"success": False, "error": str(e)}
 
 
@@ -1696,7 +1696,7 @@ def determine_team_side(excel_team_name, session):
 
     except Exception as e:
         logger.error(
-            f"Error determining team side for '{excel_team_name}': {e}")
+            f"Error determining team side for '{excel_team_name}': {e}", exc_info=True, stack_info=True)
         return 'away'
 
 
@@ -1924,7 +1924,7 @@ def parse_excel_match_data(excel_file_path, session):
         return match_data
 
     except Exception as e:
-        logger.error(f"Error parsing Excel file {excel_file_path}: {e}")
+        logger.error(f"Error parsing Excel file {excel_file_path}: {e}", exc_info=True, stack_info=True)
         raise
 
 
@@ -2065,7 +2065,7 @@ def update_trace_player_names(session, player_mappings):
                         f"TracePlayer not found for mapping key: {mapping_key}")
 
             except Exception as e:
-                logger.error(f"Error updating player {mapping_key}: {e}")
+                logger.error(f"Error updating player {mapping_key}: {e}", exc_info=True, stack_info=True)
                 continue
 
         return {
@@ -2076,7 +2076,7 @@ def update_trace_player_names(session, player_mappings):
         }
 
     except Exception as e:
-        logger.error(f"Error in update_trace_player_names: {e}")
+        logger.error(f"Error in update_trace_player_names: {e}", exc_info=True, stack_info=True)
         return {
             'updated_count': 0,
             'not_found_count': 0,
@@ -2138,7 +2138,7 @@ def map_player_to_trace_player(player_name, jersey_number, team_side, session):
         return None
 
     except Exception as e:
-        logger.error(f"Error mapping player {player_name}: {e}")
+        logger.error(f"Error mapping player {player_name}: {e}", exc_info=True, stack_info=True)
         return None
 
 

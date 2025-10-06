@@ -276,6 +276,75 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         
         return value
 
+    def validate_basic_game_stats(self, value):
+        """
+        Validate that the basic_game_stats CSV file contains all required tabs with correct columns.
+        """
+        if not value:
+            return value
+            
+        import pandas as pd
+        
+        try:
+            # Read the Excel file
+            excel_file = pd.ExcelFile(value)
+            
+            # Define required tabs and their columns
+            required_tabs = {
+                'Match_Summary': [],  # No specific columns required
+                'Starting_Lineups': ['Team', 'Number', 'Name', 'Role', 'Goals', 'SubOffMinute', 'Cards'],
+                'Replacements': ['Team', 'Number', 'Name', 'Role', 'Goals', 'ReplacerMinute'],
+                'Bench': ['Team', 'Number', 'Name'],
+                'Coaches': ['Team', 'Coach Name', 'Role'],
+                'Referees': ['Position', 'Name']
+            }
+            
+            errors = []
+            
+            # Check if all required tabs exist
+            available_tabs = excel_file.sheet_names
+            missing_tabs = []
+            
+            for tab_name in required_tabs.keys():
+                if tab_name not in available_tabs:
+                    missing_tabs.append(tab_name)
+            
+            if missing_tabs:
+                errors.append(f"Missing required tabs: {', '.join(missing_tabs)}")
+            
+            # Check columns for each existing tab
+            for tab_name, required_columns in required_tabs.items():
+                if tab_name in available_tabs:
+                    try:
+                        df = pd.read_excel(value, sheet_name=tab_name)
+                        actual_columns = df.columns.tolist()
+                        
+                        # Check if all required columns exist
+                        missing_columns = []
+                        for col in required_columns:
+                            if col not in actual_columns:
+                                missing_columns.append(col)
+                        
+                        if missing_columns:
+                            errors.append(f"Tab '{tab_name}' is missing required columns: {', '.join(missing_columns)}")
+                            
+                    except Exception as e:
+                        errors.append(f"Error reading tab '{tab_name}': {str(e)}")
+            
+            # Check if file is empty or has no data
+            if not available_tabs:
+                errors.append("The Excel file appears to be empty or corrupted")
+            
+            # If there are any errors, raise validation error
+            if errors:
+                raise serializers.ValidationError(errors)
+            
+            return value
+            
+        except Exception as e:
+            raise serializers.ValidationError([f"Error reading CSV file: {str(e)}"])
+
+
 class CoachViewSpecificTeamPlayersSerializer(serializers.ModelSerializer):
     class Meta:
         model = TracePlayer
