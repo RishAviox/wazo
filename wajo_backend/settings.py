@@ -1,6 +1,11 @@
-from pathlib import Path
 import os
+import logging
+from pathlib import Path
 from django.utils.timezone import timedelta
+
+logger = logging.getLogger(__name__)
+
+
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -209,6 +214,8 @@ AZURE_ACCOUNT_KEY = os.environ.get('wajo-azure-storage-account-key')
 # If using SAS token instead of key, use: AZURE_SAS_TOKEN = "<your_sas_token>"
 # Extract account name from connection string if available, otherwise use env var
 AZURE_CONNECTION_STRING = os.environ.get('wajo-azure-storage-connection-string')
+
+logger.info(f"{'\n'*10}AZURE_CONNECTION_STRING: {AZURE_CONNECTION_STRING}{'\n'*10}")
 if AZURE_CONNECTION_STRING:
     # Parse connection string to extract account name
     import re
