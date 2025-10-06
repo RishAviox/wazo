@@ -558,21 +558,18 @@ class TraceVisionAggregationService:
             possession_results = self._calculate_possession_metrics(
                 filtered_highlights, session)
 
-            import json
-            import os
-
             # Save possession_results to a JSON file (for debugging/analysis, not for testing)
-            output_dir = "./tracevision"
-            os.makedirs(output_dir, exist_ok=True)
-            output_path = os.path.join(
-                output_dir, f"possession_results_{session.session_id}.json")
-            try:
-                with open(output_path, "w") as f:
-                    json.dump(possession_results, f, indent=2)
-                self.logger.info(f"Possession results saved to {output_path}")
-            except Exception as e:
-                self.logger.warning(
-                    f"Failed to save possession results to {output_path}: {e}")
+            # output_dir = "./tracevision"
+            # os.makedirs(output_dir, exist_ok=True)
+            # output_path = os.path.join(
+            #     output_dir, f"possession_results_{session.session_id}.json")
+            # try:
+            #     with open(output_path, "w") as f:
+            #         json.dump(possession_results, f, indent=2)
+            #     self.logger.info(f"Possession results saved to {output_path}")
+            # except Exception as e:
+            #     self.logger.warning(
+            #         f"Failed to save possession results to {output_path}: {e}")
 
             # Save results to database
             save_result = save_possession_calculation_results(
