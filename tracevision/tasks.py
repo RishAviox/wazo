@@ -416,6 +416,7 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
         # Retry blob client creation for network issues
         for client_attempt in range(3):
             try:
+                logger.info(f'AZURE_CONNECTION_STRING Found : {"Found"if settings.AZURE_CONNECTION_STRING else "Not Found"}')
                 blob_service_client = BlobServiceClient.from_connection_string(
                     settings.AZURE_CONNECTION_STRING)
 
