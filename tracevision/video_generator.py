@@ -193,8 +193,29 @@ def download_video_from_storage(video_blob_url: str, temp_dir: Optional[str] = N
             # Production - Azure Blob Storage with relative path
             response = default_storage.open(video_blob_url)
 
+        # with open(temp_path, 'wb') as f:
+        #     f.write(response.read())
+        # response.close()
         with open(temp_path, 'wb') as f:
-            f.write(response.read())
+            # Optimized 2MB chunks for large video files (3-4GB)
+            chunk_size = 2 * 1024 * 1024  # 2MB chunks (2,097,152 bytes)
+            total_bytes = 0
+            last_logged_mb = 0
+            
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                total_bytes += len(chunk)
+                
+                # Log progress every 200MB
+                current_mb = total_bytes / (1024 * 1024)
+                if int(current_mb) - last_logged_mb >= 200:
+                    last_logged_mb = int(current_mb)
+                    logger.info(f"Downloaded {current_mb:.1f} MB of video file")
+            
+            logger.info(f"Video download completed: {total_bytes / (1024 * 1024):.1f} MB total")
         response.close()
         # temp_path = "./media/videos/4299999/4299999_video.mp4"
         if os.path.exists(temp_path):
