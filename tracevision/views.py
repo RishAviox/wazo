@@ -552,37 +552,50 @@ class TraceVisionPlayerStatsView(APIView):
 
     def post(self, request, pk):
         """
-        Trigger player stats calculation for a session
+        Trigger player stats calculation for a session or generate overlay highlights
+        
+        Query Parameters:
+        - task_type: 'process_sessions' (default) or 'generate_overlays'
         """
         try:
             # Get the session for the authenticated user
             session = TraceSession.objects.get(id=pk, user=request.user)
 
-            # Check if session is processed
-            if session.status != "processed":
+            # Get task type from query parameters
+            task_type = request.query_params.get('task_type', 'process_sessions')
+            
+            # Validate task type
+            if task_type not in ['process_sessions', 'generate_overlays']:
+                return Response({
+                    "error": "Invalid task type",
+                    "details": "task_type must be 'process_sessions' or 'generate_overlays'"
+                }, status=http_status.HTTP_400_BAD_REQUEST)
+
+            # Check if session is processed (only for process_sessions task)
+            if task_type == 'process_sessions' and session.status != "processed":
                 return Response({
                     "error": "Session is not processed yet",
                     "details": f"Current status: {session.status}. Wait for processing to complete."
                 }, status=http_status.HTTP_400_BAD_REQUEST)
 
-            # Check if session has trace objects
-            # if not session.trace_objects.exists():
-            #     return Response({
-            #         "error": "No trace objects found",
-            #         "details": "Session must have trace objects before calculating stats."
-            #     }, status=http_status.HTTP_400_BAD_REQUEST)
-
-            # Trigger async stats calculation
-            from tracevision.tasks import process_trace_sessions_task
-            task = process_trace_sessions_task.delay(session.id)
-
-            logger.info(f"Queued player stats calculation for session {session.session_id}")
+            # Trigger the appropriate async task
+            if task_type == 'process_sessions':
+                from tracevision.tasks import process_trace_sessions_task
+                task = process_trace_sessions_task.delay(session.id)
+                message = "Player stats calculation started"
+                logger.info(f"Queued player stats calculation for session {session.session_id}")
+            else:  # generate_overlays
+                from tracevision.tasks import generate_overlay_highlights_task
+                task = generate_overlay_highlights_task.delay(session_id=session.session_id)
+                message = "Overlay highlights generation started"
+                logger.info(f"Queued overlay highlights generation for session {session.session_id}")
 
             return Response({
                 "success": True,
-                "message": "Player stats calculation started",
+                "message": message,
                 "task_id": task.id,
                 "session_id": session.session_id,
+                "task_type": task_type,
                 "status": "processing"
             }, status=http_status.HTTP_202_ACCEPTED)
 
