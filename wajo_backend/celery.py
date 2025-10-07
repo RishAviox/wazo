@@ -23,7 +23,12 @@ app.conf.beat_schedule = getattr(settings, 'CELERY_BEAT_SCHEDULE', {
     # Process TraceVision sessions every 2 hours, starting immediately
     'tracevision-process-sessions-every-2h': {
         'task': 'tracevision.tasks.process_trace_sessions_task',
-        # 'schedule': 2 * 60 * 60,  # 2 hours in seconds
-        'schedule': 60,  # every minute
+        'schedule': 2 * 60 * 60,  # 2 hours in seconds
+    },
+    
+    # Generate overlay highlights every 24 hours
+    'tracevision-generate-overlay-highlights': {
+        'task': 'tracevision.tasks.generate_overlay_highlights_task',
+        'schedule': 24 * 60 * 60,  # 24 hours in seconds
     },
 })
