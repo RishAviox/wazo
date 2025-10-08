@@ -1,4 +1,7 @@
+from django.db.models import Q
 from rest_framework import serializers
+
+
 from tracevision.models import TraceSession, TraceClipReel, TracePlayer
 from tracevision.utils import get_hex_from_color_name
 
@@ -25,7 +28,7 @@ class TraceVisionProcessesSerializer(serializers.ModelSerializer):
 
 class TraceSessionListSerializer(serializers.ModelSerializer):
     """
-    Serializer for TraceSession list view with essential information
+    Serializer for TraceSession list view with essential information and filtering
     """
     home_team_name = serializers.CharField(source='home_team.name', read_only=True)
     away_team_name = serializers.CharField(source='away_team.name', read_only=True)
@@ -33,13 +36,37 @@ class TraceSessionListSerializer(serializers.ModelSerializer):
     away_team_jersey_color = serializers.CharField(source='away_team.jersey_color', read_only=True)
     pitch_dimensions = serializers.CharField(source='get_pitch_dimensions', read_only=True)
     
+    # Filter fields
+    match_date = serializers.DateField(required=False, help_text="Filter by exact match date (YYYY-MM-DD)")
+    created_at = serializers.DateTimeField(required=False, help_text="Filter by creation date (YYYY-MM-DD HH:MM:SS)")
+    status = serializers.ChoiceField(
+        choices=['waiting_for_data', 'processing', 'processed', 'process_error'],
+        required=False,
+        # write_only=True,
+        help_text="Filter by session status"
+    )
+    age_group = serializers.ChoiceField(
+        choices=['U11_U12', 'U13_U14', 'U15_U16', 'U17_U18', 'SENIOR'],
+        required=False,
+        # write_only=True,
+        help_text="Filter by age group"
+    )
+    team_name = serializers.CharField(
+        max_length=100,
+        required=False,
+        # write_only=True,
+        help_text="Filter by team name (searches both home and away teams)"
+    )
+    
     class Meta:
         model = TraceSession
         fields = [
-            'id', 'session_id', 'status', 'user', 'match_date', 'home_team', 'away_team',
+            'id', 'session_id', 'status', 'user', 'match_date',
             'home_team_name', 'away_team_name', 'home_score', 'away_score', 
             'home_team_jersey_color', 'away_team_jersey_color', 'age_group', 'pitch_size', 'pitch_dimensions',
-            'final_score', 'start_time', 'video_url', 'created_at', 'updated_at'
+            'final_score', 'start_time', 'video_url', 'created_at', 'updated_at',
+            # Filter fields
+            'match_date', 'created_at', 'status', 'age_group', 'team_name'
         ]
         read_only_fields = [
             'id', 'session_id', 'status', 'user', 'match_date', 'home_team', 'away_team',
@@ -47,6 +74,49 @@ class TraceSessionListSerializer(serializers.ModelSerializer):
             'home_team_jersey_color', 'away_team_jersey_color', 'age_group', 'pitch_size', 'pitch_dimensions',
             'final_score', 'start_time', 'video_url', 'created_at', 'updated_at'
         ]
+
+    def validate_match_date(self, value):
+        """Validate match_date format"""
+        if value:
+            return value
+        return None
+
+    def validate_created_at(self, value):
+        """Validate created_at format"""
+        if value:
+            return value
+        return None
+
+    @classmethod
+    def get_filtered_queryset(cls, queryset, validated_data):
+        """
+        Apply filters to queryset based on validated data
+        """
+        
+        # Created date filter
+        if validated_data.get('created_at'):
+            queryset = queryset.filter(created_at__date=validated_data['created_at'].date())
+        
+        # Status filter
+        if validated_data.get('status'):
+            queryset = queryset.filter(status=validated_data['status'])
+        
+        # Match date filter
+        if validated_data.get('match_date'):
+            queryset = queryset.filter(match_date=validated_data['match_date'])
+        
+        # Age group filter
+        if validated_data.get('age_group'):
+            queryset = queryset.filter(age_group=validated_data['age_group'])
+        
+        # Team name filter (searches both home_team and away_team)
+        if validated_data.get('team_name'):
+            queryset = queryset.filter(
+                Q(home_team__name__icontains=validated_data['team_name']) |
+                Q(away_team__name__icontains=validated_data['team_name'])
+            )
+        
+        return queryset.order_by('-updated_at', '-created_at')
 
 
 class TraceVisionProcessSerializer(serializers.Serializer):

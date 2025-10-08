@@ -1,27 +1,22 @@
 import logging
 import requests
-from datetime import datetime
-from django.db.models import JSONField   # Postgres native
-from tracevision.models import TraceClipReel, TraceSession
-from teams.models import Team
+from django.db.models import Q
+from datetime import timedelta
+from django.conf import settings
+from datetime import datetime, date
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
-from django.conf import settings
-from tracevision.tasks import download_video_and_save_to_azure_blob, generate_overlay_highlights_task
-from datetime import datetime
-from datetime import timedelta
+from rest_framework.pagination import PageNumberPagination
 
 
-from tracevision.models import TraceSession, TracePlayer
+from teams.models import Team
+from tracevision.models import TraceClipReel, TraceSession, TracePlayer, TraceVisionPlayerStats, TraceVisionSessionStats
+from tracevision.tasks import download_video_and_save_to_azure_blob, generate_overlay_highlights_task, process_trace_sessions_task
 from tracevision.serializers import TraceVisionProcessesSerializer, TraceVisionProcessSerializer, TraceSessionListSerializer, TraceClipReelSerializer, CoachViewSpecificTeamPlayersSerializer
 from tracevision.services import TraceVisionService
-from teams.models import Team
-
-
-from rest_framework.pagination import PageNumberPagination
 
 
 logger = logging.getLogger()
@@ -36,7 +31,32 @@ class TraceVisionProcessesList(ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return TraceSession.objects.filter(user=self.request.user).order_by('-updated_at', '-created_at')
+        base_queryset = TraceSession.objects.filter(
+            Q(user=self.request.user) |
+            Q(trace_players__user=self.request.user)
+        ).distinct()
+
+        serializer = self.serializer_class(data=self.request.query_params)
+        if not serializer.is_valid():
+            # Return empty queryset instead of Response object
+            return TraceSession.objects.none()
+
+        return self.serializer_class.get_filtered_queryset(base_queryset, serializer.validated_data)
+
+    def list(self, request, *args, **kwargs):
+        """
+        Override list method to handle validation errors properly
+        """
+        # Validate query parameters first
+        serializer = self.serializer_class(data=request.query_params)
+        if not serializer.is_valid():
+            return Response({
+                "error": "Invalid query parameters",
+                "details": serializer.errors
+            }, status=http_status.HTTP_400_BAD_REQUEST)
+        
+        # If validation passes, proceed with normal list behavior
+        return super().list(request, *args, **kwargs)
 
     def get_paginated_response(self, data):
         """
@@ -86,7 +106,8 @@ class TraceVisionProcessView(APIView):
 
             # Extract validated data
             video_link = serializer.validated_data.get('video_link')
-            video_file = serializer.validated_data.get('video_file') # TODO: For video upload instead of video URL.
+            # TODO: For video upload instead of video URL.
+            video_file = serializer.validated_data.get('video_file')
             home_team = serializer.validated_data['home_team_name']
             away_team = serializer.validated_data['away_team_name']
             home_color = serializer.validated_data['home_team_jersey_color']
@@ -227,7 +248,7 @@ class TraceVisionProcessView(APIView):
 
                 import_response = requests.post(GRAPHQL_URL, headers={
                                                 "Content-Type": "application/json"}, json=import_video_payload)
-                
+
                 import_json = import_response.json()
                 logger.info("Video import response: %s", import_json)
 
@@ -338,21 +359,6 @@ class TraceVisionProcessView(APIView):
             }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class TraceVisionProcessResultView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, pk):
-        try:
-            session = TraceSession.objects.get(id=pk, user=request.user)
-            return Response(session.result, status=http_status.HTTP_200_OK)
-        except TraceSession.DoesNotExist:
-            return Response({"error": "Session not found"}, status=http_status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logger.exception(
-                f"Error while fetching TraceVision result: {str(e)}")
-            return Response({"error": "Internal server error"}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 class TraceVisionPollStatusView(APIView):
     """
     API endpoint to actively poll TraceVision API for latest session status and data.
@@ -426,6 +432,61 @@ class TraceVisionPollStatusView(APIView):
                 "video_url": session.video_url,
             }
 
+            # If session is processed, include session URL and highlights
+            if session.status == "processed":
+                # Get highlights for this session
+                highlights = session.highlights.all().order_by('start_offset')
+                highlights_data = []
+
+                for highlight in highlights:
+                    highlight_data = {
+                        "id": highlight.id,
+                        "highlight_id": highlight.highlight_id,
+                        "start_offset": highlight.start_offset,
+                        "duration": highlight.duration,
+                        "event_type": highlight.event_type,
+                        "match_time": highlight.match_time,
+                        "half": highlight.half,
+                        "tags": highlight.tags,
+                        "video_stream": highlight.video_stream,
+                        "performance_impact": highlight.performance_impact,
+                        "team_impact": highlight.team_impact,
+                        "event_metadata": highlight.event_metadata,
+                    }
+
+                    # Include primary player info if available
+                    if hasattr(highlight, 'primary_player') and highlight.primary_player:
+                        highlight_data["primary_player"] = {
+                            "id": highlight.primary_player.id,
+                            "name": highlight.primary_player.name,
+                            "jersey_number": highlight.primary_player.jersey_number,
+                        }
+
+                    highlights_data.append(highlight_data)
+
+                # Add session URL and highlights to response
+                response_data.update({
+                    "session_url": f"/api/vision/process/{session.id}/",
+                    "highlights": highlights_data,
+                    "highlights_count": len(highlights_data),
+                    "metadata": {
+                        "home_team": session.home_team.name if session.home_team else None,
+                        "away_team": session.away_team.name if session.away_team else None,
+                        "home_score": session.home_score,
+                        "away_score": session.away_score,
+                        "home_team_jersey_color": session.home_team.jersey_color if session.home_team else None,
+                        "away_team_jersey_color": session.away_team.jersey_color if session.away_team else None,
+                        "age_group": session.age_group,
+                        "pitch_size": session.pitch_size,
+                        "pitch_dimensions": session.get_pitch_dimensions(),
+                        "final_score": session.final_score,
+                        "start_time": session.start_time,
+                        "match_date": session.match_date,
+                        "video_url": session.video_url,
+                        "fetched_at": datetime.now().isoformat()
+                    }
+                })
+
             return Response(response_data, status=http_status.HTTP_200_OK)
 
         except TraceSession.DoesNotExist:
@@ -434,114 +495,6 @@ class TraceVisionPollStatusView(APIView):
             logger.exception(
                 f"Error while polling TraceVision status: {str(e)}")
             return Response({"error": "Internal server error"}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class TraceVisionSchedulerStatusView(APIView):
-    """
-    API endpoint to check the status of the TraceVision scheduler.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        try:
-            from tracevision.scheduler import get_scheduler_status
-
-            status = get_scheduler_status()
-
-            if 'error' in status:
-                return Response({
-                    "error": "Failed to get scheduler status",
-                    "details": status["error"]
-                }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            # Add environment info
-            import os
-            env = "development" if settings.DEBUG else "production"
-
-            response_data = {
-                "success": True,
-                "scheduler_running": status['running'],
-                "total_jobs": status['total_jobs'],
-                "jobs": status['jobs'],
-                "environment": env,
-                "interval": "every minute" if env.lower() == 'development' else "every 2 hours",
-                "timestamp": datetime.now().isoformat()
-            }
-
-            return Response(response_data, status=http_status.HTTP_200_OK)
-
-        except Exception as e:
-            logger.exception(
-                f"Error while checking scheduler status: {str(e)}")
-            return Response({
-                "error": "Internal server error",
-                "details": str(e)
-            }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class TraceVisionSessionResultView(APIView):
-    """
-    API endpoint to get TraceVision session result using GraphQL query.
-    This is a testing endpoint that will be converted to a Celery task in the future.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, pk):
-        try:
-            # Get the session for the authenticated user
-            session = TraceSession.objects.get(id=pk, user=request.user)
-
-            # Initialize service
-            tracevision_service = TraceVisionService()
-
-            # Get session result data
-            result_data = tracevision_service.get_session_result(session)
-
-            if not result_data:
-                return Response({
-                    "error": "Failed to retrieve session result from TraceVision API",
-                    "session_id": session.session_id,
-                    "details": "No result data available. Session may not be completed yet."
-                }, status=http_status.HTTP_404_NOT_FOUND)
-
-            # Prepare response data
-            response_data = {
-                "success": True,
-                "session_id": session.session_id,
-                "session_status": session.status,
-                "result": result_data,
-                "metadata": {
-                    "home_team": session.home_team.name if session.home_team else None,
-                    "away_team": session.away_team.name if session.away_team else None,
-                    "home_score": session.home_score,
-                    "away_score": session.away_score,
-                    "home_team_jersey_color": session.home_team.jersey_color if session.home_team else None,
-                    "away_team_jersey_color": session.away_team.jersey_color if session.away_team else None,
-                    "age_group": session.age_group,
-                    "pitch_size": session.pitch_size,
-                    "pitch_dimensions": session.get_pitch_dimensions(),
-                    "final_score": session.final_score,
-                    "start_time": session.start_time,
-                    "match_date": session.match_date,
-                    "video_url": session.video_url,
-                    "fetched_at": datetime.now().isoformat()
-                }
-            }
-
-            return Response(response_data, status=http_status.HTTP_200_OK)
-
-        except TraceSession.DoesNotExist:
-            return Response({
-                "error": "Session not found",
-                "details": "No TraceVision session found with the given ID for this user"
-            }, status=http_status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logger.exception(
-                f"Error while fetching TraceVision session result: {str(e)}")
-            return Response({
-                "error": "Internal server error",
-                "details": str(e)
-            }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class TraceVisionPlayerStatsView(APIView):
@@ -553,7 +506,7 @@ class TraceVisionPlayerStatsView(APIView):
     def post(self, request, pk):
         """
         Trigger player stats calculation for a session or generate overlay highlights
-        
+
         Query Parameters:
         - task_type: 'process_sessions' (default) or 'generate_overlays'
         """
@@ -562,8 +515,9 @@ class TraceVisionPlayerStatsView(APIView):
             session = TraceSession.objects.get(id=pk, user=request.user)
 
             # Get task type from query parameters
-            task_type = request.query_params.get('task_type', 'process_sessions')
-            
+            task_type = request.query_params.get(
+                'task_type', 'process_sessions')
+
             # Validate task type
             if task_type not in ['process_sessions', 'generate_overlays']:
                 return Response({
@@ -580,15 +534,16 @@ class TraceVisionPlayerStatsView(APIView):
 
             # Trigger the appropriate async task
             if task_type == 'process_sessions':
-                from tracevision.tasks import process_trace_sessions_task
                 task = process_trace_sessions_task.delay(session.id)
                 message = "Player stats calculation started"
-                logger.info(f"Queued player stats calculation for session {session.session_id}")
+                logger.info(
+                    f"Queued player stats calculation for session {session.session_id}")
             else:  # generate_overlays
-                from tracevision.tasks import generate_overlay_highlights_task
-                task = generate_overlay_highlights_task.delay(session_id=session.session_id)
+                task = generate_overlay_highlights_task.delay(
+                    session_id=session.session_id)
                 message = "Overlay highlights generation started"
-                logger.info(f"Queued overlay highlights generation for session {session.session_id}")
+                logger.info(
+                    f"Queued overlay highlights generation for session {session.session_id}")
 
             return Response({
                 "success": True,
@@ -621,7 +576,6 @@ class TraceVisionPlayerStatsView(APIView):
             session = TraceSession.objects.get(id=pk, user=request.user)
 
             # Get player stats
-            from tracevision.models import TraceVisionPlayerStats
             player_stats = TraceVisionPlayerStats.objects.filter(
                 session=session
             ).order_by('-performance_score')
@@ -634,7 +588,6 @@ class TraceVisionPlayerStatsView(APIView):
                 }, status=http_status.HTTP_404_NOT_FOUND)
 
             # Get session stats
-            from tracevision.models import TraceVisionSessionStats
             session_stats = TraceVisionSessionStats.objects.filter(
                 session=session).first()
 
@@ -724,7 +677,6 @@ class TraceVisionPlayerStatsDetailView(APIView):
             session = TraceSession.objects.get(id=pk, user=request.user)
 
             # Get player stats
-            from tracevision.models import TraceVisionPlayerStats
             try:
                 player_stats = TraceVisionPlayerStats.objects.get(
                     session=session,
@@ -830,7 +782,6 @@ class GetTracePlayerReelsView(APIView):
         if player:
             clipreels = player.primary_clip_reels.all()
         else:
-            from tracevision.models import TraceClipReel
             clipreels = TraceClipReel.objects.none()
 
         # ---------- filters ----------
