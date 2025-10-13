@@ -1,5 +1,6 @@
 import logging
 import requests
+from django.db import models
 from django.db.models import Q
 from datetime import timedelta
 from django.conf import settings
@@ -54,7 +55,7 @@ class TraceVisionProcessesList(ListAPIView):
                 "error": "Invalid query parameters",
                 "details": serializer.errors
             }, status=http_status.HTTP_400_BAD_REQUEST)
-        
+
         # If validation passes, proceed with normal list behavior
         return super().list(request, *args, **kwargs)
 
@@ -812,19 +813,30 @@ class GetTracePlayerReelsView(APIView):
         if age_group:
             clipreels = clipreels.filter(session__age_group=age_group)
 
+        # New filters for highlights
+        half = request.query_params.get('half')  # 1 or 2 for first/second half
+        player_id = request.query_params.get(
+            'player_id')  # Filter by specific player
+        event_type = request.query_params.get(
+            'event_type')  # Filter by event type
+
         # ---------- Build JSON ----------
         data = {
             "teams": [],
             "goals": [],
-            "highlights": [],
+            "highlights": {},  # Changed: Dictionary grouped by player
             "events_details": [],
+            "match_info": {},  # Match information including final score
             # "video_urls": {}
         }
 
-        # Teams
+        # Get all unique sessions for match info
+        sessions = set()
         teams_dict = {}
         for reel in clipreels.select_related("session__home_team", "session__away_team"):
             session = reel.session
+            sessions.add(session)
+
             if session.home_team and session.home_team.id not in teams_dict:
                 teams_dict[session.home_team.id] = {
                     "team_id": str(session.home_team.id),
@@ -839,27 +851,98 @@ class GetTracePlayerReelsView(APIView):
                 }
         data["teams"] = list(teams_dict.values())
 
+        # ---------- Match Info (Final Score) ----------
+        if sessions:
+            # Get the first session for match info (assuming all clips are from same match)
+            session = list(sessions)[0]
+            data["match_info"] = {
+                "session_id": str(session.id),
+                "match_date": session.match_date.strftime("%Y-%m-%d") if session.match_date else None,
+                "final_score": session.final_score,
+                "home_score": session.home_score,
+                "away_score": session.away_score,
+                "home_team": {
+                    "id": str(session.home_team.id) if session.home_team else None,
+                    "name": session.home_team.name if session.home_team else None,
+                } if session.home_team else None,
+                "away_team": {
+                    "id": str(session.away_team.id) if session.away_team else None,
+                    "name": session.away_team.name if session.away_team else None,
+                } if session.away_team else None,
+                "age_group": session.age_group,
+                "match_start_time": session.match_start_time,
+                "first_half_end_time": session.first_half_end_time,
+                "second_half_start_time": session.second_half_start_time,
+                "match_end_time": session.match_end_time,
+            }
+
         # ---------- Goals ----------
         for reel in clipreels.filter(event_type="goal").select_related(
-            "primary_player", "session__home_team", "session__away_team"
+            "primary_player", "session__home_team", "session__away_team", "highlight"
         ):
             session = reel.session
             team = session.home_team if reel.side == "home" else session.away_team
+
+            # Primary player with full details for goals
+            primary_player_data = None
+            if reel.primary_player:
+                primary_player_data = {
+                    "id": str(reel.primary_player.id),
+                    "name": reel.primary_player.name,
+                    "jersey_number": reel.primary_player.jersey_number,
+                    "position": reel.primary_player.position,
+                    "object_id": reel.primary_player.object_id,
+                    "team_id": str(reel.primary_player.team.id) if reel.primary_player.team else None,
+                    "team_name": reel.primary_player.team.name if reel.primary_player.team else None,
+                    "is_mapped": reel.primary_player.is_mapped,
+                    "created_at": reel.primary_player.created_at.isoformat() if reel.primary_player.created_at else None,
+                    "updated_at": reel.primary_player.updated_at.isoformat() if reel.primary_player.updated_at else None,
+                }
+
+            # Get event name from highlight
+            event_name = reel.highlight.get_event_description() if reel.highlight else "Goal"
+
             data["goals"].append({
                 "team_id": str(team.id) if team else None,
                 "team_name": team.name if team else None,
-                "player_id": str(reel.primary_player.id) if reel.primary_player else None,
-                "player_name": reel.primary_player.name if reel.primary_player else None,
+                "primary_player": primary_player_data,  # Full player details as dict
                 "event_time": reel.start_ms,
                 "start_time": reel.start_ms,
                 "end_time": reel.start_ms + reel.duration_ms,
-                "half": getattr(session, "half", None),
+                "half": reel.highlight.half if reel.highlight else None,
+                "event_name": event_name,
+                "match_time": reel.highlight.match_time if reel.highlight else None,
             })
 
-        # ---------- Highlights ----------
-        for reel in clipreels.exclude(event_type="goal").select_related(
-            "primary_player", "session__home_team", "session__away_team"
-        ).prefetch_related("involved_players"):
+        # ---------- Highlights Processing ----------
+        # Apply additional filters
+        highlights_queryset = clipreels.exclude(event_type="goal").select_related(
+            "primary_player", "session__home_team", "session__away_team", "highlight"
+        ).prefetch_related("involved_players")
+
+        # Filter by half if specified
+        if half:
+            if half == "1":
+                highlights_queryset = highlights_queryset.filter(
+                    highlight__half=1)
+            elif half == "2":
+                highlights_queryset = highlights_queryset.filter(
+                    highlight__half=2)
+
+        # Filter by player if specified
+        if player_id:
+            highlights_queryset = highlights_queryset.filter(
+                models.Q(primary_player_id=player_id) |
+                models.Q(involved_players__id=player_id)
+            ).distinct()
+
+        # Filter by event type if specified
+        if event_type:
+            highlights_queryset = highlights_queryset.filter(
+                event_type=event_type)
+
+        # Process highlights and group by player
+        for reel in highlights_queryset:
             session = reel.session
             team = session.home_team if reel.side == "home" else session.away_team
 
@@ -869,10 +952,43 @@ class GetTracePlayerReelsView(APIView):
             start_clock = str(start_td)
             end_clock = str(end_td)
 
-            # Involved players
-            involved_players = [str(p.id) for p in reel.involved_players.all()]
+            # Involved players with full details
+            involved_players = []
+            for p in reel.involved_players.all():
+                involved_players.append({
+                    "id": str(p.id),
+                    "name": p.name,
+                    "jersey_number": p.jersey_number,
+                    "position": p.position,
+                    "object_id": p.object_id,
+                    "team_id": str(p.team.id) if p.team else None,
+                    "team_name": p.team.name if p.team else None,
+                    "is_mapped": p.is_mapped,
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                    "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+                })
 
-            data["highlights"].append({
+            # Primary player with full details
+            primary_player_data = None
+            if reel.primary_player:
+                primary_player_data = {
+                    "id": str(reel.primary_player.id),
+                    "name": reel.primary_player.name,
+                    "jersey_number": reel.primary_player.jersey_number,
+                    "position": reel.primary_player.position,
+                    "object_id": reel.primary_player.object_id,
+                    "team_id": str(reel.primary_player.team.id) if reel.primary_player.team else None,
+                    "team_name": reel.primary_player.team.name if reel.primary_player.team else None,
+                    "is_mapped": reel.primary_player.is_mapped,
+                    "created_at": reel.primary_player.created_at.isoformat() if reel.primary_player.created_at else None,
+                    "updated_at": reel.primary_player.updated_at.isoformat() if reel.primary_player.updated_at else None,
+                }
+
+            # Get event name from highlight
+            event_name = reel.highlight.get_event_description(
+            ) if reel.highlight else reel.event_type.capitalize()
+
+            highlight_data = {
                 "id": str(reel.id),
                 "age_group": getattr(session, "age_group", None),
                 "match_date": session.match_date.strftime("%Y-%m-%d") if session.match_date else None,
@@ -880,6 +996,7 @@ class GetTracePlayerReelsView(APIView):
                 "video_type": reel.video_type,
                 "video_variant_name": reel.video_variant_name,
                 "event_type": reel.event_type,
+                "event_name": event_name,
                 "side": reel.side,
                 "start_ms": reel.start_ms,
                 "duration_ms": reel.duration_ms,
@@ -905,15 +1022,34 @@ class GetTracePlayerReelsView(APIView):
                 "updated_at": reel.updated_at.isoformat() if reel.updated_at else None,
                 "session": str(session.id),
                 "highlight": str(reel.highlight.id),
-                "primary_player": str(reel.primary_player.id) if reel.primary_player else None,
-                "involved_players": involved_players,
+                "primary_player": primary_player_data,  # Full player details as dict
+                "involved_players": involved_players,  # List of player details as dicts
                 "match_start_time": session.match_start_time,
                 "first_half_end_time": session.first_half_end_time,
                 "second_half_start_time": session.second_half_start_time,
                 "match_end_time": session.match_end_time,
                 "basic_game_stats": session.basic_game_stats.url if session.basic_game_stats else None,
+                # Half information from TraceHighlight
+                "half": reel.highlight.half if reel.highlight else None,
+                # Match time from TraceHighlight
+                "match_time": reel.highlight.match_time if reel.highlight else None,
+            }
 
-            })
+            # ---------- Group highlights by player ----------
+            # Add to primary player's highlights
+            if reel.primary_player:
+                player_key = reel.primary_player.name  # Use actual player name as key
+                if player_key not in data["highlights"]:
+                    data["highlights"][player_key] = []
+                data["highlights"][player_key].append(highlight_data)
+
+            # Also add to involved players' highlights (if different from primary player)
+            for involved_player in reel.involved_players.all():
+                if not reel.primary_player or involved_player.id != reel.primary_player.id:
+                    player_key = involved_player.name  # Use actual player name as key
+                    if player_key not in data["highlights"]:
+                        data["highlights"][player_key] = []
+                    data["highlights"][player_key].append(highlight_data)
 
         # ---------- Pagination ----------
         paginator = PageNumberPagination()
