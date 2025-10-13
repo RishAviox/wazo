@@ -1064,6 +1064,52 @@ class GetTracePlayerReelsView(APIView):
         return Response(data)
 
 
+class GetAvailableHighlightDatesView(APIView):
+    """
+    API endpoint to get list of dates on which highlights are available.
+    This helps in making only those dates selectable in the calendar.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            # Get the current user's player
+            player = request.user.trace_players.first()
+            if not player:
+                return Response({
+                    "success": False,
+                    "message": "No player found for this user",
+                    "data": []
+                }, status=http_status.HTTP_404_NOT_FOUND)
+
+            # Get all unique match dates where the player has highlights
+            # Using TraceClipReel to get dates with highlights
+            available_dates = TraceClipReel.objects.filter(
+                models.Q(primary_player=player) | 
+                models.Q(involved_players=player)
+            ).values_list('session__match_date', flat=True).distinct().order_by('-session__match_date')
+
+            # Convert to simple list of dates
+            available_dates_list = []
+            for date in available_dates:
+                if date:  # Ensure date is not None
+                    available_dates_list.append(date.strftime("%Y-%m-%d"))
+
+            return Response({
+                "success": True,
+                "message": "Available highlight dates retrieved successfully",
+                "data": available_dates_list
+            }, status=http_status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "success": False,
+                "message": "Failed to fetch available highlight dates",
+                "data": [],
+                "error": str(e)
+            }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class CoachViewSpecificTeamPlayers(APIView):
     def get(self, request):
         if not request.user.is_authenticated:
