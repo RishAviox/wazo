@@ -95,6 +95,7 @@ class GreetingAPI(APIView):
             return Response({ 'greeting': greeting }, status=status.HTTP_200_OK)
         
         except Exception as e:
+            print(f"Error while processing greeting request for user {request.user.id}: {str(e)}")
             logger.error(
                 f"Error while processing greeting request for user {request.user.id}: {str(e)}", stack_info=True)
             return Response({
