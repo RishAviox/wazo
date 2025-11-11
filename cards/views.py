@@ -1,4 +1,5 @@
 # views related to cards
+import sys
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
@@ -80,15 +81,43 @@ class GreetingAPI(APIView):
                         Current Date and time: {israel_local_time}
                     """
 
-            greeting = generate_llm_response(prompt)
-            print("greeting: ", greeting)
-            print("*" * 100)
-            # store in db
-            GreetingCache.objects.create(user=user, text=greeting)
-            print("[Generated] New Greeting: ", greeting)
-            return Response({ 'greeting': greeting }, status=status.HTTP_200_OK)
+            print("[GreetingAPI] About to call generate_llm_response...")
+            sys.stdout.flush()
+            print(f"[GreetingAPI] Prompt length: {len(prompt)}")
+            sys.stdout.flush()
+            
+            try:
+                greeting = generate_llm_response(prompt)
+                print("[GreetingAPI] Successfully received greeting from LLM")
+                sys.stdout.flush()
+                print("greeting: ", greeting)
+                sys.stdout.flush()
+                print("*" * 100)
+                sys.stdout.flush()
+                
+                print("[GreetingAPI] About to save greeting to database...")
+                sys.stdout.flush()
+                # store in db
+                GreetingCache.objects.create(user=user, text=greeting)
+                print("[Generated] New Greeting: ", greeting)
+                sys.stdout.flush()
+                print("[GreetingAPI] Successfully saved greeting to database")
+                sys.stdout.flush()
+                return Response({ 'greeting': greeting }, status=status.HTTP_200_OK)
+            except Exception as llm_error:
+                print(f"[GreetingAPI] LLM Error: {str(llm_error)}")
+                sys.stdout.flush()
+                import traceback
+                print(f"[GreetingAPI] LLM Traceback: {traceback.format_exc()}")
+                sys.stdout.flush()
+                # Re-raise to be caught by outer exception handler
+                raise
         except Exception as e:
-            print(f"Error while processing greeting request for user {request.user.id}: {str(e)}")
+            print(f"[GreetingAPI] Error while processing greeting request for user {getattr(request.user, 'id', 'unknown')}: {str(e)}")
+            sys.stdout.flush()
+            import traceback
+            print(f"[GreetingAPI] Full Traceback: {traceback.format_exc()}")
+            sys.stdout.flush()
             return Response({ 'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
  
 # ai-insight API, unique for each card
