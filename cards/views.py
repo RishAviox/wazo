@@ -1,5 +1,4 @@
 # views related to cards
-import logging
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
@@ -20,8 +19,6 @@ from events.models import MatchEventsDataFile
 from accounts.serializer import WajoUserSerializer
 from games.models import GameMetaData
 
-logger = logging.getLogger(__name__)
-
 # Fake insights for News Card
 NEWS_CARD_INSIGHTS = [
     "Learn from the best! Watching the pros in action can sharpen your skills and elevate your game.",
@@ -41,65 +38,55 @@ class GreetingAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        try:
-            user = request.user
-            
-            greeting_cache_qs = GreetingCache.objects.filter(user=user).order_by('-updated_on') 
-            latest_greeting_obj = greeting_cache_qs.first()
-            
-            if latest_greeting_obj:
-                greeting = latest_greeting_obj.text
-                logger.info(f"[Cached] greeting for user {user.id}: {greeting}")
-                return Response({ 'greeting': greeting }, status=status.HTTP_200_OK)
-     
-            
-            today = datetime.today()
-
-            if user.selected_language == 'he':
-                language = "Hebrew"
-            else:
-                language = "English"
+        user = request.user
         
-            user_data = {
-                "name": request.user.name,
-                "wellness": get_status_card_metrics(user),
-                "calendar": get_daily_snapshot(user, today),
-                # "performance-metrics": get_performance_metrics(user),
-                # "defensive-performance-metrics": get_defensive_performance_metrics(user),
-                # "offensive-performance-metrics": get_offensive_performance_metrics(user),
-                "current_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-            logger.info(f"Generating greeting for user {user.id} with language: {language}")
-            print(f"Generating greeting for user {user.id} with language: {language}")
-            # logger.debug("user_data for greeting generation: %s", user_data)
-
-            israel_tz = pytz.timezone('Asia/Jerusalem')
-            utc_time = datetime.now(pytz.utc)
-            israel_local_time = utc_time.astimezone(israel_tz)
-
-            prompt = f"""Generate a two-liner greeting only in {language} language for the user with the following data. 
-                        Keep the word count around 60 words and make it crisp and to the point for a athelete. Do not include JSON data. 
-                        From the data passed, see what should be his main focus for the day.: {user_data}. 
-                        {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}
-                        Current Date and time: {israel_local_time}
-                    """
-
-            greeting = generate_llm_response(prompt)
-            
-            # store in db
-            GreetingCache.objects.create(user=user, text=greeting)
-
-            logger.info(f"[Generated] New Greeting for user {user.id}: {greeting}")
-            print(f"[Generated] New Greeting for user {user.id}: {greeting}")
-
+        greeting_cache_qs = GreetingCache.objects.filter(user=user).order_by('-updated_on') 
+        latest_greeting_obj = greeting_cache_qs.first()
+        
+        if latest_greeting_obj:
+            greeting = latest_greeting_obj.text
+            print("[Cached] greeting: ", greeting)
             return Response({ 'greeting': greeting }, status=status.HTTP_200_OK)
+ 
         
-        except Exception as e:
-            logger.error(
-                f"Error while processing greeting request for user {request.user.id}: {str(e)}", stack_info=True)
-            return Response({
-                "error": "Internal server error",
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        today = datetime.today()
+
+        if user.selected_language == 'he':
+            language = "Hebrew"
+        else:
+            language = "English"
+    
+        user_data = {
+            "name": request.user.name,
+            "wellness": get_status_card_metrics(user),
+            "calendar": get_daily_snapshot(user, today),
+            # "performance-metrics": get_performance_metrics(user),
+            # "defensive-performance-metrics": get_defensive_performance_metrics(user),
+            # "offensive-performance-metrics": get_offensive_performance_metrics(user),
+            "current_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        print("*" * 100)
+        # print("user_data for greeting generation: ", user_data)
+
+        israel_tz = pytz.timezone('Asia/Jerusalem')
+        utc_time = datetime.now(pytz.utc)
+        israel_local_time = utc_time.astimezone(israel_tz)
+
+        prompt = f"""Generate a two-liner greeting only in {language} language for the user with the following data. 
+                    Keep the word count around 60 words and make it crisp and to the point for a athelete. Do not include JSON data. 
+                    From the data passed, see what should be his main focus for the day.: {user_data}. 
+                    {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}
+                    Current Date and time: {israel_local_time}
+                """
+
+        greeting = generate_llm_response(prompt)
+        
+        # store in db
+        GreetingCache.objects.create(user=user, text=greeting)
+
+        print("[Generated] New Greeting: ", greeting)
+
+        return Response({ 'greeting': greeting }, status=status.HTTP_200_OK)
  
 
 # ai-insight API, unique for each card
