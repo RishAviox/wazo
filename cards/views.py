@@ -80,43 +80,17 @@ class GreetingAPI(APIView):
                         {'Dont translate but think and respond in Hebrew.' if language == 'Hebrew' else ''}
                         Current Date and time: {israel_local_time}
                     """
-
-            print("[GreetingAPI] About to call generate_llm_response...")
-            sys.stdout.flush()
-            print(f"[GreetingAPI] Prompt length: {len(prompt)}")
-            sys.stdout.flush()
-            
             try:
                 greeting = generate_llm_response(prompt)
-                print("[GreetingAPI] Successfully received greeting from LLM")
-                sys.stdout.flush()
-                print("greeting: ", greeting)
-                sys.stdout.flush()
-                print("*" * 100)
-                sys.stdout.flush()
-                
-                print("[GreetingAPI] About to save greeting to database...")
-                sys.stdout.flush()
                 # store in db
                 GreetingCache.objects.create(user=user, text=greeting)
-                print("[Generated] New Greeting: ", greeting)
-                sys.stdout.flush()
-                print("[GreetingAPI] Successfully saved greeting to database")
-                sys.stdout.flush()
                 return Response({ 'greeting': greeting }, status=status.HTTP_200_OK)
             except Exception as llm_error:
                 print(f"[GreetingAPI] LLM Error: {str(llm_error)}")
                 sys.stdout.flush()
-                import traceback
-                print(f"[GreetingAPI] LLM Traceback: {traceback.format_exc()}")
-                sys.stdout.flush()
-                # Re-raise to be caught by outer exception handler
                 raise
         except Exception as e:
-            print(f"[GreetingAPI] Error while processing greeting request for user {getattr(request.user, 'id', 'unknown')}: {str(e)}")
-            sys.stdout.flush()
-            import traceback
-            print(f"[GreetingAPI] Full Traceback: {traceback.format_exc()}")
+            print(f"[GreetingAPI] Full Traceback: {str(e)}")
             sys.stdout.flush()
             return Response({ 'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
  
