@@ -6,14 +6,14 @@ Adapted from WAZO.py to work with Django models and Azure Blob Storage.
 import json
 import logging
 import os
+import subprocess
 import tempfile
 import uuid
-from typing import Dict, Optional
+from typing import Optional
 
 import cv2
 import numpy as np
 import pandas as pd
-import requests
 from django.core.files.storage import default_storage
 
 from .models import TraceClipReel, TraceObject, TracePlayer
@@ -301,6 +301,41 @@ def add_bbox_overlay_to_frame(
     return frame
 
 
+def convert_to_browser_friendly(input_video_path: str, fps: float) -> str:
+    """Convert video to browser/Flutter-friendly H.264 format using ffmpeg."""
+    try:
+        # Check ffmpeg availability
+        subprocess.run(['ffmpeg', '-version'], capture_output=True, timeout=5, check=True)
+    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        logger.warning("ffmpeg not available, skipping browser-friendly conversion")
+        return input_video_path
+    
+    temp_output = input_video_path + '.h264.mp4'
+    try:
+        cmd = [
+            'ffmpeg', '-loglevel', 'error', '-i', input_video_path,
+            '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
+            '-pix_fmt', 'yuv420p', '-profile:v', 'baseline', '-level', '3.1',
+            '-movflags', '+faststart', '-vsync', 'cfr', '-r', str(int(fps)),
+            '-an', '-f', 'mp4', '-y', temp_output
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode == 0 and os.path.exists(temp_output) and os.path.getsize(temp_output) > 0:
+            os.remove(input_video_path)
+            os.rename(temp_output, input_video_path)
+            logger.info(f"Video converted to browser-friendly H.264 format")
+            return input_video_path
+        else:
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
+            raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
+    except Exception as e:
+        if os.path.exists(temp_output):
+            os.remove(temp_output)
+        logger.error(f"Browser-friendly conversion failed: {e}")
+        raise
+
+
 def create_video_with_tracking_overlay(
     video_time_min_ms,
     video_time_max_ms,
@@ -420,7 +455,21 @@ def create_video_with_tracking_overlay(
     # Close input and output videos:
     sav.release()
     cap.release()
+    
+    # Validate output file
+    if not os.path.exists(out_video_filepath) or os.path.getsize(out_video_filepath) == 0:
+        raise ValueError(f"Output video file is empty or missing: {out_video_filepath}")
+    
     logger.info(f"Video generation completed: {out_video_filepath}")
+    
+    # Convert to browser/Flutter-friendly format
+    try:
+        out_video_filepath = convert_to_browser_friendly(out_video_filepath, fps)
+    except Exception as e:
+        logger.error(f"Browser-friendly conversion failed: {e}")
+        raise RuntimeError(f"Failed to convert video to browser-friendly format: {e}")
+    
+    return out_video_filepath
 
 
 def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Optional[TrackingDataCache] = None, session_video_path: Optional[str] = None) -> str:
