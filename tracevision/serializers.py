@@ -5,9 +5,13 @@ from rest_framework import serializers
 from tracevision.models import TraceSession, TraceClipReel, TracePlayer
 from tracevision.utils import get_hex_from_color_name
 
+
 class TraceClipReelSerializer(serializers.ModelSerializer):
-    age_group = serializers.CharField(source="session.age_group", read_only=True)
-    match_date = serializers.DateField(source="session.match_date", read_only=True)
+    age_group = serializers.CharField(
+        source="session.age_group", read_only=True)
+    match_date = serializers.DateField(
+        source="session.match_date", read_only=True)
+
     class Meta:
         model = TraceClipReel
         fields = '__all__'
@@ -15,11 +19,15 @@ class TraceClipReelSerializer(serializers.ModelSerializer):
 
 
 class TraceVisionProcessesSerializer(serializers.ModelSerializer):
-    home_team_name = serializers.CharField(source='home_team.name', read_only=True)
-    away_team_name = serializers.CharField(source='away_team.name', read_only=True)
-    home_team_jersey_color = serializers.CharField(source='home_team.jersey_color', read_only=True)
-    away_team_jersey_color = serializers.CharField(source='away_team.jersey_color', read_only=True)
-    
+    home_team_name = serializers.CharField(
+        source='home_team.name', read_only=True)
+    away_team_name = serializers.CharField(
+        source='away_team.name', read_only=True)
+    home_team_jersey_color = serializers.CharField(
+        source='home_team.jersey_color', read_only=True)
+    away_team_jersey_color = serializers.CharField(
+        source='away_team.jersey_color', read_only=True)
+
     class Meta:
         model = TraceSession
         fields = '__all__'
@@ -30,17 +38,25 @@ class TraceSessionListSerializer(serializers.ModelSerializer):
     """
     Serializer for TraceSession list view with essential information and filtering
     """
-    home_team_name = serializers.CharField(source='home_team.name', read_only=True)
-    away_team_name = serializers.CharField(source='away_team.name', read_only=True)
-    home_team_jersey_color = serializers.CharField(source='home_team.jersey_color', read_only=True)
-    away_team_jersey_color = serializers.CharField(source='away_team.jersey_color', read_only=True)
-    pitch_dimensions = serializers.CharField(source='get_pitch_dimensions', read_only=True)
-    
+    home_team_name = serializers.CharField(
+        source='home_team.name', read_only=True)
+    away_team_name = serializers.CharField(
+        source='away_team.name', read_only=True)
+    home_team_jersey_color = serializers.CharField(
+        source='home_team.jersey_color', read_only=True)
+    away_team_jersey_color = serializers.CharField(
+        source='away_team.jersey_color', read_only=True)
+    pitch_dimensions = serializers.CharField(
+        source='get_pitch_dimensions', read_only=True)
+
     # Filter fields
-    match_date = serializers.DateField(required=False, help_text="Filter by exact match date (YYYY-MM-DD)")
-    created_at = serializers.DateTimeField(required=False, help_text="Filter by creation date (YYYY-MM-DD HH:MM:SS)")
+    match_date = serializers.DateField(
+        required=False, help_text="Filter by exact match date (YYYY-MM-DD)")
+    created_at = serializers.DateTimeField(
+        required=False, help_text="Filter by creation date (YYYY-MM-DD HH:MM:SS)")
     status = serializers.ChoiceField(
-        choices=['waiting_for_data', 'processing', 'processed', 'process_error'],
+        choices=['waiting_for_data', 'processing',
+                 'processed', 'process_error'],
         required=False,
         # write_only=True,
         help_text="Filter by session status"
@@ -57,12 +73,12 @@ class TraceSessionListSerializer(serializers.ModelSerializer):
         # write_only=True,
         help_text="Filter by team name (searches both home and away teams)"
     )
-    
+
     class Meta:
         model = TraceSession
         fields = [
             'id', 'session_id', 'status', 'user', 'match_date',
-            'home_team_name', 'away_team_name', 'home_score', 'away_score', 
+            'home_team_name', 'away_team_name', 'home_score', 'away_score',
             'home_team_jersey_color', 'away_team_jersey_color', 'age_group', 'pitch_size', 'pitch_dimensions',
             'final_score', 'start_time', 'video_url', 'created_at', 'updated_at',
             # Filter fields
@@ -70,7 +86,7 @@ class TraceSessionListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'session_id', 'status', 'user', 'match_date', 'home_team', 'away_team',
-            'home_team_name', 'away_team_name', 'home_score', 'away_score', 
+            'home_team_name', 'away_team_name', 'home_score', 'away_score',
             'home_team_jersey_color', 'away_team_jersey_color', 'age_group', 'pitch_size', 'pitch_dimensions',
             'final_score', 'start_time', 'video_url', 'created_at', 'updated_at'
         ]
@@ -92,30 +108,31 @@ class TraceSessionListSerializer(serializers.ModelSerializer):
         """
         Apply filters to queryset based on validated data
         """
-        
+
         # Created date filter
         if validated_data.get('created_at'):
-            queryset = queryset.filter(created_at__date=validated_data['created_at'].date())
-        
+            queryset = queryset.filter(
+                created_at__date=validated_data['created_at'].date())
+
         # Status filter
         if validated_data.get('status'):
             queryset = queryset.filter(status=validated_data['status'])
-        
+
         # Match date filter
         if validated_data.get('match_date'):
             queryset = queryset.filter(match_date=validated_data['match_date'])
-        
+
         # Age group filter
         if validated_data.get('age_group'):
             queryset = queryset.filter(age_group=validated_data['age_group'])
-        
+
         # Team name filter (searches both home_team and away_team)
         if validated_data.get('team_name'):
             queryset = queryset.filter(
                 Q(home_team__name__icontains=validated_data['team_name']) |
                 Q(away_team__name__icontains=validated_data['team_name'])
             )
-        
+
         return queryset.order_by('-updated_at', '-created_at')
 
 
@@ -186,7 +203,6 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         required=False,
         help_text="Basic game stats file (optional)"
     )
-   
 
     # Age group and pitch size fields
     age_group = serializers.ChoiceField(
@@ -203,7 +219,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         allow_null=True,
         help_text="Age group of the players (defaults to SENIOR if not provided)"
     )
-    
+
     # Optional custom pitch size (if user wants to override default)
     pitch_length = serializers.FloatField(
         required=False,
@@ -217,8 +233,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         max_value=100,
         help_text="Custom pitch width in meters (optional, will use age group default if not provided)"
     )
-    
-    
+
     def validate_video_file(self, value):
         """Validate video file field."""
         if value is None:
@@ -285,7 +300,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f"Invalid color name: {value}"
             )
-        
+
         if not hex_color.startswith('#') or len(hex_color) != 7:
             raise serializers.ValidationError(
                 "Away team jersey color must be a valid hex color (e.g., #0000FF)")
@@ -317,33 +332,33 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Final score is required. Use '0-0' if there is no score."
             )
-        
+
         value = value.strip()
         # Check if it contains exactly one dash
-        
+
         if value.count('-') != 1:
             raise serializers.ValidationError(
                 "Final score must be in format 'home_score-away_score' (e.g., '2-1', '0-0')"
             )
-        
+
         # Split and validate both parts
         try:
             home_score_str, away_score_str = value.split('-')
-            
+
             # Validate both scores are non-negative integers
             home_score = int(home_score_str)
             away_score = int(away_score_str)
-            
+
             if home_score < 0 or away_score < 0:
                 raise serializers.ValidationError(
                     "Both home and away scores must be non-negative integers"
                 )
-                
+
         except ValueError:
             raise serializers.ValidationError(
                 "Final score must contain valid integers in format 'home_score-away_score' (e.g., '2-1', '0-0')"
             )
-        
+
         return value
 
     def validate_basic_game_stats(self, value):
@@ -352,13 +367,13 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         """
         if not value:
             return value
-            
+
         import pandas as pd
-        
+
         try:
             # Read the Excel file
             excel_file = pd.ExcelFile(value)
-            
+
             # Define required tabs and their columns
             required_tabs = {
                 'Match_Summary': [],  # No specific columns required
@@ -368,54 +383,133 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                 'Coaches': ['Team', 'Coach Name', 'Role'],
                 'Referees': ['Position', 'Name']
             }
-            
+
             errors = []
-            
+
             # Check if all required tabs exist
             available_tabs = excel_file.sheet_names
             missing_tabs = []
-            
+
             for tab_name in required_tabs.keys():
                 if tab_name not in available_tabs:
                     missing_tabs.append(tab_name)
-            
+
             if missing_tabs:
-                errors.append(f"Missing required tabs: {', '.join(missing_tabs)}")
-            
+                errors.append(
+                    f"Missing required tabs: {', '.join(missing_tabs)}")
+
             # Check columns for each existing tab
             for tab_name, required_columns in required_tabs.items():
                 if tab_name in available_tabs:
                     try:
                         df = pd.read_excel(value, sheet_name=tab_name)
                         actual_columns = df.columns.tolist()
-                        
+
                         # Check if all required columns exist
                         missing_columns = []
                         for col in required_columns:
                             if col not in actual_columns:
                                 missing_columns.append(col)
-                        
+
                         if missing_columns:
-                            errors.append(f"Tab '{tab_name}' is missing required columns: {', '.join(missing_columns)}")
-                            
+                            errors.append(
+                                f"Tab '{tab_name}' is missing required columns: {', '.join(missing_columns)}")
+
                     except Exception as e:
-                        errors.append(f"Error reading tab '{tab_name}': {str(e)}")
-            
+                        errors.append(
+                            f"Error reading tab '{tab_name}': {str(e)}")
+
             # Check if file is empty or has no data
             if not available_tabs:
-                errors.append("The Excel file appears to be empty or corrupted")
-            
+                errors.append(
+                    "The Excel file appears to be empty or corrupted")
+
             # If there are any errors, raise validation error
             if errors:
                 raise serializers.ValidationError(errors)
-            
+
             return value
-            
+
         except Exception as e:
-            raise serializers.ValidationError([f"Error reading CSV file: {str(e)}"])
+            raise serializers.ValidationError(
+                [f"Error reading CSV file: {str(e)}"])
 
 
 class CoachViewSpecificTeamPlayersSerializer(serializers.ModelSerializer):
     class Meta:
         model = TracePlayer
         fields = '__all__'
+
+
+class HighlightDatePlayerSerializer(serializers.ModelSerializer):
+    """Serializer for player info in highlight dates response"""
+    player_id = serializers.IntegerField(source='id', read_only=True)
+    player_name = serializers.CharField(source='name', read_only=True)
+    player_jersey_number = serializers.IntegerField(
+        source='jersey_number', read_only=True)
+    player_position = serializers.CharField(source='position', read_only=True)
+    side = serializers.SerializerMethodField()
+    team = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TracePlayer
+        fields = ['player_id', 'player_name', 'player_jersey_number',
+                  'player_position', 'side', 'team']
+
+    def get_side(self, obj):
+        """Determine if player is on home or away team"""
+        session = obj.session
+        if session.home_team and obj.team and session.home_team.id == obj.team.id:
+            return 'home'
+        elif session.away_team and obj.team and session.away_team.id == obj.team.id:
+            return 'away'
+        return None
+
+    def get_team(self, obj):
+        """Get team information for the player"""
+        if not obj.team:
+            return {
+                "team_id": None,
+                "team_name": None,
+                "side": self.get_side(obj)
+            }
+
+        return {
+            "team_id": obj.team.id,
+            "team_name": obj.team.name,
+            "side": self.get_side(obj)
+        }
+
+
+class HighlightDateTeamSerializer(serializers.Serializer):
+    """Serializer for team info in highlight dates response"""
+    id = serializers.CharField(allow_null=True)
+    name = serializers.CharField(allow_null=True)
+
+    def to_representation(self, instance):
+        """Handle None team instances"""
+        if instance is None:
+            return {"id": None, "name": None}
+        return {
+            "id": instance.id,
+            "name": instance.name
+        }
+
+
+class HighlightDateSessionSerializer(serializers.ModelSerializer):
+    """Serializer for session info in highlight dates response"""
+    session_id = serializers.CharField(read_only=True)
+    match_date = serializers.DateField(format='%Y-%m-%d', read_only=True)
+    home_team = HighlightDateTeamSerializer(read_only=True)
+    away_team = HighlightDateTeamSerializer(read_only=True)
+    players = HighlightDatePlayerSerializer(
+        source='trace_players', many=True, read_only=True)
+
+    class Meta:
+        model = TraceSession
+        fields = [
+            'session_id', 'match_date', 'final_score', 'home_score', 'away_score',
+            'home_team', 'away_team', 'age_group', 'match_start_time',
+            'first_half_end_time', 'second_half_start_time', 'match_end_time',
+            'players'
+        ]

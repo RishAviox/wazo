@@ -217,7 +217,7 @@ def download_video_from_storage(video_blob_url: str, temp_dir: Optional[str] = N
             
             logger.info(f"Video download completed: {total_bytes / (1024 * 1024):.1f} MB total")
         response.close()
-        # temp_path = "./media/videos/4299999/4299999_video.mp4"
+        # temp_path = "./media/video_data/test_video.mp4"
         if os.path.exists(temp_path):
             logger.info(f"{'=='*50}\n\n{temp_path}\n\n{'=='*50}")
         else:

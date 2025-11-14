@@ -4,7 +4,8 @@ from django.db import models
 from django.db.models import Q
 from datetime import timedelta
 from django.conf import settings
-from datetime import datetime, date
+from datetime import datetime
+from django.db.models import Prefetch
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
@@ -12,11 +13,13 @@ from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 
-
 from teams.models import Team
-from tracevision.models import TraceClipReel, TraceSession, TracePlayer, TraceVisionPlayerStats, TraceVisionSessionStats
+from tracevision.models import TraceClipReel, TraceSession, TraceVisionPlayerStats, TracePlayer
 from tracevision.tasks import download_video_and_save_to_azure_blob, generate_overlay_highlights_task, process_trace_sessions_task
-from tracevision.serializers import TraceVisionProcessesSerializer, TraceVisionProcessSerializer, TraceSessionListSerializer, TraceClipReelSerializer, CoachViewSpecificTeamPlayersSerializer
+from tracevision.serializers import (
+    TraceVisionProcessesSerializer, TraceVisionProcessSerializer, TraceSessionListSerializer, 
+    CoachViewSpecificTeamPlayersSerializer, HighlightDateSessionSerializer
+)
 from tracevision.services import TraceVisionService
 
 
@@ -568,101 +571,6 @@ class TraceVisionPlayerStatsView(APIView):
                 "details": str(e)
             }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def get(self, request, pk):
-        """
-        Get player performance statistics for a session
-        """
-        try:
-            # Get the session for the authenticated user
-            session = TraceSession.objects.get(id=pk, user=request.user)
-
-            # Get player stats
-            player_stats = TraceVisionPlayerStats.objects.filter(
-                session=session
-            ).order_by('-performance_score')
-
-            if not player_stats.exists():
-                return Response({
-                    "success": False,
-                    "error": "No player stats found",
-                    "details": "Player statistics have not been calculated yet. Use POST to trigger calculation."
-                }, status=http_status.HTTP_404_NOT_FOUND)
-
-            # Get session stats
-            session_stats = TraceVisionSessionStats.objects.filter(
-                session=session).first()
-
-            # Format player stats for response
-            stats_data = []
-            for stats in player_stats:
-                stats_data.append({
-                    'object_id': stats.object_id,
-                    'side': stats.side,
-
-                    # Movement stats
-                    'total_distance_meters': stats.total_distance_meters,
-                    'avg_speed_mps': stats.avg_speed_mps,
-                    'max_speed_mps': stats.max_speed_mps,
-                    'total_time_seconds': stats.total_time_seconds,
-                    'distance_per_minute': stats.distance_per_minute,
-
-                    # Sprint stats
-                    'sprint_count': stats.sprint_count,
-                    'sprint_distance_meters': stats.sprint_distance_meters,
-                    'sprint_time_seconds': stats.sprint_time_seconds,
-                    'sprint_percentage': stats.sprint_percentage,
-
-                    # Position stats
-                    'avg_position_x': stats.avg_position_x,
-                    'avg_position_y': stats.avg_position_y,
-                    'position_variance': stats.position_variance,
-
-                    # Performance metrics
-                    'performance_score': stats.performance_score,
-                    'stamina_rating': stats.stamina_rating,
-                    'work_rate': stats.work_rate,
-
-                    # Metadata
-                    'calculation_method': stats.calculation_method,
-                    'calculation_version': stats.calculation_version,
-                    'last_calculated': stats.last_calculated.isoformat() if stats.last_calculated else None
-                })
-
-            # Format session stats
-            session_stats_data = None
-            if session_stats:
-                session_stats_data = {
-                    'total_tracking_points': session_stats.total_tracking_points,
-                    'data_coverage_percentage': session_stats.data_coverage_percentage,
-                    'quality_score': session_stats.quality_score,
-                    'processing_status': session_stats.processing_status,
-                    'home_team_stats': session_stats.home_team_stats,
-                    'away_team_stats': session_stats.away_team_stats
-                }
-
-            return Response({
-                "success": True,
-                "session_id": session.session_id,
-                "player_stats_count": len(stats_data),
-                "player_stats": stats_data,
-                "session_stats": session_stats_data,
-                "fetched_at": datetime.now().isoformat()
-            }, status=http_status.HTTP_200_OK)
-
-        except TraceSession.DoesNotExist:
-            return Response({
-                "error": "Session not found",
-                "details": "No TraceVision session found with the given ID for this user"
-            }, status=http_status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logger.exception(
-                f"Error getting player stats for session {pk}: {str(e)}")
-            return Response({
-                "error": "Internal server error",
-                "details": str(e)
-            }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 class TraceVisionPlayerStatsDetailView(APIView):
     """
     API endpoint to get detailed statistics for a specific player in a session.
@@ -1067,7 +975,7 @@ class GetTracePlayerReelsView(APIView):
 class GetAvailableHighlightDatesView(APIView):
     """
     API endpoint to get list of dates on which highlights are available.
-    This helps in making only those dates selectable in the calendar.
+    Returns sessions grouped by date with match info and players.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1079,34 +987,75 @@ class GetAvailableHighlightDatesView(APIView):
                 return Response({
                     "success": False,
                     "message": "No player found for this user",
-                    "data": []
+                    "data": {}
                 }, status=http_status.HTTP_404_NOT_FOUND)
 
-            # Get all unique match dates where the player has highlights
-            # Using TraceClipReel to get dates with highlights
-            available_dates = TraceClipReel.objects.filter(
-                models.Q(primary_player=player) | 
-                models.Q(involved_players=player)
-            ).values_list('session__match_date', flat=True).distinct().order_by('-session__match_date')
+            # Get all sessions where the player has highlights (optimized query)
+            # Using select_related and prefetch_related to avoid N+1 queries
+            try:
+                sessions_with_highlights = TraceSession.objects.filter(
+                    models.Q(clip_reels__primary_player=player) | 
+                    models.Q(clip_reels__involved_players=player)
+                ).select_related(
+                    'home_team', 'away_team'
+                ).prefetch_related(
+                    Prefetch(
+                        'trace_players',
+                        queryset=TracePlayer.objects.select_related('team')
+                    )
+                ).distinct().order_by('-match_date', '-id')
+            except Exception as db_error:
+                logger.exception(f"Database error while fetching sessions: {str(db_error)}")
+                return Response({
+                    "success": False,
+                    "message": "Something went wrong",
+                    "data": {},
+                    "error": "Unable to retrieve session data. Please try again later."
+                }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            # Convert to simple list of dates
-            available_dates_list = []
-            for date in available_dates:
-                if date:  # Ensure date is not None
-                    available_dates_list.append(date.strftime("%Y-%m-%d"))
+            # Group sessions by date
+            sessions_by_date = {}
+            try:
+                for session in sessions_with_highlights:
+                    try:
+                        date_key = session.match_date.strftime("%Y-%m-%d") if session.match_date else None
+                        if not date_key:
+                            continue
+                        
+                        if date_key not in sessions_by_date:
+                            sessions_by_date[date_key] = []
+                        
+                        # Serialize session data
+                        serializer = HighlightDateSessionSerializer(session)
+                        sessions_by_date[date_key].append(serializer.data)
+                    except (AttributeError, ValueError, KeyError) as session_error:
+                        logger.warning(f"Error processing session {session.id if hasattr(session, 'id') else 'unknown'}: {str(session_error)}")
+                        continue
+                    except Exception as serialization_error:
+                        logger.warning(f"Serialization error for session {session.id if hasattr(session, 'id') else 'unknown'}: {str(serialization_error)}")
+                        continue
+            except Exception as processing_error:
+                logger.exception(f"Error processing sessions: {str(processing_error)}")
+                return Response({
+                    "success": False,
+                    "message": "Error processing session data",
+                    "data": {},
+                    "error": "Unable to process session information. Please try again later."
+                }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             return Response({
                 "success": True,
                 "message": "Available highlight dates retrieved successfully",
-                "data": available_dates_list
+                "data": sessions_by_date
             }, status=http_status.HTTP_200_OK)
 
         except Exception as e:
+            logger.error(f"Unexpected error fetching available highlight dates: {str(e)}")
             return Response({
                 "success": False,
-                "message": "Failed to fetch available highlight dates",
-                "data": [],
-                "error": str(e)
+                "message": "An unexpected error occurred",
+                "data": {},
+                "error": "Unable to retrieve highlight dates. Please try again later."
             }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
