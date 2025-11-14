@@ -990,20 +990,48 @@ class GetAvailableHighlightDatesView(APIView):
                     "data": {}
                 }, status=http_status.HTTP_404_NOT_FOUND)
 
-            # Get all sessions where the player has highlights (optimized query)
-            # Using select_related and prefetch_related to avoid N+1 queries
             try:
+                # Get sessions with teams where the player has highlights
                 sessions_with_highlights = TraceSession.objects.filter(
                     models.Q(clip_reels__primary_player=player) | 
                     models.Q(clip_reels__involved_players=player)
                 ).select_related(
                     'home_team', 'away_team'
-                ).prefetch_related(
-                    Prefetch(
-                        'trace_players',
-                        queryset=TracePlayer.objects.select_related('team')
-                    )
                 ).distinct().order_by('-match_date', '-id')
+                
+                # Prefetch all players for teams in these sessions
+                # Get unique team IDs from sessions
+                team_ids = set()
+                for session in sessions_with_highlights:
+                    if session.home_team:
+                        team_ids.add(session.home_team.id)
+                    if session.away_team:
+                        team_ids.add(session.away_team.id)
+                
+                # Get all TracePlayers for these teams (NOT filtered by session)
+                # This ensures we get players even if they weren't created for this specific session
+                all_players = TracePlayer.objects.filter(
+                    team_id__in=team_ids
+                ).select_related('team', 'session')
+                
+                # Create a mapping of team_id -> players for quick lookup
+                players_by_team = {}
+                for player_obj in all_players:
+                    team_id = player_obj.team_id
+                    if team_id not in players_by_team:
+                        players_by_team[team_id] = []
+                    players_by_team[team_id].append(player_obj)
+                
+                # Attach prefetched players to sessions based on teams
+                # Get players from home_team and away_team for each session
+                for session in sessions_with_highlights:
+                    session._prefetched_players = []
+                    if session.home_team and session.home_team.id in players_by_team:
+                        session._prefetched_players.extend(players_by_team[session.home_team.id])
+                    if session.away_team and session.away_team.id in players_by_team:
+                        session._prefetched_players.extend(players_by_team[session.away_team.id])
+
+                        
             except Exception as db_error:
                 logger.exception(f"Database error while fetching sessions: {str(db_error)}")
                 return Response({

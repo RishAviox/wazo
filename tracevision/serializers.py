@@ -502,8 +502,7 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
     match_date = serializers.DateField(format='%Y-%m-%d', read_only=True)
     home_team = HighlightDateTeamSerializer(read_only=True)
     away_team = HighlightDateTeamSerializer(read_only=True)
-    players = HighlightDatePlayerSerializer(
-        source='trace_players', many=True, read_only=True)
+    players = serializers.SerializerMethodField()
 
     class Meta:
         model = TraceSession
@@ -513,3 +512,34 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             'first_half_end_time', 'second_half_start_time', 'match_end_time',
             'players'
         ]
+    
+    def get_players(self, obj):
+        """Get players from teams (home_team and away_team) - not filtered by session"""
+        players_list = []
+        
+        # Use prefetched players if available (from view optimization)
+        if hasattr(obj, '_prefetched_players'):
+            players = obj._prefetched_players
+        else:
+            # Fallback: get all players from teams (not filtered by session)
+            from tracevision.models import TracePlayer
+            team_ids = []
+            if obj.home_team:
+                team_ids.append(obj.home_team.id)
+            if obj.away_team:
+                team_ids.append(obj.away_team.id)
+            
+            if team_ids:
+                # Get all TracePlayers for these teams, regardless of session
+                players = TracePlayer.objects.filter(
+                    team_id__in=team_ids
+                ).select_related('team')
+            else:
+                players = TracePlayer.objects.none()
+        
+        # Serialize all players (filtered by team, not by session)
+        for player in players:
+            serializer = HighlightDatePlayerSerializer(player)
+            players_list.append(serializer.data)
+        
+        return players_list
