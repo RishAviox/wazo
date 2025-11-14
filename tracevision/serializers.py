@@ -543,3 +543,193 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             players_list.append(serializer.data)
         
         return players_list
+
+
+class PlayerDetailSerializer(serializers.ModelSerializer):
+    """Serializer for player details in highlights"""
+    id = serializers.CharField(read_only=True)
+    team_id = serializers.CharField(source='team.id', read_only=True)
+    team_name = serializers.CharField(source='team.name', read_only=True)
+    created_at = serializers.DateTimeField(format='%Y-%m-%dT%H:%M:%S.%fZ', read_only=True)
+    updated_at = serializers.DateTimeField(format='%Y-%m-%dT%H:%M:%S.%fZ', read_only=True)
+
+    class Meta:
+        model = TracePlayer
+        fields = [
+            'id', 'name', 'jersey_number', 'position', 'object_id',
+            'team_id', 'team_name', 'is_mapped', 'created_at', 'updated_at'
+        ]
+
+
+class MatchInfoSerializer(serializers.ModelSerializer):
+    """Serializer for match information"""
+    session_id = serializers.CharField(source='id', read_only=True)
+    match_date = serializers.DateField(format='%Y-%m-%d', read_only=True)
+    home_team = serializers.SerializerMethodField()
+    away_team = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TraceSession
+        fields = [
+            'session_id', 'match_date', 'final_score', 'home_score', 'away_score',
+            'home_team', 'away_team', 'age_group', 'match_start_time',
+            'first_half_end_time', 'second_half_start_time', 'match_end_time'
+        ]
+
+    def get_home_team(self, obj):
+        if obj.home_team:
+            return {
+                "id": str(obj.home_team.id),
+                "name": obj.home_team.name
+            }
+        return None
+
+    def get_away_team(self, obj):
+        if obj.away_team:
+            return {
+                "id": str(obj.away_team.id),
+                "name": obj.away_team.name
+            }
+        return None
+
+
+class HighlightClipReelSerializer(serializers.ModelSerializer):
+    """Comprehensive serializer for TraceClipReel highlights"""
+    id = serializers.CharField(read_only=True)
+    age_group = serializers.CharField(source='session.age_group', read_only=True)
+    match_date = serializers.DateField(source='session.match_date', format='%Y-%m-%d', read_only=True)
+    event_name = serializers.SerializerMethodField()
+    start_clock = serializers.SerializerMethodField()
+    end_clock = serializers.SerializerMethodField()
+    primary_player = PlayerDetailSerializer(read_only=True)
+    involved_players = PlayerDetailSerializer(many=True, read_only=True)
+    session = serializers.CharField(source='session.id', read_only=True)
+    highlight = serializers.CharField(source='highlight.id', read_only=True, allow_null=True)
+    match_start_time = serializers.CharField(source='session.match_start_time', read_only=True)
+    first_half_end_time = serializers.CharField(source='session.first_half_end_time', read_only=True)
+    second_half_start_time = serializers.CharField(source='session.second_half_start_time', read_only=True)
+    match_end_time = serializers.CharField(source='session.match_end_time', read_only=True)
+    basic_game_stats = serializers.SerializerMethodField()
+    half = serializers.IntegerField(source='highlight.half', read_only=True, allow_null=True)
+    match_time = serializers.CharField(source='highlight.match_time', read_only=True, allow_null=True)
+    generation_started_at = serializers.DateTimeField(format='%Y-%m-%dT%H:%M:%S.%fZ', read_only=True, allow_null=True)
+    generation_completed_at = serializers.DateTimeField(format='%Y-%m-%dT%H:%M:%S.%fZ', read_only=True, allow_null=True)
+    created_at = serializers.DateTimeField(format='%Y-%m-%dT%H:%M:%S.%fZ', read_only=True, allow_null=True)
+    updated_at = serializers.DateTimeField(format='%Y-%m-%dT%H:%M:%S.%fZ', read_only=True, allow_null=True)
+    generation_errors = serializers.JSONField(default=list)
+    generation_metadata = serializers.JSONField(default=dict)
+    description = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TraceClipReel
+        fields = [
+            'id', 'age_group', 'match_date', 'event_id', 'video_type',
+            'video_variant_name', 'event_type', 'event_name', 'side',
+            'start_ms', 'duration_ms', 'start_clock', 'end_clock',
+            'generation_status', 'video_url', 'video_thumbnail_url',
+            'video_size_mb', 'video_duration_seconds', 'generation_started_at',
+            'generation_completed_at', 'generation_errors', 'generation_metadata',
+            'resolution', 'frame_rate', 'bitrate', 'label', 'description',
+            'tags', 'video_stream', 'created_at', 'updated_at', 'session',
+            'highlight', 'primary_player', 'involved_players',
+            'match_start_time', 'first_half_end_time', 'second_half_start_time',
+            'match_end_time', 'basic_game_stats', 'half', 'match_time'
+        ]
+
+    def get_event_name(self, obj):
+        """Get event name from highlight"""
+        if obj.highlight:
+            return obj.highlight.get_event_description()
+        return obj.event_type.capitalize() if obj.event_type else None
+
+    def get_start_clock(self, obj):
+        """Convert start_ms to clock format"""
+        from datetime import timedelta
+        start_td = timedelta(milliseconds=obj.start_ms)
+        return str(start_td)
+
+    def get_end_clock(self, obj):
+        """Convert end_ms to clock format"""
+        from datetime import timedelta
+        end_td = timedelta(milliseconds=obj.start_ms + obj.duration_ms)
+        return str(end_td)
+
+    def get_basic_game_stats(self, obj):
+        """Get basic game stats URL"""
+        if obj.session and obj.session.basic_game_stats:
+            return obj.session.basic_game_stats.url
+        return None
+
+    def get_description(self, obj):
+        """Get description or generate default"""
+        if obj.description:
+            return obj.description
+        return f"{obj.event_type.capitalize()} event for {obj.side} team"
+
+    def get_tags(self, obj):
+        """Get tags or generate default"""
+        if obj.tags:
+            return obj.tags
+        return [obj.side, obj.event_type] if obj.side and obj.event_type else []
+
+
+class PossessionTeamMetricsSerializer(serializers.Serializer):
+    """Serializer for team possession metrics"""
+    team = serializers.SerializerMethodField()
+    possession_time_ms = serializers.IntegerField()
+    possession_count = serializers.IntegerField()
+    avg_duration_ms = serializers.FloatField()
+    avg_passes = serializers.FloatField()
+    longest_possession_ms = serializers.IntegerField()
+    turnovers = serializers.IntegerField()
+    total_touches = serializers.IntegerField()
+    total_passes = serializers.IntegerField()
+    possession_percentage = serializers.FloatField()
+
+    def get_team(self, obj):
+        """Get team details"""
+        if obj.get('team'):
+            return {
+                "id": str(obj['team'].id),
+                "name": obj['team'].name
+            }
+        return None
+
+
+class PossessionPlayerMetricsSerializer(serializers.Serializer):
+    """Serializer for player possession metrics"""
+    player = serializers.SerializerMethodField()
+    involvement_count = serializers.IntegerField()
+    total_duration_ms = serializers.IntegerField()
+    total_touches = serializers.IntegerField()
+    total_passes = serializers.IntegerField()
+    possession_percentage = serializers.FloatField()
+
+    def get_player(self, obj):
+        """Get player details with team info"""
+        player = obj.get('player')
+        if not player:
+            return None
+        
+        team = player.team
+        side = None
+        
+        # Get session from context if available
+        session = self.context.get('session')
+        if session and team:
+            if session.home_team and team.id == session.home_team.id:
+                side = 'home'
+            elif session.away_team and team.id == session.away_team.id:
+                side = 'away'
+        
+        return {
+            "id": str(player.id),
+            "name": player.name,
+            "jersey_number": player.jersey_number,
+            "position": player.position,
+            "object_id": player.object_id,
+            "team_id": str(team.id) if team else None,
+            "team_name": team.name if team else None,
+            "side": side
+        }

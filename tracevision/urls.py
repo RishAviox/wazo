@@ -20,7 +20,7 @@ urlpatterns = [
     # Player stats endpoints
     path('process/<int:pk>/stats/', TraceVisionPlayerStatsView.as_view(), name='player-stats'),
     path('process/<int:pk>/stats/<int:player_id>/', TraceVisionPlayerStatsDetailView.as_view(), name='player-stats-detail'),
-    path('highlights/', GetTracePlayerReelsView.as_view(), name='player-reels'),
+    path('highlights/<int:session_id>/', GetTracePlayerReelsView.as_view(), name='player-reels'),
     path('highlights/dates/', GetAvailableHighlightDatesView.as_view(), name='available-highlight-dates'),
     path('coach/players/', CoachViewSpecificTeamPlayers.as_view(), name='coach-players'),
 ]

@@ -14,11 +14,16 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 
 from teams.models import Team
-from tracevision.models import TraceClipReel, TraceSession, TraceVisionPlayerStats, TracePlayer
+from tracevision.models import (
+    TraceClipReel, TraceSession, TraceVisionPlayerStats, TracePlayer,
+    TracePossessionSegment, TracePossessionStats
+)
 from tracevision.tasks import download_video_and_save_to_azure_blob, generate_overlay_highlights_task, process_trace_sessions_task
 from tracevision.serializers import (
     TraceVisionProcessesSerializer, TraceVisionProcessSerializer, TraceSessionListSerializer, 
-    CoachViewSpecificTeamPlayersSerializer, HighlightDateSessionSerializer
+    CoachViewSpecificTeamPlayersSerializer, HighlightDateSessionSerializer,
+    HighlightClipReelSerializer, MatchInfoSerializer,
+    PossessionTeamMetricsSerializer, PossessionPlayerMetricsSerializer
 )
 from tracevision.services import TraceVisionService
 
@@ -571,6 +576,199 @@ class TraceVisionPlayerStatsView(APIView):
                 "details": str(e)
             }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def get(self, request, pk):
+        """
+        Get possession segment data (team and player metrics) for a session.
+        
+        Query Parameters:
+        - team_id: Filter by specific team ID (optional)
+        - player_id: Filter by specific player ID (optional)
+        """
+        try:
+            # Get the session for the authenticated user
+            session = TraceSession.objects.select_related('home_team', 'away_team').get(
+                id=pk, user=request.user
+            )
+
+            # Get filter parameters
+            team_id_filter = request.query_params.get('team_id', None)
+            player_id_filter = request.query_params.get('player_id', None)
+
+            # Validate filters - if both provided, ensure they're from the same side
+            if team_id_filter and player_id_filter:
+                try:
+                    team_id = team_id_filter  # Team ID is a string (CharField)
+                    player_id = int(player_id_filter)
+                    
+                    # Get the team and player
+                    team = Team.objects.get(id=team_id)
+                    player = TracePlayer.objects.select_related('team').get(id=player_id)
+                    
+                    # Determine sides
+                    team_side = None
+                    if session.home_team and team.id == session.home_team.id:
+                        team_side = 'home'
+                    elif session.away_team and team.id == session.away_team.id:
+                        team_side = 'away'
+                    
+                    player_side = None
+                    if player.team:
+                        if session.home_team and player.team.id == session.home_team.id:
+                            player_side = 'home'
+                        elif session.away_team and player.team.id == session.away_team.id:
+                            player_side = 'away'
+                    
+                    # Validate they're from the same side - return simple 404 if not
+                    if team_side and player_side and team_side != player_side:
+                        return Response({
+                            "error": "Not found",
+                            "details": "No stats found with the team_id & player_id"
+                        }, status=http_status.HTTP_404_NOT_FOUND)
+                    
+                except (Team.DoesNotExist, TracePlayer.DoesNotExist, ValueError):
+                    return Response({
+                        "error": "Not found",
+                        "details": "No stats found with the team_id & player_id"
+                    }, status=http_status.HTTP_404_NOT_FOUND)
+
+            # Get team metrics from last TracePossessionSegment for each side
+            team_metrics_data = {}
+            
+            # Determine which sides to query
+            sides_to_query = ['home', 'away']
+            if team_id_filter:
+                team_id = team_id_filter  # Team ID is a string (CharField)
+                if session.home_team and team_id == session.home_team.id:
+                    sides_to_query = ['home']
+                elif session.away_team and team_id == session.away_team.id:
+                    sides_to_query = ['away']
+                else:
+                    return Response({
+                        "error": "Team not found",
+                        "details": f"Team {team_id} is not associated with this session"
+                    }, status=http_status.HTTP_404_NOT_FOUND)
+
+            for side in sides_to_query:
+                # Get the last segment for this side (cumulative metrics)
+                last_segment = TracePossessionSegment.objects.filter(
+                    session=session, side=side
+                ).order_by('-end_ms').only('team_metrics', 'side').first()
+                
+                if last_segment and last_segment.team_metrics:
+                    team = session.home_team if side == 'home' else session.away_team
+                    metrics = last_segment.team_metrics
+                    
+                    # Format team metrics data
+                    team_metrics_data[side] = {
+                        'team': team,
+                        'possession_time_ms': metrics.get('possession_time_ms', 0),
+                        'possession_count': metrics.get('possession_count', 0),
+                        'avg_duration_ms': metrics.get('avg_duration_ms', 0.0),
+                        'avg_passes': metrics.get('avg_passes', 0.0),
+                        'longest_possession_ms': metrics.get('longest_possession_ms', 0),
+                        'turnovers': metrics.get('turnovers', 0),
+                        'total_touches': metrics.get('total_touches', 0),
+                        'total_passes': metrics.get('total_passes', 0),
+                        'possession_percentage': metrics.get('possession_percentage', 0.0)
+                    }
+                else:
+                    team = session.home_team if side == 'home' else session.away_team
+                    team_metrics_data[side] = {
+                        'team': team,
+                        'possession_time_ms': 0,
+                        'possession_count': 0,
+                        'avg_duration_ms': 0.0,
+                        'avg_passes': 0.0,
+                        'longest_possession_ms': 0,
+                        'turnovers': 0,
+                        'total_touches': 0,
+                        'total_passes': 0,
+                        'possession_percentage': 0.0
+                    }
+
+            # Get player metrics from TracePossessionStats
+            player_stats_query = TracePossessionStats.objects.filter(
+                session=session,
+                possession_type='player'
+            ).select_related('player', 'player__team')
+            
+            # optimize by filtering directly on team through player relationship
+            if team_id_filter:
+                team_id = team_id_filter
+                # This ensures we only get players from the specified team
+                player_stats_query = player_stats_query.filter(player__team_id=team_id)
+            
+            if player_id_filter:
+                try:
+                    player_id = int(player_id_filter)
+                    player_stats_query = player_stats_query.filter(player_id=player_id)
+                except ValueError:
+                    return Response({
+                        "error": "Invalid player_id",
+                        "details": "player_id must be a valid integer"
+                    }, status=http_status.HTTP_400_BAD_REQUEST)
+
+            player_stats_list = list(player_stats_query.all())
+            
+            # Format player metrics data
+            player_metrics_data = []
+            for player_stat in player_stats_list:
+                metrics = player_stat.metrics or {}
+                
+                # Calculate possession_percentage from involvement_percentage if available
+                possession_percentage = metrics.get('possession_percentage', 
+                                                   metrics.get('involvement_percentage', 0.0))
+                
+                player_data = {
+                    'player': player_stat.player,
+                    'involvement_count': metrics.get('involvement_count', 
+                                                    metrics.get('possessions_involved', 0)),
+                    'total_duration_ms': metrics.get('total_duration_ms', 0),
+                    'total_touches': metrics.get('total_touches', 
+                                                metrics.get('touches_in_possession', 0)),
+                    'total_passes': metrics.get('total_passes', 
+                                              metrics.get('passes_in_possession', 0)),
+                    'possession_percentage': possession_percentage
+                }
+                player_metrics_data.append(player_data)
+
+            # Serialize the data
+            team_metrics_serialized = {}
+            for side, team_data in team_metrics_data.items():
+                serializer = PossessionTeamMetricsSerializer(team_data)
+                team_metrics_serialized[side] = serializer.data
+
+            # Serialize player metrics with session context
+            player_metrics_serialized = []
+            for player_data in player_metrics_data:
+                serializer = PossessionPlayerMetricsSerializer(
+                    player_data,
+                    context={'session': session}
+                )
+                player_metrics_serialized.append(serializer.data)
+
+            return Response({
+                "success": True,
+                "data": {
+                    "team_metrics": team_metrics_serialized,
+                    "player_metrics": player_metrics_serialized
+                }
+            }, status=http_status.HTTP_200_OK)
+
+        except TraceSession.DoesNotExist:
+            return Response({
+                "error": "Session not found",
+                "details": "No TraceVision session found with the given ID for this user"
+            }, status=http_status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception(
+                f"Error getting possession stats for session {pk}: {str(e)}")
+            return Response({
+                "error": "Internal server error",
+                "details": str(e)
+            }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class TraceVisionPlayerStatsDetailView(APIView):
     """
     API endpoint to get detailed statistics for a specific player in a session.
@@ -683,293 +881,166 @@ class TraceVisionPlayerStatsDetailView(APIView):
             }, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class GetTracePlayerReelsView(APIView):
+class GetTracePlayerReelsView(ListAPIView):
+    """
+    API endpoint to get highlights for a specific session.
+    URL: highlights/<session_id>/
+    Query Parameters:
+    - player_id: Filter by specific player ID (optional)
+    - video_type: Filter by video type (optional)
+    - generation_status: Filter by generation status (optional)
+    - event_type: Filter by event type (optional)
+    - half: Filter by half (1 or 2) (optional)
+    """
     permission_classes = [IsAuthenticated]
+    serializer_class = HighlightClipReelSerializer
+    pagination_class = PageNumberPagination
 
-    def get(self, request):
-        player = request.user.trace_players.first()
-        if player:
-            clipreels = player.primary_clip_reels.all()
-        else:
-            clipreels = TraceClipReel.objects.none()
+    def get_queryset(self):
+        """Get optimized queryset for clip reels"""
+        session_id = self.kwargs.get('session_id')
+        
+        # Get session and verify user has access
+        try:
+            session = TraceSession.objects.select_related(
+                'home_team', 'away_team'
+            ).get(id=session_id, user=self.request.user)
+        except TraceSession.DoesNotExist:
+            return TraceClipReel.objects.none()
 
-        # ---------- filters ----------
-        video_type = request.query_params.get('video_type')
+        # Base queryset with optimized selects
+        queryset = TraceClipReel.objects.filter(
+            session=session
+        ).select_related(
+            'primary_player__team',
+            'session__home_team',
+            'session__away_team',
+            'highlight'
+        ).prefetch_related(
+            'involved_players__team'
+        )
+
+        # Apply filters from query parameters
+        video_type = self.request.query_params.get('video_type')
         if video_type:
-            clipreels = clipreels.filter(video_type=video_type)
+            queryset = queryset.filter(video_type=video_type)
 
-        session_id = request.query_params.get('session')
-        if session_id:
-            clipreels = clipreels.filter(session=session_id)
-
-        generation_status = request.query_params.get('generation_status')
+        generation_status = self.request.query_params.get('generation_status')
         if generation_status:
-            clipreels = clipreels.filter(generation_status=generation_status)
+            queryset = queryset.filter(generation_status=generation_status)
 
-        match_date = request.query_params.get('match_date')
-        if match_date:
+        event_type = self.request.query_params.get('event_type')
+        if event_type:
+            queryset = queryset.filter(event_type=event_type)
+
+        # Filter by player_id if provided
+        player_id = self.request.query_params.get('player_id')
+        if player_id:
             try:
-                match_date = datetime.strptime(match_date, "%Y-%m-%d").date()
-                clipreels = clipreels.filter(session__match_date=match_date)
+                player_id = int(player_id)
+                queryset = queryset.filter(
+                    models.Q(primary_player_id=player_id) |
+                    models.Q(involved_players__id=player_id)
+                ).distinct()
             except ValueError:
-                return Response(
-                    {"error": "Invalid date format. Use YYYY-MM-DD."},
-                    status=400
-                )
-
-        age_group = request.query_params.get('age_group')
-        if age_group:
-            clipreels = clipreels.filter(session__age_group=age_group)
-
-        # New filters for highlights
-        half = request.query_params.get('half')  # 1 or 2 for first/second half
-        player_id = request.query_params.get(
-            'player_id')  # Filter by specific player
-        event_type = request.query_params.get(
-            'event_type')  # Filter by event type
-
-        # ---------- Build JSON ----------
-        data = {
-            "teams": [],
-            "goals": [],
-            "highlights": {},  # Changed: Dictionary grouped by player
-            "events_details": [],
-            "match_info": {},  # Match information including final score
-            # "video_urls": {}
-        }
-
-        # Get all unique sessions for match info
-        sessions = set()
-        teams_dict = {}
-        for reel in clipreels.select_related("session__home_team", "session__away_team"):
-            session = reel.session
-            sessions.add(session)
-
-            if session.home_team and session.home_team.id not in teams_dict:
-                teams_dict[session.home_team.id] = {
-                    "team_id": str(session.home_team.id),
-                    "team_name": session.home_team.name,
-                    "logo_url": session.home_team.logo.url if session.home_team.logo else None,
-                }
-            if session.away_team and session.away_team.id not in teams_dict:
-                teams_dict[session.away_team.id] = {
-                    "team_id": str(session.away_team.id),
-                    "team_name": session.away_team.name,
-                    "logo_url": session.away_team.logo.url if session.away_team.logo else None,
-                }
-        data["teams"] = list(teams_dict.values())
-
-        # ---------- Match Info (Final Score) ----------
-        if sessions:
-            # Get the first session for match info (assuming all clips are from same match)
-            session = list(sessions)[0]
-            data["match_info"] = {
-                "session_id": str(session.id),
-                "match_date": session.match_date.strftime("%Y-%m-%d") if session.match_date else None,
-                "final_score": session.final_score,
-                "home_score": session.home_score,
-                "away_score": session.away_score,
-                "home_team": {
-                    "id": str(session.home_team.id) if session.home_team else None,
-                    "name": session.home_team.name if session.home_team else None,
-                } if session.home_team else None,
-                "away_team": {
-                    "id": str(session.away_team.id) if session.away_team else None,
-                    "name": session.away_team.name if session.away_team else None,
-                } if session.away_team else None,
-                "age_group": session.age_group,
-                "match_start_time": session.match_start_time,
-                "first_half_end_time": session.first_half_end_time,
-                "second_half_start_time": session.second_half_start_time,
-                "match_end_time": session.match_end_time,
-            }
-
-        # ---------- Goals ----------
-        for reel in clipreels.filter(event_type="goal").select_related(
-            "primary_player", "session__home_team", "session__away_team", "highlight"
-        ):
-            session = reel.session
-            team = session.home_team if reel.side == "home" else session.away_team
-
-            # Primary player with full details for goals
-            primary_player_data = None
-            if reel.primary_player:
-                primary_player_data = {
-                    "id": str(reel.primary_player.id),
-                    "name": reel.primary_player.name,
-                    "jersey_number": reel.primary_player.jersey_number,
-                    "position": reel.primary_player.position,
-                    "object_id": reel.primary_player.object_id,
-                    "team_id": str(reel.primary_player.team.id) if reel.primary_player.team else None,
-                    "team_name": reel.primary_player.team.name if reel.primary_player.team else None,
-                    "is_mapped": reel.primary_player.is_mapped,
-                    "created_at": reel.primary_player.created_at.isoformat() if reel.primary_player.created_at else None,
-                    "updated_at": reel.primary_player.updated_at.isoformat() if reel.primary_player.updated_at else None,
-                }
-
-            # Get event name from highlight
-            event_name = reel.highlight.get_event_description() if reel.highlight else "Goal"
-
-            data["goals"].append({
-                "team_id": str(team.id) if team else None,
-                "team_name": team.name if team else None,
-                "primary_player": primary_player_data,  # Full player details as dict
-                "event_time": reel.start_ms,
-                "start_time": reel.start_ms,
-                "end_time": reel.start_ms + reel.duration_ms,
-                "half": reel.highlight.half if reel.highlight else None,
-                "event_name": event_name,
-                "match_time": reel.highlight.match_time if reel.highlight else None,
-            })
-
-        # ---------- Highlights Processing ----------
-        # Apply additional filters
-        highlights_queryset = clipreels.exclude(event_type="goal").select_related(
-            "primary_player", "session__home_team", "session__away_team", "highlight"
-        ).prefetch_related("involved_players")
+                # Invalid player_id - return empty queryset
+                return TraceClipReel.objects.none()
 
         # Filter by half if specified
+        half = self.request.query_params.get('half')
         if half:
-            if half == "1":
-                highlights_queryset = highlights_queryset.filter(
-                    highlight__half=1)
-            elif half == "2":
-                highlights_queryset = highlights_queryset.filter(
-                    highlight__half=2)
+            try:
+                half_num = int(half)
+                if half_num in [1, 2]:
+                    queryset = queryset.filter(highlight__half=half_num)
+                else:
+                    # Invalid half - return empty queryset
+                    return TraceClipReel.objects.none()
+            except ValueError:
+                # Invalid half - return empty queryset
+                return TraceClipReel.objects.none()
 
-        # Filter by player if specified
+        return queryset
+
+    def get_serializer_context(self):
+        """Add session to serializer context"""
+        context = super().get_serializer_context()
+        session_id = self.kwargs.get('session_id')
+        try:
+            context['session'] = TraceSession.objects.select_related(
+                'home_team', 'away_team'
+            ).get(id=session_id, user=self.request.user)
+        except TraceSession.DoesNotExist:
+            context['session'] = None
+        return context
+
+    def list(self, request, *args, **kwargs):
+        """Override list to add match_info and custom response format"""
+        session_id = kwargs.get('session_id')
+        
+        # Get session for match_info
+        try:
+            session = TraceSession.objects.select_related(
+                'home_team', 'away_team'
+            ).get(id=session_id, user=request.user)
+        except TraceSession.DoesNotExist:
+            return Response({
+                "error": "Session not found",
+                "details": f"No session found with ID {session_id} for this user"
+            }, status=http_status.HTTP_404_NOT_FOUND)
+
+        # Validate query parameters
+        player_id = request.query_params.get('player_id')
         if player_id:
-            highlights_queryset = highlights_queryset.filter(
-                models.Q(primary_player_id=player_id) |
-                models.Q(involved_players__id=player_id)
-            ).distinct()
+            try:
+                int(player_id)
+            except ValueError:
+                return Response({
+                    "error": "Invalid player_id",
+                    "details": "player_id must be a valid integer"
+                }, status=http_status.HTTP_400_BAD_REQUEST)
 
-        # Filter by event type if specified
-        if event_type:
-            highlights_queryset = highlights_queryset.filter(
-                event_type=event_type)
+        half = request.query_params.get('half')
+        if half:
+            try:
+                half_num = int(half)
+                if half_num not in [1, 2]:
+                    return Response({
+                        "error": "Invalid half",
+                        "details": "half must be 1 or 2"
+                    }, status=http_status.HTTP_400_BAD_REQUEST)
+            except ValueError:
+                return Response({
+                    "error": "Invalid half",
+                    "details": "half must be 1 or 2"
+                }, status=http_status.HTTP_400_BAD_REQUEST)
 
-        # Process highlights and group by player
-        for reel in highlights_queryset:
-            session = reel.session
-            team = session.home_team if reel.side == "home" else session.away_team
+        # Get queryset and paginate
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Serialize highlights
+        serializer = self.get_serializer(queryset, many=True)
+        highlights = serializer.data
 
-            # Convert start_ms to clock format
-            start_td = timedelta(milliseconds=reel.start_ms)
-            end_td = timedelta(milliseconds=reel.start_ms + reel.duration_ms)
-            start_clock = str(start_td)
-            end_clock = str(end_td)
+        # Serialize match_info
+        match_info_serializer = MatchInfoSerializer(session)
+        match_info = match_info_serializer.data
 
-            # Involved players with full details
-            involved_players = []
-            for p in reel.involved_players.all():
-                involved_players.append({
-                    "id": str(p.id),
-                    "name": p.name,
-                    "jersey_number": p.jersey_number,
-                    "position": p.position,
-                    "object_id": p.object_id,
-                    "team_id": str(p.team.id) if p.team else None,
-                    "team_name": p.team.name if p.team else None,
-                    "is_mapped": p.is_mapped,
-                    "created_at": p.created_at.isoformat() if p.created_at else None,
-                    "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-                })
-
-            # Primary player with full details
-            primary_player_data = None
-            if reel.primary_player:
-                primary_player_data = {
-                    "id": str(reel.primary_player.id),
-                    "name": reel.primary_player.name,
-                    "jersey_number": reel.primary_player.jersey_number,
-                    "position": reel.primary_player.position,
-                    "object_id": reel.primary_player.object_id,
-                    "team_id": str(reel.primary_player.team.id) if reel.primary_player.team else None,
-                    "team_name": reel.primary_player.team.name if reel.primary_player.team else None,
-                    "is_mapped": reel.primary_player.is_mapped,
-                    "created_at": reel.primary_player.created_at.isoformat() if reel.primary_player.created_at else None,
-                    "updated_at": reel.primary_player.updated_at.isoformat() if reel.primary_player.updated_at else None,
-                }
-
-            # Get event name from highlight
-            event_name = reel.highlight.get_event_description(
-            ) if reel.highlight else reel.event_type.capitalize()
-
-            highlight_data = {
-                "id": str(reel.id),
-                "age_group": getattr(session, "age_group", None),
-                "match_date": session.match_date.strftime("%Y-%m-%d") if session.match_date else None,
-                "event_id": reel.event_id,
-                "video_type": reel.video_type,
-                "video_variant_name": reel.video_variant_name,
-                "event_type": reel.event_type,
-                "event_name": event_name,
-                "side": reel.side,
-                "start_ms": reel.start_ms,
-                "duration_ms": reel.duration_ms,
-                "start_clock": start_clock,
-                "end_clock": end_clock,
-                "generation_status": reel.generation_status,
-                "video_url": reel.video_url,
-                "video_thumbnail_url": reel.video_thumbnail_url,
-                "video_size_mb": reel.video_size_mb,
-                "video_duration_seconds": reel.video_duration_seconds,
-                "generation_started_at": reel.generation_started_at,
-                "generation_completed_at": reel.generation_completed_at,
-                "generation_errors": reel.generation_errors,
-                "generation_metadata": reel.generation_metadata,
-                "resolution": reel.resolution,
-                "frame_rate": reel.frame_rate,
-                "bitrate": reel.bitrate,
-                "label": reel.label,
-                "description": reel.description or f"{reel.event_type.capitalize()} event for {reel.side} team",
-                "tags": reel.tags or [reel.side, reel.event_type],
-                "video_stream": reel.video_stream,
-                "created_at": reel.created_at.isoformat() if reel.created_at else None,
-                "updated_at": reel.updated_at.isoformat() if reel.updated_at else None,
-                "session": str(session.id),
-                "highlight": str(reel.highlight.id),
-                "primary_player": primary_player_data,  # Full player details as dict
-                "involved_players": involved_players,  # List of player details as dicts
-                "match_start_time": session.match_start_time,
-                "first_half_end_time": session.first_half_end_time,
-                "second_half_start_time": session.second_half_start_time,
-                "match_end_time": session.match_end_time,
-                "basic_game_stats": session.basic_game_stats.url if session.basic_game_stats else None,
-                # Half information from TraceHighlight
-                "half": reel.highlight.half if reel.highlight else None,
-                # Match time from TraceHighlight
-                "match_time": reel.highlight.match_time if reel.highlight else None,
-            }
-
-            # ---------- Group highlights by player ----------
-            # Add to primary player's highlights
-            if reel.primary_player:
-                player_key = reel.primary_player.name  # Use actual player name as key
-                if player_key not in data["highlights"]:
-                    data["highlights"][player_key] = []
-                data["highlights"][player_key].append(highlight_data)
-
-            # Also add to involved players' highlights (if different from primary player)
-            for involved_player in reel.involved_players.all():
-                if not reel.primary_player or involved_player.id != reel.primary_player.id:
-                    player_key = involved_player.name  # Use actual player name as key
-                    if player_key not in data["highlights"]:
-                        data["highlights"][player_key] = []
-                    data["highlights"][player_key].append(highlight_data)
-
-        # ---------- Pagination ----------
-        paginator = PageNumberPagination()
+        # Pagination
+        paginator = self.pagination_class()
         paginator.page_size = 10
-        paginated_clipreels = paginator.paginate_queryset(clipreels, request)
+        paginated_highlights = paginator.paginate_queryset(highlights, request)
 
-        data["count"] = paginator.page.paginator.count if paginator.page else len(
-            clipreels)
-        data["next"] = paginator.get_next_link()
-        data["previous"] = paginator.get_previous_link()
+        # Build response
+        response_data = {
+            "highlights": paginated_highlights if paginated_highlights else highlights,
+            "match_info": match_info,
+            "count": paginator.page.paginator.count if paginator.page else len(highlights),
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link()
+        }
 
-        return Response(data)
+        return Response(response_data, status=http_status.HTTP_200_OK)
 
 
 class GetAvailableHighlightDatesView(APIView):
