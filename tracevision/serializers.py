@@ -498,6 +498,7 @@ class HighlightDateTeamSerializer(serializers.Serializer):
 
 class HighlightDateSessionSerializer(serializers.ModelSerializer):
     """Serializer for session info in highlight dates response"""
+    id = serializers.IntegerField(source='id', read_only=True)
     session_id = serializers.CharField(read_only=True)
     match_date = serializers.DateField(format='%Y-%m-%d', read_only=True)
     home_team = HighlightDateTeamSerializer(read_only=True)
@@ -507,7 +508,7 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = TraceSession
         fields = [
-            'session_id', 'match_date', 'final_score', 'home_score', 'away_score',
+            'id', 'session_id', 'match_date', 'final_score', 'home_score', 'away_score',
             'home_team', 'away_team', 'age_group', 'match_start_time',
             'first_half_end_time', 'second_half_start_time', 'match_end_time',
             'players'
