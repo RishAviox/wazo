@@ -498,7 +498,7 @@ class HighlightDateTeamSerializer(serializers.Serializer):
 
 class HighlightDateSessionSerializer(serializers.ModelSerializer):
     """Serializer for session info in highlight dates response"""
-    id = serializers.IntegerField(source='id', read_only=True)
+    id = serializers.IntegerField(read_only=True)
     session_id = serializers.CharField(read_only=True)
     match_date = serializers.DateField(format='%Y-%m-%d', read_only=True)
     home_team = HighlightDateTeamSerializer(read_only=True)
