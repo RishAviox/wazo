@@ -511,7 +511,7 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             'id', 'session_id', 'match_date', 'final_score', 'home_score', 'away_score',
             'home_team', 'away_team', 'age_group', 'match_start_time',
             'first_half_end_time', 'second_half_start_time', 'match_end_time',
-            'players'
+            'players', 'video_url'
         ]
     
     def get_players(self, obj):
