@@ -9,7 +9,9 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def _download_tracking_data_from_azure_blob(blob_url: str, cache_key: str = None) -> List[List[float]]:
+def _download_tracking_data_from_azure_blob(
+    blob_url: str, cache_key: str = None
+) -> List[List[float]]:
     """
     Download tracking data from Azure blob URL with caching support.
     In development mode, reads from local file system.
@@ -29,40 +31,45 @@ def _download_tracking_data_from_azure_blob(blob_url: str, cache_key: str = None
                 return cached_data
 
         # Check if we're in development mode (local file storage)
-        if settings.DEBUG and not hasattr(settings, 'AZURE_CUSTOM_DOMAIN'):
+        if settings.DEBUG and not hasattr(settings, "AZURE_CUSTOM_DOMAIN"):
             logger.info(
-                f"Development mode detected - reading from local file: {blob_url}")
+                f"Development mode detected - reading from local file: {blob_url}"
+            )
 
             # Convert blob URL to local file path
-            if blob_url.startswith('/media/'):
+            if blob_url.startswith("/media/"):
                 # Remove /media/ prefix and join with MEDIA_ROOT
                 local_file_path = os.path.join(
-                    settings.MEDIA_ROOT, blob_url[7:])  # Remove '/media/'
+                    settings.MEDIA_ROOT, blob_url[7:]
+                )  # Remove '/media/'
             else:
                 # Assume it's already a local path
                 local_file_path = blob_url
 
             if os.path.exists(local_file_path):
-                with open(local_file_path, 'r') as f:
+                with open(local_file_path, "r") as f:
                     data = json.load(f)
 
                 # Extract spotlights data
-                if isinstance(data, dict) and 'spotlights' in data:
-                    tracking_data = data['spotlights']
+                if isinstance(data, dict) and "spotlights" in data:
+                    tracking_data = data["spotlights"]
                 elif isinstance(data, list):
                     tracking_data = data
                 else:
                     logger.warning(
-                        f"Unexpected data format in local file {local_file_path}")
+                        f"Unexpected data format in local file {local_file_path}"
+                    )
                     return []
 
                 # Cache the data if cache_key is provided
                 if cache_key and tracking_data:
-                    cache.set(cache_key, tracking_data,
-                              timeout=3600)  # Cache for 1 hour
+                    cache.set(
+                        cache_key, tracking_data, timeout=3600
+                    )  # Cache for 1 hour
 
                 logger.info(
-                    f"Successfully loaded {len(tracking_data)} tracking points from local file")
+                    f"Successfully loaded {len(tracking_data)} tracking points from local file"
+                )
                 return tracking_data
             else:
                 logger.warning(f"Local file not found: {local_file_path}")
@@ -85,18 +92,17 @@ def _download_tracking_data_from_azure_blob(blob_url: str, cache_key: str = None
             # Already a relative path
             relative_path = blob_url
 
-        logger.info(
-            f"Using relative path for storage operations: {relative_path}")
+        logger.info(f"Using relative path for storage operations: {relative_path}")
 
         # Use Django's default storage to download the file
         if default_storage.exists(relative_path):
             # Read the file content
-            with default_storage.open(relative_path, 'r') as f:
+            with default_storage.open(relative_path, "r") as f:
                 data = json.load(f)
 
             # Extract spotlights data
-            if isinstance(data, dict) and 'spotlights' in data:
-                tracking_data = data['spotlights']
+            if isinstance(data, dict) and "spotlights" in data:
+                tracking_data = data["spotlights"]
             elif isinstance(data, list):
                 tracking_data = data
             else:
@@ -105,20 +111,20 @@ def _download_tracking_data_from_azure_blob(blob_url: str, cache_key: str = None
 
             # Cache the data if cache_key is provided
             if cache_key and tracking_data:
-                cache.set(cache_key, tracking_data,
-                          timeout=3600)  # Cache for 1 hour
+                cache.set(cache_key, tracking_data, timeout=3600)  # Cache for 1 hour
 
             logger.info(
-                f"Successfully downloaded {len(tracking_data)} tracking points from Azure blob")
+                f"Successfully downloaded {len(tracking_data)} tracking points from Azure blob"
+            )
             return tracking_data
         else:
             logger.error(
-                f"Blob file not found: {relative_path} (original URL: {blob_url})")
+                f"Blob file not found: {relative_path} (original URL: {blob_url})"
+            )
             return []
 
     except Exception as e:
-        logger.exception(
-            f"Error downloading tracking data from {blob_url}: {e}")
+        logger.exception(f"Error downloading tracking data from {blob_url}: {e}")
         return []
 
 
@@ -137,7 +143,8 @@ def clear_tracking_data_cache(player_id: str, session_id: str) -> bool:
         cache_key = f"tracking_data_{session_id}_{player_id}"
         cache.delete(cache_key)
         logger.info(
-            f"Cleared tracking data cache for player {player_id} in session {session_id}")
+            f"Cleared tracking data cache for player {player_id} in session {session_id}"
+        )
         return True
     except Exception as e:
         logger.exception(f"Error clearing cache for player {player_id}: {e}")
@@ -161,7 +168,8 @@ def clear_session_tracking_data_cache(session_id: str) -> int:
         # Note: Django's cache framework doesn't support pattern deletion by default
         # You might need to implement this differently based on your cache backend
         logger.info(
-            f"Cache clearing for session {session_id} would require cache backend support")
+            f"Cache clearing for session {session_id} would require cache backend support"
+        )
         return 0
     except Exception as e:
         logger.exception(f"Error clearing session cache for {session_id}: {e}")
@@ -185,15 +193,17 @@ def is_tracking_data_available_in_azure(player_obj) -> bool:
             return False
 
         # In development mode, check local file system
-        if settings.DEBUG and not hasattr(settings, 'AZURE_CUSTOM_DOMAIN'):
+        if settings.DEBUG and not hasattr(settings, "AZURE_CUSTOM_DOMAIN"):
             import os
 
             # Convert blob URL to local file path
-            if trace_object.tracking_blob_url.startswith('/media/'):
+            if trace_object.tracking_blob_url.startswith("/media/"):
                 # Remove /media/ prefix and join with MEDIA_ROOT
                 local_file_path = os.path.join(
                     # Remove '/media/'
-                    settings.MEDIA_ROOT, trace_object.tracking_blob_url[7:])
+                    settings.MEDIA_ROOT,
+                    trace_object.tracking_blob_url[7:],
+                )
             else:
                 # Assume it's already a local path
                 local_file_path = trace_object.tracking_blob_url
@@ -219,7 +229,8 @@ def is_tracking_data_available_in_azure(player_obj) -> bool:
 
     except Exception as e:
         logger.exception(
-            f"Error checking tracking data availability for player {player_obj.object_id}: {e}")
+            f"Error checking tracking data availability for player {player_obj.object_id}: {e}"
+        )
         return False
 
 
@@ -233,14 +244,14 @@ def calculate_passing_stats(highlights: List[Dict]) -> Dict[str, float]:
 
     # Count passes using both event types and tags
     for highlight in highlights:
-        event_type = highlight.get('event_type', '')
-        tags = highlight.get('tags', [])
+        event_type = highlight.get("event_type", "")
+        tags = highlight.get("tags", [])
 
-        if event_type == 'pass' or 'pass' in tags:
+        if event_type == "pass" or "pass" in tags:
             attempted += 1
             # Assume completed if tracked (could be improved with metadata)
             completed += 1
-        elif event_type == 'touch-chain' or 'touch-chain' in tags:
+        elif event_type == "touch-chain" or "touch-chain" in tags:
             # Touch chains indicate successful passes
             attempted += 1
             completed += 1

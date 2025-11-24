@@ -58,37 +58,40 @@ def upload_video_and_create_trace_data(sender, instance, created, **kwargs):
                 }
             """,
             "variables": {
-                "token": {
-                    "customer_id": int(CUSTOMER_ID),
-                    "token": API_KEY
-                },
+                "token": {"customer_id": int(CUSTOMER_ID), "token": API_KEY},
                 "sessionData": {
                     "type": "soccer_game",
                     "game_info": {
                         "home_team": {
                             "name": home_team,
                             "score": home_score,
-                            "color": home_color
+                            "color": home_color,
                         },
                         "away_team": {
                             "name": away_team,
                             "score": away_score,
-                            "color": away_color
+                            "color": away_color,
                         },
-                        "start_time": start_time
+                        "start_time": start_time,
                     },
-                    "capabilities": ["tracking", "highlights"]
-                }
-            }
+                    "capabilities": ["tracking", "highlights"],
+                },
+            },
         }
 
-        session_response = requests.post(GRAPHQL_URL, headers={"Content-Type": "application/json"}, json=session_payload)
+        session_response = requests.post(
+            GRAPHQL_URL,
+            headers={"Content-Type": "application/json"},
+            json=session_payload,
+        )
         session_json = session_response.json()
 
         logger.debug("Session creation response: %s", session_json)
         print(session_json)
 
-        if session_response.status_code != 200 or not session_json.get("data", {}).get("createSession", {}).get("success"):
+        if session_response.status_code != 200 or not session_json.get("data", {}).get(
+            "createSession", {}
+        ).get("success"):
             logger.error("Session creation failed: %s", session_json)
             return
 
@@ -107,22 +110,25 @@ def upload_video_and_create_trace_data(sender, instance, created, **kwargs):
                 }
             """,
             "variables": {
-                "token": {
-                    "customer_id": int(CUSTOMER_ID),
-                    "token": API_KEY
-                },
+                "token": {"customer_id": int(CUSTOMER_ID), "token": API_KEY},
                 "session_id": session_id,
                 "video_name": instance.video.name,
-                "start_time": start_time
-            }
+                "start_time": start_time,
+            },
         }
 
-        upload_response = requests.post(GRAPHQL_URL, headers={"Content-Type": "application/json"}, json=upload_payload)
+        upload_response = requests.post(
+            GRAPHQL_URL,
+            headers={"Content-Type": "application/json"},
+            json=upload_payload,
+        )
         upload_json = upload_response.json()
 
         logger.debug("Upload URL response: %s", upload_json)
 
-        if upload_response.status_code != 200 or not upload_json.get("data", {}).get("uploadVideo", {}).get("success"):
+        if upload_response.status_code != 200 or not upload_json.get("data", {}).get(
+            "uploadVideo", {}
+        ).get("success"):
             logger.error("Failed to get upload URL: %s", upload_json)
             return
 
@@ -132,13 +138,15 @@ def upload_video_and_create_trace_data(sender, instance, created, **kwargs):
         logger.info("Step 3: Uploading video to TraceVision...")
         with instance.video.open("rb") as video_file:
             upload_result = requests.put(
-                upload_url,
-                headers={"Content-Type": "video/mp4"},
-                data=video_file
+                upload_url, headers={"Content-Type": "video/mp4"}, data=video_file
             )
 
         if upload_result.status_code != 200:
-            logger.error("Video upload failed (%s): %s", upload_result.status_code, upload_result.text)
+            logger.error(
+                "Video upload failed (%s): %s",
+                upload_result.status_code,
+                upload_result.text,
+            )
             return
 
         # Step 4: Save TraceSession to local DB
@@ -150,22 +158,27 @@ def upload_video_and_create_trace_data(sender, instance, created, **kwargs):
             home_team=home_team,
             away_team=away_team,
             home_score=home_score,
-            away_score=away_score
+            away_score=away_score,
         )
 
         # Step 5: Save players linked to session
-        TracePlayer.objects.bulk_create([
-            TracePlayer(
-                name=player.get("name"),
-                jersey_number=player.get("jersey_number"),
-                position=player.get("position"),
-                team=player.get("team"),
-                session=session
-            )
-            for player in players
-        ])
+        TracePlayer.objects.bulk_create(
+            [
+                TracePlayer(
+                    name=player.get("name"),
+                    jersey_number=player.get("jersey_number"),
+                    position=player.get("position"),
+                    team=player.get("team"),
+                    session=session,
+                )
+                for player in players
+            ]
+        )
 
         logger.info("Trace session, video, and player data saved successfully.")
 
     except Exception as e:
-        logger.exception("Unhandled exception during TraceVision processing:\n%s", traceback.format_exc())
+        logger.exception(
+            "Unhandled exception during TraceVision processing:\n%s",
+            traceback.format_exc(),
+        )

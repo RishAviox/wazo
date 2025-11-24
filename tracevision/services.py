@@ -5,13 +5,21 @@ from django.core.cache import cache
 from django.conf import settings
 from django.db import models
 
-from tracevision.models import TraceClipReel, TraceHighlight, TracePlayer, TracePossessionSegment, TracePossessionStats
+from tracevision.models import (
+    TraceClipReel,
+    TraceHighlight,
+    TracePlayer,
+    TracePossessionSegment,
+    TracePossessionStats,
+)
 from tracevision.utils import filter_highlights_by_game_time, parse_time_to_seconds
 
 logger = logging.getLogger(__name__)
 
 
-def save_possession_calculation_results(session, team_possession_data, player_possession_data):
+def save_possession_calculation_results(
+    session, team_possession_data, player_possession_data
+):
     """
     Save possession calculation results from your existing functions to the database.
     Uses the unified TracePossessionStats model with single metrics JSON field.
@@ -34,18 +42,18 @@ def save_possession_calculation_results(session, team_possession_data, player_po
 
         # Save team possession stats (1 row per team)
         for side, team_data in team_possession_data.items():
-            team = session.home_team if side == 'home' else session.away_team
+            team = session.home_team if side == "home" else session.away_team
             if not team:
                 continue
 
             team_stats, created = TracePossessionStats.objects.update_or_create(
                 session=session,
-                possession_type='team',
+                possession_type="team",
                 team=team,
                 side=side,
                 defaults={
-                    'metrics': team_data  # Store all team data in single JSON field
-                }
+                    "metrics": team_data  # Store all team data in single JSON field
+                },
             )
             saved_team_stats.append(team_stats)
 
@@ -53,57 +61,54 @@ def save_possession_calculation_results(session, team_possession_data, player_po
         for player_id, player_data in player_possession_data.items():
             try:
                 # Extract jersey number from player_id (format: team_side_jersey)
-                jersey_number = int(player_id.split('_')[-1])
-                team_side = player_id.split('_')[0]
+                jersey_number = int(player_id.split("_")[-1])
+                team_side = player_id.split("_")[0]
 
                 # Find player by jersey number and team side
                 # Get the team object first
-                team = session.home_team if team_side == 'home' else session.away_team
+                team = session.home_team if team_side == "home" else session.away_team
                 if not team:
                     logger.warning(f"No team found for side {team_side}")
                     continue
 
                 try:
                     player = session.trace_players.get(
-                        jersey_number=jersey_number,
-                        team=team
+                        jersey_number=jersey_number, team=team
                     )
                 except TracePlayer.DoesNotExist:
                     logger.warning(
-                        f"Player {player_id} (jersey {jersey_number}, team {team.name}) not found in database, skipping")
+                        f"Player {player_id} (jersey {jersey_number}, team {team.name}) not found in database, skipping"
+                    )
                     continue
 
                 player_stats, created = TracePossessionStats.objects.update_or_create(
                     session=session,
-                    possession_type='player',
+                    possession_type="player",
                     player=player,
                     defaults={
-                        'team': player.team,  # Set the team field
-                        'side': team_side,    # Set the side field
-                        'metrics': player_data  # Store cleaned player data
-                    }
+                        "team": player.team,  # Set the team field
+                        "side": team_side,  # Set the side field
+                        "metrics": player_data,  # Store cleaned player data
+                    },
                 )
                 saved_player_stats.append(player_stats)
 
             except Exception as e:
                 logger.warning(
-                    f"Error saving player possession stats for player {player_id}: {e}")
+                    f"Error saving player possession stats for player {player_id}: {e}"
+                )
                 continue
 
         return {
-            'success': True,
-            'team_stats_saved': len(saved_team_stats),
-            'player_stats_saved': len(saved_player_stats),
-            'session_id': session.session_id
+            "success": True,
+            "team_stats_saved": len(saved_team_stats),
+            "player_stats_saved": len(saved_player_stats),
+            "session_id": session.session_id,
         }
 
     except Exception as e:
         logger.exception(f"Error saving possession calculation results: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'session_id': session.session_id
-        }
+        return {"success": False, "error": str(e), "session_id": session.session_id}
 
 
 class TraceVisionService:
@@ -119,9 +124,11 @@ class TraceVisionService:
 
         # Cache timeouts
         self.status_cache_timeout = getattr(
-            settings, 'TRACEVISION_STATUS_CACHE_TIMEOUT', 300)
+            settings, "TRACEVISION_STATUS_CACHE_TIMEOUT", 300
+        )
         self.result_cache_timeout = getattr(
-            settings, 'TRACEVISION_RESULT_CACHE_TIMEOUT', 1800)
+            settings, "TRACEVISION_RESULT_CACHE_TIMEOUT", 1800
+        )
 
     def get_session_status(self, session, force_refresh=False):
         """
@@ -135,20 +142,21 @@ class TraceVisionService:
             dict: Status data or None if failed
         """
         if force_refresh:
-            logger.info(
-                f"Force refreshing cache for session {session.session_id}")
+            logger.info(f"Force refreshing cache for session {session.session_id}")
             self._clear_cache_for_session(session.session_id)
         else:
             # Check cache first
             cached_data = self._get_cached_status_data(session.session_id)
             if cached_data:
                 logger.info(
-                    f"Using cached status data for session {session.session_id}")
+                    f"Using cached status data for session {session.session_id}"
+                )
                 return cached_data
 
         # Fetch from API
         logger.info(
-            f"Fetching status from TraceVision API for session {session.session_id}")
+            f"Fetching status from TraceVision API for session {session.session_id}"
+        )
         status_data = self._query_tracevision_status(session)
 
         if status_data:
@@ -171,13 +179,13 @@ class TraceVisionService:
         # Check cache first
         cached_result = self._get_cached_result_data(session.session_id)
         if cached_result:
-            logger.info(
-                f"Using cached result data for session {session.session_id}")
+            logger.info(f"Using cached result data for session {session.session_id}")
             return cached_result
 
         # Fetch from API
         logger.info(
-            f"Fetching result from TraceVision API for session {session.session_id}")
+            f"Fetching result from TraceVision API for session {session.session_id}"
+        )
         result_data = self._fetch_session_result(session)
 
         if result_data:
@@ -195,9 +203,12 @@ class TraceVisionService:
         if cached_data:
             # Check if cache is still valid
             cache_timestamp = datetime.fromisoformat(
-                cached_data.get('cache_timestamp', '1970-01-01T00:00:00'))
-            if datetime.now() - cache_timestamp < timedelta(seconds=self.status_cache_timeout):
-                cached_data['cached'] = True
+                cached_data.get("cache_timestamp", "1970-01-01T00:00:00")
+            )
+            if datetime.now() - cache_timestamp < timedelta(
+                seconds=self.status_cache_timeout
+            ):
+                cached_data["cached"] = True
                 return cached_data
 
         return None
@@ -207,7 +218,8 @@ class TraceVisionService:
         cache_key = f"tracevision_status_{session_id}"
         cache.set(cache_key, data, self.status_cache_timeout)
         logger.info(
-            f"Cached status data for session {session_id} with TTL {self.status_cache_timeout}s")
+            f"Cached status data for session {session_id} with TTL {self.status_cache_timeout}s"
+        )
 
     def _get_cached_result_data(self, session_id):
         """Get cached result data for a session."""
@@ -219,7 +231,8 @@ class TraceVisionService:
         cache_key = f"tracevision_result_{session_id}"
         cache.set(cache_key, data, self.result_cache_timeout)
         logger.info(
-            f"Cached result data for session {session_id} with TTL {self.result_cache_timeout}s")
+            f"Cached result data for session {session_id} with TTL {self.result_cache_timeout}s"
+        )
 
     def _clear_cache_for_session(self, session_id):
         """Clear all cached data for a specific session."""
@@ -250,12 +263,16 @@ class TraceVisionService:
                 },
             }
 
-            res = requests.post(self.graphql_url, headers={
-                                "Content-Type": "application/json"}, json=status_payload)
+            res = requests.post(
+                self.graphql_url,
+                headers={"Content-Type": "application/json"},
+                json=status_payload,
+            )
 
             if res.status_code != 200:
                 logger.info(
-                    f"Failed to retrieve status for session {session.session_id}: {res.status_code}")
+                    f"Failed to retrieve status for session {session.session_id}: {res.status_code}"
+                )
                 return None
 
             # logger.info(f"Status data: {res.json()}")
@@ -281,14 +298,16 @@ class TraceVisionService:
 
             if not data.get("status"):
                 logger.error(
-                    f"No status data returned for session {session.session_id}")
+                    f"No status data returned for session {session.session_id}"
+                )
                 return None
 
             return data
 
         except Exception as e:
             logger.exception(
-                f"Error querying TraceVision status for session {session.session_id}: {e}")
+                f"Error querying TraceVision status for session {session.session_id}: {e}"
+            )
             return None
 
     def _fetch_session_result(self, session):
@@ -386,23 +405,162 @@ class TraceVisionService:
                 },
             }
 
-            result_response = requests.post(self.graphql_url, headers={
-                                            "Content-Type": "application/json"}, json=result_payload)
+            result_response = requests.post(
+                self.graphql_url,
+                headers={"Content-Type": "application/json"},
+                json=result_payload,
+            )
             result_data = result_response.json().get("data", {}).get("sessionResult")
 
             if result_response.status_code == 200 and result_data:
                 logger.info(
-                    f"Successfully fetched result data for session {session.session_id}")
+                    f"Successfully fetched result data for session {session.session_id}"
+                )
                 return result_data
             else:
-                logger.error(
-                    f"Failed to fetch result for session {session.session_id}")
+                logger.error(f"Failed to fetch result for session {session.session_id}")
                 return None
 
         except Exception as e:
             logger.exception(
-                f"Error fetching result data for session {session.session_id}: {e}")
+                f"Error fetching result data for session {session.session_id}: {e}"
+            )
             return None
+
+    @staticmethod
+    def import_game_video(session_id, video_link, start_time=None):
+        """
+        Import video from URL to TraceVision session.
+
+        Args:
+            session_id: TraceVision session ID
+            video_link: URL to the video file
+            start_time: Optional start time of the video (datetime)
+
+        Returns:
+            str: video_url_for_db (the video_link)
+
+        Raises:
+            Exception: If import fails
+        """
+        customer_id = int(settings.TRACEVISION_CUSTOMER_ID)
+        api_key = settings.TRACEVISION_API_KEY
+        graphql_url = settings.TRACEVISION_GRAPHQL_URL
+
+        logger.info(f"Importing video from link for session {session_id}...")
+        import_video_payload = {
+            "query": """
+                mutation ($token: CustomerToken!, $session_id: Int!, $video: ImportVideoInput!, $start_time: DateTime) {
+                    importVideo(token: $token, session_id: $session_id, video: $video, start_time: $start_time) {
+                        success
+                        error
+                    }
+                }
+            """,
+            "variables": {
+                "token": {"customer_id": customer_id, "token": api_key},
+                "session_id": session_id,
+                "video": {"type": "url", "via_url": {"url": video_link}},
+                "start_time": start_time.isoformat() if start_time else None,
+            },
+        }
+
+        import_response = requests.post(
+            graphql_url,
+            headers={"Content-Type": "application/json"},
+            json=import_video_payload,
+        )
+
+        import_json = import_response.json()
+        logger.info(f"Video import response: {import_json}")
+
+        if import_response.status_code != 200 or not import_json.get("data", {}).get(
+            "importVideo", {}
+        ).get("success"):
+            error_msg = (
+                import_json.get("data", {})
+                .get("importVideo", {})
+                .get("error", "Unknown error")
+            )
+            raise Exception(f"Video import failed: {error_msg}")
+
+        return video_link
+
+    @staticmethod
+    def upload_game_video(session_id, video_file):
+        """
+        Upload video file to TraceVision session.
+
+        Args:
+            session_id: TraceVision session ID
+            video_file: Video file object to upload
+
+        Returns:
+            str: video_url_for_db (the upload_url)
+
+        Raises:
+            Exception: If upload fails
+        """
+        customer_id = int(settings.TRACEVISION_CUSTOMER_ID)
+        api_key = settings.TRACEVISION_API_KEY
+        graphql_url = settings.TRACEVISION_GRAPHQL_URL
+
+        logger.info(f"Processing video file upload for session {session_id}...")
+
+        # Get upload URL for file
+        upload_payload = {
+            "query": """
+                mutation ($token: CustomerToken!, $session_id: Int!, $video_name: String!) {
+                    uploadVideo(token: $token, session_id: $session_id, video_name: $video_name) {
+                        success
+                        error
+                        upload_url
+                    }
+                }
+            """,
+            "variables": {
+                "token": {"customer_id": customer_id, "token": api_key},
+                "session_id": session_id,
+                "video_name": video_file.name,
+            },
+        }
+
+        upload_response = requests.post(
+            graphql_url,
+            headers={"Content-Type": "application/json"},
+            json=upload_payload,
+        )
+        upload_json = upload_response.json()
+        logger.debug(f"Upload URL response: {upload_json}")
+
+        if upload_response.status_code != 200 or not upload_json.get("data", {}).get(
+            "uploadVideo", {}
+        ).get("success"):
+            error_msg = (
+                upload_json.get("data", {})
+                .get("uploadVideo", {})
+                .get("error", "Unknown error")
+            )
+            raise Exception(f"Failed to get video upload URL: {error_msg}")
+
+        upload_url = upload_json["data"]["uploadVideo"]["upload_url"]
+
+        # Upload video file
+        logger.info("Uploading video file to TraceVision...")
+        # Reset file pointer to beginning in case it was read before
+        if hasattr(video_file, "seek"):
+            video_file.seek(0)
+        put_response = requests.put(
+            upload_url, headers={"Content-Type": "video/mp4"}, data=video_file.read()
+        )
+
+        if put_response.status_code != 200:
+            raise Exception(
+                f"Video upload failed: status_code={put_response.status_code}, "
+                f"text={put_response.text}"
+            )
+
+        return upload_url
 
 
 class TraceVisionAggregationService:
@@ -416,8 +574,8 @@ class TraceVisionAggregationService:
         results = {}
         # results['coach_report'] = self._compute_coach_report(session)
         # results['touch_leaderboard'] = self._compute_touch_leaderboard(session)
-        results['possession_segments'] = self._compute_possessions(session)
-        results['clips'] = self._compute_clips(session)
+        results["possession_segments"] = self._compute_possessions(session)
+        results["clips"] = self._compute_clips(session)
         # results['passes'] = self._compute_passes(session)
         # results['passing_network'] = self._compute_passing_network(session)
         return results
@@ -432,80 +590,85 @@ class TraceVisionAggregationService:
 
     def _get_video_variant_name(self, video_type, primary_player):
         """Generate a descriptive name for the video variant"""
-        if video_type == 'original':
-            return 'Original View'
-        elif video_type == 'with_overlay':
-            return 'With Overlay'
-        elif video_type == 'zoomed_player' and primary_player:
-            return f'Focused on {primary_player.name}'
-        elif video_type == 'zoomed_team':
-            return 'Team View'
-        elif video_type == 'tactical_view':
-            return 'Tactical View'
-        elif video_type == 'slow_motion':
-            return 'Slow Motion'
-        elif video_type == 'multi_angle':
-            return 'Multi-Angle'
+        if video_type == "original":
+            return "Original View"
+        elif video_type == "with_overlay":
+            return "With Overlay"
+        elif video_type == "zoomed_player" and primary_player:
+            return f"Focused on {primary_player.name}"
+        elif video_type == "zoomed_team":
+            return "Team View"
+        elif video_type == "tactical_view":
+            return "Tactical View"
+        elif video_type == "slow_motion":
+            return "Slow Motion"
+        elif video_type == "multi_angle":
+            return "Multi-Angle"
         else:
-            return video_type.replace('_', ' ').title()
+            return video_type.replace("_", " ").title()
 
     def _compute_clips(self, session):
         # from .models import TraceClipReel, TraceHighlight
         hs = TraceHighlight.objects.filter(session=session)
 
         for h in hs:
-            side = 'home' if 'home' in (
-                h.tags or []) else 'away' if 'away' in (h.tags or []) else ''
+            side = (
+                "home"
+                if "home" in (h.tags or [])
+                else "away" if "away" in (h.tags or []) else ""
+            )
 
             # Get all players involved in this highlight
-            highlight_objects = h.highlight_objects.all(
-            ).select_related('trace_object', 'player')
-            involved_players = [
-                ho.player for ho in highlight_objects if ho.player]
+            highlight_objects = h.highlight_objects.all().select_related(
+                "trace_object", "player"
+            )
+            involved_players = [ho.player for ho in highlight_objects if ho.player]
             primary_player = involved_players[0] if involved_players else None
 
             # Determine event type from tags
-            event_type = 'touch'  # default
+            event_type = "touch"  # default
             if h.tags:
-                if 'pass' in h.tags:
-                    event_type = 'pass'
-                elif 'shot' in h.tags:
-                    event_type = 'shot'
-                elif 'goal' in h.tags:
-                    event_type = 'goal'
-                elif 'tackle' in h.tags:
-                    event_type = 'tackle'
+                if "pass" in h.tags:
+                    event_type = "pass"
+                elif "shot" in h.tags:
+                    event_type = "shot"
+                elif "goal" in h.tags:
+                    event_type = "goal"
+                elif "tackle" in h.tags:
+                    event_type = "tackle"
 
             # Create clip reel entries for different video types
-            video_types_to_create = ['with_overlay']
+            video_types_to_create = ["with_overlay"]
 
             for video_type in video_types_to_create:
                 clip_reel, _ = TraceClipReel.objects.update_or_create(
                     highlight=h,
                     video_type=video_type,
                     defaults={
-                        'session': session,
-                        'event_id': h.highlight_id,
-                        'event_type': event_type,
-                        'side': side,
-                        'start_ms': h.start_offset,
-                        'duration_ms': h.duration,
-                        'start_clock': self._ms_to_clock(h.start_offset),
-                        'end_clock': self._ms_to_clock(h.start_offset + h.duration),
-                        'primary_player': primary_player,
-                        'label': f"{event_type.title()} - {side.title()}",
-                        'description': f"{event_type.title()} event for {side} team",
-                        'tags': h.tags or [],
-                        'video_stream': h.video_stream or '',
-                        'generation_status': 'pending',
-                        'video_variant_name': self._get_video_variant_name(video_type, primary_player),
-                        'generation_metadata': {
-                            'highlight_id': h.highlight_id,
-                            'video_id': h.video_id,
-                            'involved_players_count': len(involved_players),
-                            'created_from_aggregation': True
-                        }
-                    }
+                        "session": session,
+                        "event_id": h.highlight_id,
+                        "event_type": event_type,
+                        "side": side,
+                        "start_ms": h.start_offset,
+                        "duration_ms": h.duration,
+                        "start_clock": self._ms_to_clock(h.start_offset),
+                        "end_clock": self._ms_to_clock(h.start_offset + h.duration),
+                        "primary_player": primary_player,
+                        "label": f"{event_type.title()} - {side.title()}",
+                        "description": f"{event_type.title()} event for {side} team",
+                        "tags": h.tags or [],
+                        "video_stream": h.video_stream or "",
+                        "generation_status": "pending",
+                        "video_variant_name": self._get_video_variant_name(
+                            video_type, primary_player
+                        ),
+                        "generation_metadata": {
+                            "highlight_id": h.highlight_id,
+                            "video_id": h.video_id,
+                            "involved_players_count": len(involved_players),
+                            "created_from_aggregation": True,
+                        },
+                    },
                 )
 
                 # Add all involved players to the many-to-many relationship
@@ -519,44 +682,64 @@ class TraceVisionAggregationService:
 
         try:
             self.logger.info(
-                f"Starting possession calculation for session {session.session_id}")
+                f"Starting possession calculation for session {session.session_id}"
+            )
 
             # Get highlights from session result
-            if not session.result or 'highlights' not in session.result:
+            if not session.result or "highlights" not in session.result:
                 self.logger.warning(
-                    f"No highlights found in session {session.session_id} result")
+                    f"No highlights found in session {session.session_id} result"
+                )
                 return False
 
-            highlights = session.result['highlights']
+            highlights = session.result["highlights"]
             if not highlights:
                 self.logger.warning(
-                    f"Empty highlights list for session {session.session_id}")
+                    f"Empty highlights list for session {session.session_id}"
+                )
                 return False
 
             # Parse session timing fields to seconds
-            game_start_time = parse_time_to_seconds(
-                session.match_start_time) if session.match_start_time else None
-            first_half_end_time = parse_time_to_seconds(
-                session.first_half_end_time) if session.first_half_end_time else None
-            second_half_start_time = parse_time_to_seconds(
-                session.second_half_start_time) if session.second_half_start_time else None
-            game_end_time = parse_time_to_seconds(
-                session.match_end_time) if session.match_end_time else None
+            game_start_time = (
+                parse_time_to_seconds(session.match_start_time)
+                if session.match_start_time
+                else None
+            )
+            first_half_end_time = (
+                parse_time_to_seconds(session.first_half_end_time)
+                if session.first_half_end_time
+                else None
+            )
+            second_half_start_time = (
+                parse_time_to_seconds(session.second_half_start_time)
+                if session.second_half_start_time
+                else None
+            )
+            game_end_time = (
+                parse_time_to_seconds(session.match_end_time)
+                if session.match_end_time
+                else None
+            )
 
             # Filter highlights by game time
             filtered_highlights = filter_highlights_by_game_time(
-                highlights, game_start_time, first_half_end_time,
-                second_half_start_time, game_end_time
+                highlights,
+                game_start_time,
+                first_half_end_time,
+                second_half_start_time,
+                game_end_time,
             )
 
             if not filtered_highlights:
                 self.logger.warning(
-                    f"No highlights remain after game time filtering for session {session.session_id}")
+                    f"No highlights remain after game time filtering for session {session.session_id}"
+                )
                 return False
 
             # Calculate possession metrics
             possession_results = self._calculate_possession_metrics(
-                filtered_highlights, session)
+                filtered_highlights, session
+            )
 
             # Save possession_results to a JSON file (for debugging/analysis, not for testing)
             # output_dir = "./tracevision"
@@ -574,60 +757,64 @@ class TraceVisionAggregationService:
             # Save results to database
             save_result = save_possession_calculation_results(
                 session,
-                possession_results['team_metrics'],
-                possession_results['player_metrics']
+                possession_results["team_metrics"],
+                possession_results["player_metrics"],
             )
 
-            if save_result['success']:
+            if save_result["success"]:
                 # Create possession segments using the same data as possession stats
                 segments_result = self._create_possession_segments_from_calculation(
                     session, filtered_highlights, possession_results
                 )
                 if segments_result:
-                    self.logger.info(f"Successfully created possession segments for session {session.session_id}")
+                    self.logger.info(
+                        f"Successfully created possession segments for session {session.session_id}"
+                    )
                 else:
-                    self.logger.warning(f"Failed to create possession segments for session {session.session_id}")
-                
+                    self.logger.warning(
+                        f"Failed to create possession segments for session {session.session_id}"
+                    )
+
                 self.logger.info(
-                    f"Successfully computed and saved possession metrics for session {session.session_id}")
+                    f"Successfully computed and saved possession metrics for session {session.session_id}"
+                )
                 return True
             else:
                 self.logger.error(
-                    f"Failed to save possession metrics for session {session.session_id}: {save_result.get('error')}")
+                    f"Failed to save possession metrics for session {session.session_id}: {save_result.get('error')}"
+                )
                 return False
 
         except Exception as e:
             self.logger.exception(
-        f"Error computing possession metrics for session {session.session_id}: {e}")
+                f"Error computing possession metrics for session {session.session_id}: {e}"
+            )
             return False
 
     def _calculate_possession_metrics(self, highlights, session):
         """Calculate possession metrics based on possession.py logic"""
         # Filter only possession chains (touch-chain tags)
-        chains = [h for h in highlights if 'touch-chain' in h.get('tags', [])]
+        chains = [h for h in highlights if "touch-chain" in h.get("tags", [])]
 
         if not chains:
             self.logger.warning("No possession chains found in highlights")
-            return {'team_metrics': {'home': {}, 'away': {}}, 'player_metrics': {}}
+            return {"team_metrics": {"home": {}, "away": {}}, "player_metrics": {}}
 
         # Sort chains by start time
-        chains = sorted(chains, key=lambda x: x['start_offset'])
+        chains = sorted(chains, key=lambda x: x["start_offset"])
 
         # Group consecutive chains by the same team into possessions
         possessions = self._group_chains_into_possessions(chains)
 
         # Calculate team-level metrics
-        team_metrics = self._calculate_team_metrics_from_possessions(
-            possessions)
+        team_metrics = self._calculate_team_metrics_from_possessions(possessions)
 
         # Calculate player-level metrics
         player_metrics = self._calculate_player_metrics_from_possessions(
-            possessions, session)
+            possessions, session
+        )
 
-        return {
-            'team_metrics': team_metrics,
-            'player_metrics': player_metrics
-        }
+        return {"team_metrics": team_metrics, "player_metrics": player_metrics}
 
     def _group_chains_into_possessions(self, chains):
         """Group consecutive touch-chains by the same team into possessions"""
@@ -635,47 +822,45 @@ class TraceVisionAggregationService:
         current_possession = None
 
         for chain in chains:
-            tags = chain.get('tags', [])
+            tags = chain.get("tags", [])
             team_side = None
-            if 'home' in tags:
-                team_side = 'home'
-            elif 'away' in tags:
-                team_side = 'away'
+            if "home" in tags:
+                team_side = "home"
+            elif "away" in tags:
+                team_side = "away"
 
             if not team_side:
                 continue
 
             # If this is the first chain or different team, start new possession
-            if current_possession is None or current_possession['team'] != team_side:
+            if current_possession is None or current_possession["team"] != team_side:
                 # Save previous possession if exists
                 if current_possession is not None:
                     possessions.append(current_possession)
 
                 # Start new possession
                 current_possession = {
-                    'team': team_side,
-                    'chains': [chain],
-                    'start_ms': chain['start_offset'],
-                    'end_ms': chain['start_offset'] + chain['duration'],
-                    'total_duration_ms': chain['duration'],
-                    'total_touches': len(chain.get('objects', [])),
-                    'players_involved': set()
+                    "team": team_side,
+                    "chains": [chain],
+                    "start_ms": chain["start_offset"],
+                    "end_ms": chain["start_offset"] + chain["duration"],
+                    "total_duration_ms": chain["duration"],
+                    "total_touches": len(chain.get("objects", [])),
+                    "players_involved": set(),
                 }
             else:
                 # Same team - add to current possession
-                current_possession['chains'].append(chain)
-                current_possession['end_ms'] = chain['start_offset'] + \
-                    chain['duration']
-                current_possession['total_duration_ms'] = current_possession['end_ms'] - \
-                    current_possession['start_ms']
-                current_possession['total_touches'] += len(
-                    chain.get('objects', []))
+                current_possession["chains"].append(chain)
+                current_possession["end_ms"] = chain["start_offset"] + chain["duration"]
+                current_possession["total_duration_ms"] = (
+                    current_possession["end_ms"] - current_possession["start_ms"]
+                )
+                current_possession["total_touches"] += len(chain.get("objects", []))
 
             # Track players involved in this possession
-            for obj in chain.get('objects', []):
-                if obj.get('object_id'):
-                    current_possession['players_involved'].add(
-                        obj['object_id'])
+            for obj in chain.get("objects", []):
+                if obj.get("object_id"):
+                    current_possession["players_involved"].add(obj["object_id"])
 
         # Add the last possession
         if current_possession is not None:
@@ -685,57 +870,62 @@ class TraceVisionAggregationService:
 
     def _calculate_team_metrics_from_possessions(self, possessions):
         """Calculate team-level metrics from grouped possessions"""
-        team_metrics = {'home': {}, 'away': {}}
+        team_metrics = {"home": {}, "away": {}}
 
         # Group possessions by team
-        team_possessions = {'home': [], 'away': []}
+        team_possessions = {"home": [], "away": []}
         for possession in possessions:
-            team_possessions[possession['team']].append(possession)
+            team_possessions[possession["team"]].append(possession)
 
         # Calculate metrics for each team
-        for team_side in ['home', 'away']:
+        for team_side in ["home", "away"]:
             team_poss = team_possessions[team_side]
             if not team_poss:
                 team_metrics[team_side] = self._get_empty_team_metrics()
                 continue
 
             # Basic metrics (keep in milliseconds)
-            total_duration_ms = sum(p['total_duration_ms'] for p in team_poss)
+            total_duration_ms = sum(p["total_duration_ms"] for p in team_poss)
             possession_count = len(team_poss)
-            avg_duration_ms = total_duration_ms / \
-                possession_count if possession_count > 0 else 0
+            avg_duration_ms = (
+                total_duration_ms / possession_count if possession_count > 0 else 0
+            )
 
             # Calculate passes (touches - 1 per possession)
-            total_touches = sum(p['total_touches'] for p in team_poss)
+            total_touches = sum(p["total_touches"] for p in team_poss)
             total_passes = max(total_touches - possession_count, 0)
             avg_passes = total_passes / possession_count if possession_count > 0 else 0
 
             # Longest possession (keep in milliseconds)
-            longest_possession_ms = max(
-                p['total_duration_ms'] for p in team_poss)
+            longest_possession_ms = max(p["total_duration_ms"] for p in team_poss)
 
             # Calculate turnovers (number of times this team lost possession)
             turnovers = self._calculate_team_turnovers(possessions, team_side)
 
             team_metrics[team_side] = {
-                'possession_time_ms': round(total_duration_ms, 1),
-                'possession_count': possession_count,
-                'avg_duration_ms': round(avg_duration_ms, 1),
-                'avg_passes': round(avg_passes, 2),
-                'longest_possession_ms': round(longest_possession_ms, 1),
-                'turnovers': turnovers,
-                'total_touches': total_touches,
-                'total_passes': total_passes
+                "possession_time_ms": round(total_duration_ms, 1),
+                "possession_count": possession_count,
+                "avg_duration_ms": round(avg_duration_ms, 1),
+                "avg_passes": round(avg_passes, 2),
+                "longest_possession_ms": round(longest_possession_ms, 1),
+                "turnovers": turnovers,
+                "total_touches": total_touches,
+                "total_passes": total_passes,
             }
 
         # Calculate possession percentages
         total_possession_time_ms = sum(
-            team_metrics[side]['possession_time_ms'] for side in team_metrics)
+            team_metrics[side]["possession_time_ms"] for side in team_metrics
+        )
         if total_possession_time_ms > 0:
             for team_side in team_metrics:
-                team_metrics[team_side]['possession_percentage'] = round(
-                    (team_metrics[team_side]['possession_time_ms'] /
-                     total_possession_time_ms) * 100, 1
+                team_metrics[team_side]["possession_percentage"] = round(
+                    (
+                        team_metrics[team_side]["possession_time_ms"]
+                        / total_possession_time_ms
+                    )
+                    * 100,
+                    1,
                 )
 
         return team_metrics
@@ -744,9 +934,9 @@ class TraceVisionAggregationService:
         """Calculate turnovers for a specific team"""
         turnovers = 0
         for i, possession in enumerate(possessions):
-            if possession['team'] == team_side:
+            if possession["team"] == team_side:
                 # Check if next possession is by different team
-                if i + 1 < len(possessions) and possessions[i + 1]['team'] != team_side:
+                if i + 1 < len(possessions) and possessions[i + 1]["team"] != team_side:
                     turnovers += 1
         return turnovers
 
@@ -757,36 +947,39 @@ class TraceVisionAggregationService:
         player_metrics = {}
 
         # Group possessions by team for percentage calculations
-        team_possessions = {'home': [], 'away': []}
+        team_possessions = {"home": [], "away": []}
         for possession in possessions:
-            team_possessions[possession['team']].append(possession)
+            team_possessions[possession["team"]].append(possession)
 
         for player in players:
             # Create player_id in format: <team_side>_<jersey_number>
-            team_side = 'home' if 'home' in player.team_name.lower() else 'away'
+            team_side = "home" if "home" in player.team_name.lower() else "away"
             player_id = f"{team_side}_{player.jersey_number}"
 
             # Find possessions where this player was involved
             player_possessions = []
             for possession in possessions:
-                if player.object_id in possession['players_involved']:
+                if player.object_id in possession["players_involved"]:
                     player_possessions.append(possession)
 
             if not player_possessions:
                 player_metrics[player_id] = self._get_empty_player_metrics(
-                    player, player_id, team_side)
+                    player, player_id, team_side
+                )
                 continue
 
             # Calculate player-specific metrics (keep in milliseconds)
-            total_duration_ms = sum(p['total_duration_ms']
-                                    for p in player_possessions)
+            total_duration_ms = sum(p["total_duration_ms"] for p in player_possessions)
             involvement_count = len(player_possessions)
-            avg_duration_ms = total_duration_ms / \
-                involvement_count if involvement_count > 0 else 0
+            avg_duration_ms = (
+                total_duration_ms / involvement_count if involvement_count > 0 else 0
+            )
 
             # Calculate touches in possessions
-            total_touches = sum(p['total_touches'] for p in player_possessions)
-            avg_touches = total_touches / involvement_count if involvement_count > 0 else 0
+            total_touches = sum(p["total_touches"] for p in player_possessions)
+            avg_touches = (
+                total_touches / involvement_count if involvement_count > 0 else 0
+            )
 
             # Calculate involvement percentage for player's team
             team_poss = team_possessions[team_side]
@@ -794,15 +987,16 @@ class TraceVisionAggregationService:
             involvement_percentage = 0
             if team_possession_count > 0:
                 involvement_percentage = round(
-                    (involvement_count / team_possession_count) * 100, 1)
+                    (involvement_count / team_possession_count) * 100, 1
+                )
 
             player_metrics[player_id] = {
-                'involvement_count': involvement_count,
-                'total_duration_ms': round(total_duration_ms, 1),
-                'avg_duration_ms': round(avg_duration_ms, 1),
-                'total_touches': total_touches,
-                'avg_touches': round(avg_touches, 2),
-                'involvement_percentage': involvement_percentage
+                "involvement_count": involvement_count,
+                "total_duration_ms": round(total_duration_ms, 1),
+                "avg_duration_ms": round(avg_duration_ms, 1),
+                "total_touches": total_touches,
+                "avg_touches": round(avg_touches, 2),
+                "involvement_percentage": involvement_percentage,
             }
 
         return player_metrics
@@ -810,224 +1004,278 @@ class TraceVisionAggregationService:
     def _get_empty_team_metrics(self):
         """Return empty team metrics structure"""
         return {
-            'possession_time_ms': 0,
-            'possession_count': 0,
-            'avg_duration_ms': 0,
-            'avg_passes': 0,
-            'longest_possession_ms': 0,
-            'turnovers': 0,
-            'total_touches': 0,
-            'total_passes': 0,
-            'possession_percentage': 0
+            "possession_time_ms": 0,
+            "possession_count": 0,
+            "avg_duration_ms": 0,
+            "avg_passes": 0,
+            "longest_possession_ms": 0,
+            "turnovers": 0,
+            "total_touches": 0,
+            "total_passes": 0,
+            "possession_percentage": 0,
         }
 
     def _get_empty_player_metrics(self, player, player_id, team_side):
         """Return empty player metrics structure"""
         return {
-            'involvement_count': 0,
-            'total_duration_ms': 0,
-            'avg_duration_ms': 0,
-            'total_touches': 0,
-            'avg_touches': 0,
-            'involvement_percentage': 0
+            "involvement_count": 0,
+            "total_duration_ms": 0,
+            "avg_duration_ms": 0,
+            "total_touches": 0,
+            "avg_touches": 0,
+            "involvement_percentage": 0,
         }
 
-
-    def _create_possession_segments_from_calculation(self, session, highlights, possession_results):
+    def _create_possession_segments_from_calculation(
+        self, session, highlights, possession_results
+    ):
         """Create possession segments using the same data as possession calculation"""
         try:
-            self.logger.info(f"Creating possession segments from calculation for session {session.session_id}")
-            
+            self.logger.info(
+                f"Creating possession segments from calculation for session {session.session_id}"
+            )
+
             # Clear existing segments for this session
             TracePossessionSegment.objects.filter(session=session).delete()
-            
+
             # Filter only possession chains (touch-chain tags)
-            chains = [h for h in highlights if 'touch-chain' in h.get('tags', [])]
-            
+            chains = [h for h in highlights if "touch-chain" in h.get("tags", [])]
+
             if not chains:
-                self.logger.warning(f"No possession chains found for session {session.session_id}")
+                self.logger.warning(
+                    f"No possession chains found for session {session.session_id}"
+                )
                 return False
-            
+
             # Sort chains by start time
-            chains = sorted(chains, key=lambda x: x['start_offset'])
-            
+            chains = sorted(chains, key=lambda x: x["start_offset"])
+
             # Group consecutive chains by the same team into possessions
             possessions = self._group_chains_into_possessions(chains)
-            
+
             # Create segments for each possession
             segments_created = 0
-            cumulative_team_metrics = {'home': {}, 'away': {}}
+            cumulative_team_metrics = {"home": {}, "away": {}}
             cumulative_player_metrics = {}
-            
+
             for i, possession in enumerate(possessions):
-                team_side = possession['team']
-                
+                team_side = possession["team"]
+
                 # Calculate cumulative metrics up to this possession
-                cumulative_team_metrics[team_side] = self._calculate_cumulative_team_metrics_for_segment(
-                    possessions[:i+1], team_side, session, possessions
+                cumulative_team_metrics[team_side] = (
+                    self._calculate_cumulative_team_metrics_for_segment(
+                        possessions[: i + 1], team_side, session, possessions
+                    )
                 )
-                
+
                 # Calculate player metrics for this possession
                 player_metrics = self._calculate_player_metrics_for_possession(
                     possession, session, cumulative_player_metrics
                 )
-                
+
                 # Filter out players with all zero metrics to save space
                 filtered_player_metrics = {
-                    player_id: metrics for player_id, metrics in player_metrics.items()
-                    if any(metrics.get(key, 0) != 0 for key in ['involvement_count', 'total_duration_ms', 'total_touches'])
+                    player_id: metrics
+                    for player_id, metrics in player_metrics.items()
+                    if any(
+                        metrics.get(key, 0) != 0
+                        for key in [
+                            "involvement_count",
+                            "total_duration_ms",
+                            "total_touches",
+                        ]
+                    )
                 }
-                
+
                 # Find the highlight that corresponds to this possession
                 # Use the first chain in the possession to find the highlight
                 highlight = None
-                if possession['chains']:
-                    first_chain = possession['chains'][0]
+                if possession["chains"]:
+                    first_chain = possession["chains"][0]
                     # Try to find the highlight by start_offset
                     highlight = session.highlights.filter(
-                        start_offset=first_chain['start_offset']
+                        start_offset=first_chain["start_offset"]
                     ).first()
-                
+
                 # Create segment
                 segment = TracePossessionSegment.objects.create(
                     session=session,
                     side=team_side,
-                    start_ms=possession['start_ms'],
-                    end_ms=possession['end_ms'],
-                    count=len(possession['chains']),  # Number of chains in this possession
-                    start_clock=self._ms_to_clock(possession['start_ms']),
-                    end_clock=self._ms_to_clock(possession['end_ms']),
-                    duration_s=possession['total_duration_ms'] / 1000.0,  # Convert ms to seconds
+                    start_ms=possession["start_ms"],
+                    end_ms=possession["end_ms"],
+                    count=len(
+                        possession["chains"]
+                    ),  # Number of chains in this possession
+                    start_clock=self._ms_to_clock(possession["start_ms"]),
+                    end_clock=self._ms_to_clock(possession["end_ms"]),
+                    duration_s=possession["total_duration_ms"]
+                    / 1000.0,  # Convert ms to seconds
                     highlight=highlight,  # Link to the highlight
                     team_metrics=cumulative_team_metrics[team_side],
-                    player_metrics=filtered_player_metrics  # Only non-zero player metrics
+                    player_metrics=filtered_player_metrics,  # Only non-zero player metrics
                 )
                 segments_created += 1
-                
-                self.logger.debug(f"Created segment {segments_created} for {team_side} team with {len(possession['chains'])} chains")
-            
-            self.logger.info(f"Successfully created {segments_created} possession segments for session {session.session_id}")
+
+                self.logger.debug(
+                    f"Created segment {segments_created} for {team_side} team with {len(possession['chains'])} chains"
+                )
+
+            self.logger.info(
+                f"Successfully created {segments_created} possession segments for session {session.session_id}"
+            )
             return True
-            
+
         except Exception as e:
-            self.logger.exception(f"Error creating possession segments for session {session.session_id}: {e}")
+            self.logger.exception(
+                f"Error creating possession segments for session {session.session_id}: {e}"
+            )
             return False
 
-    def _calculate_cumulative_team_metrics_for_segment(self, possessions_up_to_now, team_side, session, all_possessions):
+    def _calculate_cumulative_team_metrics_for_segment(
+        self, possessions_up_to_now, team_side, session, all_possessions
+    ):
         """Calculate cumulative team metrics up to a specific possession"""
-        team_possessions = [p for p in possessions_up_to_now if p['team'] == team_side]
-        
+        team_possessions = [p for p in possessions_up_to_now if p["team"] == team_side]
+
         if not team_possessions:
             return self._get_empty_team_metrics()
-        
+
         # Calculate cumulative metrics
-        total_duration_ms = sum(p['total_duration_ms'] for p in team_possessions)
+        total_duration_ms = sum(p["total_duration_ms"] for p in team_possessions)
         possession_count = len(team_possessions)
-        avg_duration_ms = total_duration_ms / possession_count if possession_count > 0 else 0
-        
+        avg_duration_ms = (
+            total_duration_ms / possession_count if possession_count > 0 else 0
+        )
+
         # Calculate touches and passes
-        total_touches = sum(p['total_touches'] for p in team_possessions)
+        total_touches = sum(p["total_touches"] for p in team_possessions)
         total_passes = max(total_touches - possession_count, 0)
         avg_passes = total_passes / possession_count if possession_count > 0 else 0
-        
+
         # Calculate turnovers using the FULL possession list, not just up to now
         turnovers = self._calculate_team_turnovers(all_possessions, team_side)
-        
+
         # Calculate longest possession
-        longest_possession_ms = max(p['total_duration_ms'] for p in team_possessions) if team_possessions else 0
-        
+        longest_possession_ms = (
+            max(p["total_duration_ms"] for p in team_possessions)
+            if team_possessions
+            else 0
+        )
+
         # Calculate possession percentage using full data
-        total_all_teams_duration = sum(p['total_duration_ms'] for p in all_possessions)
-        possession_percentage = (total_duration_ms / total_all_teams_duration * 100) if total_all_teams_duration > 0 else 0
-        
+        total_all_teams_duration = sum(p["total_duration_ms"] for p in all_possessions)
+        possession_percentage = (
+            (total_duration_ms / total_all_teams_duration * 100)
+            if total_all_teams_duration > 0
+            else 0
+        )
+
         return {
-            'possession_count': possession_count,
-            'possession_time_ms': total_duration_ms,
-            'avg_duration_ms': avg_duration_ms,
-            'total_touches': total_touches,
-            'total_passes': total_passes,
-            'avg_passes': avg_passes,
-            'turnovers': turnovers,
-            'longest_possession_ms': longest_possession_ms,
-            'possession_percentage': possession_percentage
+            "possession_count": possession_count,
+            "possession_time_ms": total_duration_ms,
+            "avg_duration_ms": avg_duration_ms,
+            "total_touches": total_touches,
+            "total_passes": total_passes,
+            "avg_passes": avg_passes,
+            "turnovers": turnovers,
+            "longest_possession_ms": longest_possession_ms,
+            "possession_percentage": possession_percentage,
         }
 
-    def _calculate_player_metrics_for_possession(self, possession, session, cumulative_player_metrics):
+    def _calculate_player_metrics_for_possession(
+        self, possession, session, cumulative_player_metrics
+    ):
         """Calculate player metrics for a specific possession"""
         player_metrics = {}
-        
+
         # Get all players in the session
         players = session.trace_players.all()
-        
+
         for player in players:
-            team_side = 'home' if 'home' in player.team_name.lower() else 'away'
+            team_side = "home" if "home" in player.team_name.lower() else "away"
             player_id = f"{team_side}_{player.jersey_number}"
-            
+
             # Check if this player was involved in this possession
-            if player.object_id in possession['players_involved']:
+            if player.object_id in possession["players_involved"]:
                 # Update cumulative metrics
                 if player_id not in cumulative_player_metrics:
                     cumulative_player_metrics[player_id] = {
-                        'involvement_count': 0,
-                        'total_duration_ms': 0,
-                        'total_touches': 0
+                        "involvement_count": 0,
+                        "total_duration_ms": 0,
+                        "total_touches": 0,
                     }
-                
-                cumulative_player_metrics[player_id]['involvement_count'] += 1
-                cumulative_player_metrics[player_id]['total_duration_ms'] += possession['total_duration_ms']
-                cumulative_player_metrics[player_id]['total_touches'] += possession['total_touches']
-            
+
+                cumulative_player_metrics[player_id]["involvement_count"] += 1
+                cumulative_player_metrics[player_id]["total_duration_ms"] += possession[
+                    "total_duration_ms"
+                ]
+                cumulative_player_metrics[player_id]["total_touches"] += possession[
+                    "total_touches"
+                ]
+
             # Calculate current metrics
             if player_id in cumulative_player_metrics:
                 cum_metrics = cumulative_player_metrics[player_id]
-                involvement_count = cum_metrics['involvement_count']
-                total_duration_ms = cum_metrics['total_duration_ms']
-                total_touches = cum_metrics['total_touches']
-                
-                avg_duration_ms = total_duration_ms / involvement_count if involvement_count > 0 else 0
-                avg_touches = total_touches / involvement_count if involvement_count > 0 else 0
-                
+                involvement_count = cum_metrics["involvement_count"]
+                total_duration_ms = cum_metrics["total_duration_ms"]
+                total_touches = cum_metrics["total_touches"]
+
+                avg_duration_ms = (
+                    total_duration_ms / involvement_count
+                    if involvement_count > 0
+                    else 0
+                )
+                avg_touches = (
+                    total_touches / involvement_count if involvement_count > 0 else 0
+                )
+
                 # Calculate involvement percentage (simplified - would need total team possessions)
-                involvement_percentage = 0  # This would need to be calculated with total team possessions
-                
+                involvement_percentage = (
+                    0  # This would need to be calculated with total team possessions
+                )
+
                 player_metrics[player_id] = {
-                    'involvement_count': involvement_count,
-                    'total_duration_ms': total_duration_ms,
-                    'avg_duration_ms': avg_duration_ms,
-                    'total_touches': total_touches,
-                    'avg_touches': avg_touches,
-                    'involvement_percentage': involvement_percentage
+                    "involvement_count": involvement_count,
+                    "total_duration_ms": total_duration_ms,
+                    "avg_duration_ms": avg_duration_ms,
+                    "total_touches": total_touches,
+                    "avg_touches": avg_touches,
+                    "involvement_percentage": involvement_percentage,
                 }
             else:
                 # Player not involved yet
                 player_metrics[player_id] = {
-                    'involvement_count': 0,
-                    'total_duration_ms': 0,
-                    'avg_duration_ms': 0,
-                    'total_touches': 0,
-                    'avg_touches': 0,
-                    'involvement_percentage': 0
+                    "involvement_count": 0,
+                    "total_duration_ms": 0,
+                    "avg_duration_ms": 0,
+                    "total_touches": 0,
+                    "avg_touches": 0,
+                    "involvement_percentage": 0,
                 }
-        
+
         return player_metrics
 
     def _compute_possession_segments(self, session):
         """Compute possession segments for each highlight with touch-chain tags"""
         try:
-            self.logger.info(f"Starting possession segments calculation for session {session.session_id}")
-            
+            self.logger.info(
+                f"Starting possession segments calculation for session {session.session_id}"
+            )
+
             # Get highlights with touch-chain tags, ordered by start_offset
             highlights = session.highlights.filter(
-                tags__contains=['touch-chain']
-            ).order_by('start_offset')
-            
+                tags__contains=["touch-chain"]
+            ).order_by("start_offset")
+
             if not highlights.exists():
-                self.logger.warning(f"No touch-chain highlights found for session {session.session_id}")
+                self.logger.warning(
+                    f"No touch-chain highlights found for session {session.session_id}"
+                )
                 return False
-            
+
             # Clear existing segments for this session
             TracePossessionSegment.objects.filter(session=session).delete()
-            
+
             # Calculate segments for each highlight
             segments_created = 0
             for highlight in highlights:
@@ -1035,173 +1283,196 @@ class TraceVisionAggregationService:
                 team_side = self._get_team_side_from_highlight(highlight)
                 if not team_side:
                     continue
-                
+
                 # Calculate cumulative metrics up to this highlight
                 segment_metrics = self._calculate_highlight_segment_metrics(
                     highlight, highlights, team_side, session
                 )
-                
+
                 # Create segment with both team and player data
                 segment = TracePossessionSegment.objects.create(
-                session=session,
+                    session=session,
                     highlight=highlight,
                     side=team_side,
                     start_ms=highlight.start_offset,
                     end_ms=highlight.start_offset + highlight.duration,
-                    team_metrics=segment_metrics['team'],
-                    player_metrics=segment_metrics['player']
+                    team_metrics=segment_metrics["team"],
+                    player_metrics=segment_metrics["player"],
                 )
                 segments_created += 1
-                
-                self.logger.debug(f"Created segment for highlight {highlight.highlight_id}: {team_side} team")
-            
-            self.logger.info(f"Successfully created {segments_created} possession segments for session {session.session_id}")
+
+                self.logger.debug(
+                    f"Created segment for highlight {highlight.highlight_id}: {team_side} team"
+                )
+
+            self.logger.info(
+                f"Successfully created {segments_created} possession segments for session {session.session_id}"
+            )
             return True
 
         except Exception as e:
-            self.logger.exception(f"Error computing possession segments for session {session.session_id}: {e}")
+            self.logger.exception(
+                f"Error computing possession segments for session {session.session_id}: {e}"
+            )
             return False
 
     def _get_team_side_from_highlight(self, highlight):
         """Extract team side from highlight tags"""
         tags = highlight.tags or []
-        if 'home' in tags:
-            return 'home'
-        elif 'away' in tags:
-            return 'away'
+        if "home" in tags:
+            return "home"
+        elif "away" in tags:
+            return "away"
             return None
 
-    def _calculate_highlight_segment_metrics(self, current_highlight, all_highlights, team_side, session):
+    def _calculate_highlight_segment_metrics(
+        self, current_highlight, all_highlights, team_side, session
+    ):
         """Calculate cumulative possession metrics up to this highlight"""
-        
+
         # Get all previous highlights of the same team up to this point
         previous_highlights = all_highlights.filter(
-            start_offset__lte=current_highlight.start_offset,
-            tags__contains=[team_side]
-        ).order_by('start_offset')
-        
+            start_offset__lte=current_highlight.start_offset, tags__contains=[team_side]
+        ).order_by("start_offset")
+
         # Calculate cumulative team metrics
-        team_metrics = self._calculate_cumulative_team_metrics(previous_highlights, team_side, session)
-        
+        team_metrics = self._calculate_cumulative_team_metrics(
+            previous_highlights, team_side, session
+        )
+
         # Calculate player metrics for this specific highlight's player
-        player_metrics = self._calculate_player_highlight_metrics(current_highlight, session)
-        
-        return {
-            'team': team_metrics,
-            'player': player_metrics
-        }
+        player_metrics = self._calculate_player_highlight_metrics(
+            current_highlight, session
+        )
+
+        return {"team": team_metrics, "player": player_metrics}
 
     def _calculate_cumulative_team_metrics(self, highlights, team_side, session):
         """Calculate cumulative team metrics from highlights"""
-        
+
         if not highlights.exists():
             return self._get_empty_team_metrics()
-        
+
         # Group consecutive highlights into possessions
         possessions = self._group_highlights_into_possessions(highlights, team_side)
-        
+
         # Calculate metrics from possessions
-        total_duration_ms = sum(p['duration_ms'] for p in possessions)
+        total_duration_ms = sum(p["duration_ms"] for p in possessions)
         possession_count = len(possessions)
-        avg_duration_ms = total_duration_ms / possession_count if possession_count > 0 else 0
-        
+        avg_duration_ms = (
+            total_duration_ms / possession_count if possession_count > 0 else 0
+        )
+
         # Calculate touches and passes
-        total_touches = sum(p['touches'] for p in possessions)
+        total_touches = sum(p["touches"] for p in possessions)
         total_passes = max(total_touches - possession_count, 0)
         avg_passes = total_passes / possession_count if possession_count > 0 else 0
-        
+
         # Calculate turnovers (number of times possession was lost)
         turnovers = self._calculate_turnovers_from_highlights(highlights, team_side)
-        
+
         # Calculate possession percentage (need total game time)
         total_game_time_ms = self._get_total_game_time_ms(session)
-        possession_percentage = (total_duration_ms / total_game_time_ms * 100) if total_game_time_ms > 0 else 0
-        
+        possession_percentage = (
+            (total_duration_ms / total_game_time_ms * 100)
+            if total_game_time_ms > 0
+            else 0
+        )
+
         return {
-            'possession_percentage': round(possession_percentage, 1),
-            'turnovers': turnovers,
-            'total_passes': total_passes,
-            'total_touches': total_touches,
-            'possession_count': possession_count,
-            'possession_time_ms': round(total_duration_ms, 1),
-            'avg_duration_ms': round(avg_duration_ms, 1),
-            'avg_passes': round(avg_passes, 2),
-            'longest_possession_ms': round(max(p['duration_ms'] for p in possessions), 1) if possessions else 0
+            "possession_percentage": round(possession_percentage, 1),
+            "turnovers": turnovers,
+            "total_passes": total_passes,
+            "total_touches": total_touches,
+            "possession_count": possession_count,
+            "possession_time_ms": round(total_duration_ms, 1),
+            "avg_duration_ms": round(avg_duration_ms, 1),
+            "avg_passes": round(avg_passes, 2),
+            "longest_possession_ms": (
+                round(max(p["duration_ms"] for p in possessions), 1)
+                if possessions
+                else 0
+            ),
         }
 
     def _calculate_player_highlight_metrics(self, highlight, session):
         """Calculate player metrics for a specific highlight"""
-        
+
         if not highlight.player:
             return self._get_empty_highlight_player_metrics()
-        
+
         # Get all possessions this player was involved in up to this point
         player_highlights = session.highlights.filter(
             player=highlight.player,
             start_offset__lte=highlight.start_offset,
-            tags__contains=['touch-chain']
-        ).order_by('start_offset')
-        
+            tags__contains=["touch-chain"],
+        ).order_by("start_offset")
+
         # Calculate player involvement
         involvement_count = player_highlights.count()
-        total_touches = sum(len(h.tags or []) for h in player_highlights)  # Approximate touches
+        total_touches = sum(
+            len(h.tags or []) for h in player_highlights
+        )  # Approximate touches
         avg_touches = total_touches / involvement_count if involvement_count > 0 else 0
-        
+
         # Calculate involvement percentage
         team_side = self._get_team_side_from_highlight(highlight)
         team_highlights = session.highlights.filter(
-            tags__contains=[team_side],
-            start_offset__lte=highlight.start_offset
+            tags__contains=[team_side], start_offset__lte=highlight.start_offset
         ).count()
-        involvement_percentage = (involvement_count / team_highlights * 100) if team_highlights > 0 else 0
-        
+        involvement_percentage = (
+            (involvement_count / team_highlights * 100) if team_highlights > 0 else 0
+        )
+
         return {
-            'involvement_count': involvement_count,
-            'total_touches': total_touches,
-            'avg_touches': round(avg_touches, 2),
-            'involvement_percentage': round(involvement_percentage, 1)
+            "involvement_count": involvement_count,
+            "total_touches": total_touches,
+            "avg_touches": round(avg_touches, 2),
+            "involvement_percentage": round(involvement_percentage, 1),
         }
 
     def _group_highlights_into_possessions(self, highlights, team_side):
         """Group consecutive highlights into possession chains"""
         possessions = []
         current_possession = None
-        
+
         for highlight in highlights:
             if current_possession is None:
                 # Start new possession
                 current_possession = {
-                    'duration_ms': highlight.duration,
-                    'touches': len(highlight.tags or []),
-                    'start_ms': highlight.start_offset
+                    "duration_ms": highlight.duration,
+                    "touches": len(highlight.tags or []),
+                    "start_ms": highlight.start_offset,
                 }
             else:
                 # Check if this highlight continues the possession
-                time_gap = highlight.start_offset - (current_possession['start_ms'] + current_possession['duration_ms'])
+                time_gap = highlight.start_offset - (
+                    current_possession["start_ms"] + current_possession["duration_ms"]
+                )
                 if time_gap <= 5000:  # 5 second gap threshold
                     # Continue possession
-                    current_possession['duration_ms'] += highlight.duration
-                    current_possession['touches'] += len(highlight.tags or [])
+                    current_possession["duration_ms"] += highlight.duration
+                    current_possession["touches"] += len(highlight.tags or [])
                 else:
                     # Save current possession and start new one
                     possessions.append(current_possession)
                     current_possession = {
-                        'duration_ms': highlight.duration,
-                        'touches': len(highlight.tags or []),
-                        'start_ms': highlight.start_offset
+                        "duration_ms": highlight.duration,
+                        "touches": len(highlight.tags or []),
+                        "start_ms": highlight.start_offset,
                     }
-        
+
         # Add the last possession
         if current_possession:
             possessions.append(current_possession)
-        
+
         return possessions
 
     def _calculate_turnovers_from_highlights(self, highlights, team_side):
         """Calculate turnovers from highlight sequence"""
         turnovers = 0
         highlights_list = list(highlights)
-        
+
         for i, highlight in enumerate(highlights_list):
             if i + 1 < len(highlights_list):
                 next_highlight = highlights_list[i + 1]
@@ -1209,13 +1480,13 @@ class TraceVisionAggregationService:
                 next_team_side = self._get_team_side_from_highlight(next_highlight)
                 if next_team_side and next_team_side != team_side:
                     turnovers += 1
-        
+
         return turnovers
 
     def _get_total_game_time_ms(self, session):
         """Get total game time in milliseconds"""
         # from .utils import parse_time_to_seconds
-        
+
         if session.match_start_time and session.match_end_time:
             start_seconds = parse_time_to_seconds(session.match_start_time)
             end_seconds = parse_time_to_seconds(session.match_end_time)
@@ -1225,63 +1496,76 @@ class TraceVisionAggregationService:
     def _get_empty_team_metrics(self):
         """Return empty team metrics structure"""
         return {
-            'possession_percentage': 0.0,
-            'turnovers': 0,
-            'total_passes': 0,
-            'total_touches': 0,
-            'possession_count': 0,
-            'possession_time_ms': 0.0,
-            'avg_duration_ms': 0.0,
-            'avg_passes': 0.0,
-            'longest_possession_ms': 0.0
+            "possession_percentage": 0.0,
+            "turnovers": 0,
+            "total_passes": 0,
+            "total_touches": 0,
+            "possession_count": 0,
+            "possession_time_ms": 0.0,
+            "avg_duration_ms": 0.0,
+            "avg_passes": 0.0,
+            "longest_possession_ms": 0.0,
         }
 
     def _get_empty_highlight_player_metrics(self):
         """Return empty player metrics structure for highlights"""
         return {
-            'involvement_count': 0,
-            'total_touches': 0,
-            'avg_touches': 0.0,
-            'involvement_percentage': 0.0
+            "involvement_count": 0,
+            "total_touches": 0,
+            "avg_touches": 0.0,
+            "involvement_percentage": 0.0,
         }
 
     def validate_segment_totals(self, session):
         """Validate that segment totals match final possession stats"""
         try:
             # from .models import TracePossessionStats, TracePossessionSegment
-            
+
             # Get final possession stats
             final_team_stats = TracePossessionStats.objects.filter(
-                session=session,
-                possession_type='team'
+                session=session, possession_type="team"
             )
-            
+
             # Calculate totals from segments
             segments = TracePossessionSegment.objects.filter(session=session)
-            
+
             for team_stat in final_team_stats:
                 team_side = team_stat.side
                 team_segments = segments.filter(side=team_side)
-                
+
                 # Calculate cumulative totals
-                cumulative_turnovers = sum(s.team_metrics.get('turnovers', 0) for s in team_segments)
-                cumulative_passes = sum(s.team_metrics.get('total_passes', 0) for s in team_segments)
-                cumulative_touches = sum(s.team_metrics.get('total_touches', 0) for s in team_segments)
-                
+                cumulative_turnovers = sum(
+                    s.team_metrics.get("turnovers", 0) for s in team_segments
+                )
+                cumulative_passes = sum(
+                    s.team_metrics.get("total_passes", 0) for s in team_segments
+                )
+                cumulative_touches = sum(
+                    s.team_metrics.get("total_touches", 0) for s in team_segments
+                )
+
                 # Validate
                 final_metrics = team_stat.metrics
-                assert cumulative_turnovers == final_metrics.get('turnovers', 0), f"Turnovers mismatch for {team_side}"
-                assert cumulative_passes == final_metrics.get('total_passes', 0), f"Passes mismatch for {team_side}"
-                assert cumulative_touches == final_metrics.get('total_touches', 0), f"Touches mismatch for {team_side}"
-                
-            self.logger.info(f"Segment validation passed for session {session.session_id}")
+                assert cumulative_turnovers == final_metrics.get(
+                    "turnovers", 0
+                ), f"Turnovers mismatch for {team_side}"
+                assert cumulative_passes == final_metrics.get(
+                    "total_passes", 0
+                ), f"Passes mismatch for {team_side}"
+                assert cumulative_touches == final_metrics.get(
+                    "total_touches", 0
+                ), f"Touches mismatch for {team_side}"
+
+            self.logger.info(
+                f"Segment validation passed for session {session.session_id}"
+            )
             return True
-            
+
         except Exception as e:
-            self.logger.error(f"Segment validation failed for session {session.session_id}: {e}")
+            self.logger.error(
+                f"Segment validation failed for session {session.session_id}: {e}"
+            )
             return False
-
-
 
     # def _compute_coach_report(self, session):
     #     from .models import TraceCoachReportTeam

@@ -17,8 +17,22 @@ from azure.storage.blob import BlobServiceClient, BlobType, ContentSettings
 
 from tracevision.services import TraceVisionService
 from tracevision.notification_service import NotificationService
-from tracevision.models import TraceSession, TraceObject, TraceHighlight, TraceHighlightObject, TracePlayer
-from tracevision.utils import TraceVisionStoragePaths, cleanup_temp_files, convert_game_time_to_video_milliseconds, determine_game_half_from_minute, determine_game_half_from_highlight_offset, download_excel_file_from_storage, parse_time_to_seconds
+from tracevision.models import (
+    TraceSession,
+    TraceObject,
+    TraceHighlight,
+    TraceHighlightObject,
+    TracePlayer,
+)
+from tracevision.utils import (
+    TraceVisionStoragePaths,
+    cleanup_temp_files,
+    convert_game_time_to_video_milliseconds,
+    determine_game_half_from_minute,
+    determine_game_half_from_highlight_offset,
+    download_excel_file_from_storage,
+    parse_time_to_seconds,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +51,12 @@ def should_include_highlight(highlight_data, session, player_map):
     """
 
     # Must have valid timing data
-    start_offset = highlight_data.get('start_offset', 0)
-    duration = highlight_data.get('duration', 0)
+    start_offset = highlight_data.get("start_offset", 0)
+    duration = highlight_data.get("duration", 0)
     if start_offset < 0 or duration <= 0:
         logger.debug(
-            f"Filtered out highlight {highlight_data.get('highlight_id')} - invalid timing")
+            f"Filtered out highlight {highlight_data.get('highlight_id')} - invalid timing"
+        )
         return False
 
     # Must have meaningful tags (not empty or generic)
@@ -53,42 +68,62 @@ def should_include_highlight(highlight_data, session, player_map):
     # Exclude highlights with very short duration (less than 1 second)
     if duration < 1000:  # 1000ms = 1 second
         logger.debug(
-            f"Filtered out highlight {highlight_data.get('highlight_id')} - too short ({duration}ms)")
+            f"Filtered out highlight {highlight_data.get('highlight_id')} - too short ({duration}ms)"
+        )
         return False
 
     # Check if highlight is within game time bounds (if session has timing data)
-    if (session.match_start_time and session.match_end_time and
-            session.first_half_end_time and session.second_half_start_time):
-        game_start_ms = parse_time_to_seconds(
-            session.match_start_time) * 1000 if session.match_start_time else 0
-        game_end_ms = parse_time_to_seconds(
-            session.match_end_time) * 1000 if session.match_end_time else float('inf')
-        first_half_end_ms = parse_time_to_seconds(
-            session.first_half_end_time) * 1000 if session.first_half_end_time else float('inf')
-        second_half_start_ms = parse_time_to_seconds(
-            session.second_half_start_time) * 1000 if session.second_half_start_time else 0
+    if (
+        session.match_start_time
+        and session.match_end_time
+        and session.first_half_end_time
+        and session.second_half_start_time
+    ):
+        game_start_ms = (
+            parse_time_to_seconds(session.match_start_time) * 1000
+            if session.match_start_time
+            else 0
+        )
+        game_end_ms = (
+            parse_time_to_seconds(session.match_end_time) * 1000
+            if session.match_end_time
+            else float("inf")
+        )
+        first_half_end_ms = (
+            parse_time_to_seconds(session.first_half_end_time) * 1000
+            if session.first_half_end_time
+            else float("inf")
+        )
+        second_half_start_ms = (
+            parse_time_to_seconds(session.second_half_start_time) * 1000
+            if session.second_half_start_time
+            else 0
+        )
 
         # Check if highlight is before game start
         if start_offset < game_start_ms:
             logger.debug(
-                f"Filtered out highlight {highlight_data.get('highlight_id')} - before game start")
+                f"Filtered out highlight {highlight_data.get('highlight_id')} - before game start"
+            )
             return False
 
         # Check if highlight is after game end
         if start_offset > game_end_ms:
             logger.debug(
-                f"Filtered out highlight {highlight_data.get('highlight_id')} - after game end")
+                f"Filtered out highlight {highlight_data.get('highlight_id')} - after game end"
+            )
             return False
 
         # Check if highlight is during half-time break
         if first_half_end_ms <= start_offset < second_half_start_ms:
             logger.debug(
-                f"Filtered out highlight {highlight_data.get('highlight_id')} - during half-time")
+                f"Filtered out highlight {highlight_data.get('highlight_id')} - during half-time"
+            )
             return False
 
     # Exclude highlights with suspicious or invalid data
-    highlight_id = highlight_data.get('highlight_id', '')
-    if not highlight_id or highlight_id.strip() == '':
+    highlight_id = highlight_data.get("highlight_id", "")
+    if not highlight_id or highlight_id.strip() == "":
         logger.debug("Filtered out highlight - no highlight_id")
         return False
 
@@ -111,8 +146,9 @@ def clean_record(record: dict) -> dict:
                 cleaned[k] = [int(m) for m in minutes]
             elif isinstance(v, list):
                 # Convert possible ["16'", "77'"] → [16, 77]
-                cleaned[k] = [int(re.sub(r"\D", "", str(m)))
-                              for m in v if str(m).strip()]
+                cleaned[k] = [
+                    int(re.sub(r"\D", "", str(m))) for m in v if str(m).strip()
+                ]
             else:
                 cleaned[k] = [int(v)] if str(v).isdigit() else []
 
@@ -139,15 +175,15 @@ def get_full_azure_blob_url(file_path: str) -> str:
         str: Full Azure blob URL
     """
     try:
-        if hasattr(settings, 'AZURE_CUSTOM_DOMAIN') and settings.AZURE_CUSTOM_DOMAIN:
+        if hasattr(settings, "AZURE_CUSTOM_DOMAIN") and settings.AZURE_CUSTOM_DOMAIN:
             return f"https://{settings.AZURE_CUSTOM_DOMAIN}/media/{file_path}"
         else:
             logger.warning(
-                "AZURE_CUSTOM_DOMAIN not configured, using default_storage.url()")
+                "AZURE_CUSTOM_DOMAIN not configured, using default_storage.url()"
+            )
             return default_storage.url(file_path)
     except Exception as e:
-        logger.exception(
-            f"Error generating Azure blob URL for {file_path}: {e}")
+        logger.exception(f"Error generating Azure blob URL for {file_path}: {e}")
         return default_storage.url(file_path)
 
 
@@ -167,16 +203,18 @@ def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
         # Check if already downloaded to prevent duplicates
         if trace_object.tracking_blob_url:
             logger.info(
-                f"Tracking data already downloaded for object {trace_object.object_id}")
+                f"Tracking data already downloaded for object {trace_object.object_id}"
+            )
             return {
-                'success': True,
-                'processed': trace_object.tracking_processed,
-                'azure_blob_url': trace_object.tracking_blob_url,
-                'message': 'Already downloaded'
+                "success": True,
+                "processed": trace_object.tracking_processed,
+                "azure_blob_url": trace_object.tracking_blob_url,
+                "message": "Already downloaded",
             }
 
         logger.info(
-            f"Fetching tracking data for object {trace_object.object_id} from: {trace_object.tracking_url}")
+            f"Fetching tracking data for object {trace_object.object_id} from: {trace_object.tracking_url}"
+        )
         response = requests.get(trace_object.tracking_url, timeout=timeout)
         response.raise_for_status()
 
@@ -185,11 +223,12 @@ def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
         # Create proper file path structure for Azure blob storage
         session_id = trace_object.session.session_id
         file_path = TraceVisionStoragePaths.get_tracking_data_path(
-            session_id, trace_object.object_id)
+            session_id, trace_object.object_id
+        )
 
         # Create ContentFile with the JSON data
         json_content = json.dumps(tracking_data, indent=2)
-        file_content = ContentFile(json_content.encode('utf-8'))
+        file_content = ContentFile(json_content.encode("utf-8"))
 
         # Save to Azure Blob Storage
         logger.info(f"Uploading tracking data to Azure blob: {file_path}")
@@ -204,38 +243,49 @@ def fetch_tracking_data_and_save_to_azure_blob(trace_object, timeout=30):
 
         # Log success with data size
         try:
-            count = len(tracking_data.get('spotlights', [])) if isinstance(
-                tracking_data, dict) else len(tracking_data)
+            count = (
+                len(tracking_data.get("spotlights", []))
+                if isinstance(tracking_data, dict)
+                else len(tracking_data)
+            )
             logger.info(
-                f"Successfully processed tracking data for {trace_object.object_id}: {count} points, saved to {blob_url}")
+                f"Successfully processed tracking data for {trace_object.object_id}: {count} points, saved to {blob_url}"
+            )
         except Exception:
             logger.info(
-                f"Successfully processed tracking data for {trace_object.object_id}, saved to {blob_url}")
+                f"Successfully processed tracking data for {trace_object.object_id}, saved to {blob_url}"
+            )
 
         return {
-            'success': True,
-            'processed': trace_object.tracking_processed,
-            'azure_blob_url': blob_url,
-            'message': 'Downloaded and uploaded successfully'
+            "success": True,
+            "processed": trace_object.tracking_processed,
+            "azure_blob_url": blob_url,
+            "message": "Downloaded and uploaded successfully",
         }
 
     except requests.exceptions.RequestException as e:
         logger.error(
-            f"Failed to fetch tracking data for {trace_object.object_id} from {trace_object.tracking_url}: {e}", exc_info=True, stack_info=True)
+            f"Failed to fetch tracking data for {trace_object.object_id} from {trace_object.tracking_url}: {e}",
+            exc_info=True,
+            stack_info=True,
+        )
         return {
-            'success': False,
-            'data': [],
-            'blob_url': None,
-            'error': f"Network error: {str(e)}"
+            "success": False,
+            "data": [],
+            "blob_url": None,
+            "error": f"Network error: {str(e)}",
         }
     except Exception as e:
         logger.error(
-            f"Error processing tracking data for {trace_object.object_id}: {e}", exc_info=True, stack_info=True)
+            f"Error processing tracking data for {trace_object.object_id}: {e}",
+            exc_info=True,
+            stack_info=True,
+        )
         return {
-            'success': False,
-            'data': [],
-            'blob_url': None,
-            'error': f"Processing error: {str(e)}"
+            "success": False,
+            "data": [],
+            "blob_url": None,
+            "error": f"Processing error: {str(e)}",
         }
 
 
@@ -244,22 +294,25 @@ def upload_file_direct(blob_client, file_path, content_type, file_size):
     Simple direct upload without any special configurations.
     """
     try:
-        with open(file_path, 'rb') as data:
+        with open(file_path, "rb") as data:
             blob_client.upload_blob(
                 data=data,
                 blob_type=BlobType.BLOCKBLOB,
                 overwrite=True,
-                content_settings=ContentSettings(content_type=content_type)
+                content_settings=ContentSettings(content_type=content_type),
             )
         logger.info(
-            f"Successfully uploaded {file_size / (1024*1024*1024):.2f} GB using direct method")
+            f"Successfully uploaded {file_size / (1024*1024*1024):.2f} GB using direct method"
+        )
         return True
     except Exception as e:
         logger.error(f"Direct upload failed: {e}", exc_info=True, stack_info=True)
         return False
 
 
-def upload_large_file_chunked(blob_client, file_path, content_type, file_size, chunk_size=2*1024*1024):
+def upload_large_file_chunked(
+    blob_client, file_path, content_type, file_size, chunk_size=2 * 1024 * 1024
+):
     """
     Upload large files using chunked approach for better reliability.
     """
@@ -270,7 +323,7 @@ def upload_large_file_chunked(blob_client, file_path, content_type, file_size, c
 
         # Clear any existing blocks first
         try:
-            blob_client.delete_blob(delete_snapshots='include')
+            blob_client.delete_blob(delete_snapshots="include")
             logger.info("Cleared existing blob before chunked upload")
         except Exception as clear_error:
             logger.info(f"No existing blob to clear: {clear_error}")
@@ -280,7 +333,7 @@ def upload_large_file_chunked(blob_client, file_path, content_type, file_size, c
         block_number = 0
         total_uploaded = 0
 
-        with open(file_path, 'rb') as file_data:
+        with open(file_path, "rb") as file_data:
             while True:
                 chunk = file_data.read(chunk_size)
                 if not chunk:
@@ -288,7 +341,8 @@ def upload_large_file_chunked(blob_client, file_path, content_type, file_size, c
 
                 # Generate unique block ID
                 block_id = base64.b64encode(
-                    f"block-{block_number:06d}-{int(time.time())}".encode()).decode()
+                    f"block-{block_number:06d}-{int(time.time())}".encode()
+                ).decode()
                 block_ids.append(BlobBlock(block_id=block_id))
 
                 # Upload the chunk with retry logic
@@ -298,13 +352,17 @@ def upload_large_file_chunked(blob_client, file_path, content_type, file_size, c
                         # Validate chunk before upload
                         if not chunk or len(chunk) == 0:
                             logger.warning(
-                                f"Chunk {block_number} is empty, skipping...")
+                                f"Chunk {block_number} is empty, skipping..."
+                            )
                             break
 
                         # Ensure block_id is properly formatted
                         if not block_id or len(block_id) == 0:
                             logger.error(
-                                f"Invalid block_id for chunk {block_number}", exc_info=True, stack_info=True)
+                                f"Invalid block_id for chunk {block_number}",
+                                exc_info=True,
+                                stack_info=True,
+                            )
                             break
 
                         # Add small delay between chunks to avoid rate limiting
@@ -317,16 +375,24 @@ def upload_large_file_chunked(blob_client, file_path, content_type, file_size, c
                     except Exception as chunk_error:
                         if chunk_attempt < 2:
                             logger.warning(
-                                f"Chunk {block_number} upload attempt {chunk_attempt + 1} failed: {chunk_error}. Retrying...")
+                                f"Chunk {block_number} upload attempt {chunk_attempt + 1} failed: {chunk_error}. Retrying..."
+                            )
                             # Exponential backoff
-                            time.sleep(2 ** chunk_attempt)
+                            time.sleep(2**chunk_attempt)
                         else:
                             logger.error(
-                                f"Chunk {block_number} upload failed after 3 attempts: {chunk_error}", exc_info=True, stack_info=True)
+                                f"Chunk {block_number} upload failed after 3 attempts: {chunk_error}",
+                                exc_info=True,
+                                stack_info=True,
+                            )
                             raise chunk_error
 
                 if not chunk_uploaded:
-                    raise Exception(f"Failed to upload chunk {block_number}", exc_info=True, stack_info=True)
+                    raise Exception(
+                        f"Failed to upload chunk {block_number}",
+                        exc_info=True,
+                        stack_info=True,
+                    )
 
                 block_number += 1
                 total_uploaded += len(chunk)
@@ -336,13 +402,15 @@ def upload_large_file_chunked(blob_client, file_path, content_type, file_size, c
                 uploaded_mb = total_uploaded / (1024 * 1024)
                 total_mb = file_size / (1024 * 1024)
                 logger.info(
-                    f"Chunked upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)")
+                    f"Chunked upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)"
+                )
 
         # Commit the blocks
         if block_ids:
             blob_client.commit_block_list(block_ids)
             logger.info(
-                f"Successfully uploaded {file_size / (1024*1024*1024):.2f} GB using chunked method")
+                f"Successfully uploaded {file_size / (1024*1024*1024):.2f} GB using chunked method"
+            )
             return True
         else:
             logger.error("No blocks to commit", exc_info=True, stack_info=True)
@@ -363,36 +431,40 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
         session = TraceSession.objects.get(id=session_id)
 
         if session.blob_video_url:
-            logger.info(
-                f"Video already downloaded for session {session.session_id}")
+            logger.info(f"Video already downloaded for session {session.session_id}")
             return {
-                'success': True,
-                'blob_url': session.blob_video_url,
-                'message': 'Already downloaded'
+                "success": True,
+                "blob_url": session.blob_video_url,
+                "message": "Already downloaded",
             }
 
         logger.info(
-            f"Downloading video for session {session.session_id} from: {session.video_url}")
+            f"Downloading video for session {session.session_id} from: {session.video_url}"
+        )
 
         # Download the video stream
         response = requests.get(
-            session.video_url, stream=True, timeout=max(timeout, 600))
+            session.video_url, stream=True, timeout=max(timeout, 600)
+        )
         response.raise_for_status()
 
         # # Validate content type
-        content_type = response.headers.get('content-type', '')
-        file_extension = mimetypes.guess_extension(content_type) or '.mp4'
+        content_type = response.headers.get("content-type", "")
+        file_extension = mimetypes.guess_extension(content_type) or ".mp4"
         # content_type = "video/mp4"
         # file_extension = ".mp4"
         blob_path = TraceVisionStoragePaths.get_session_video_path(
-            session.session_id, "original")
+            session.session_id, "original"
+        )
 
         # Ensure blob path is clean and valid
-        blob_path = blob_path.replace('//', '/').strip('/')
+        blob_path = blob_path.replace("//", "/").strip("/")
         logger.info(f"Blob path: {blob_path}")
 
         # Create temp file and stream content to it
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=file_extension
+        ) as tmp_file:
             temp_file_path = tmp_file.name
             total_size = 0
             chunk_count = 0
@@ -404,10 +476,10 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
                     chunk_count += 1
                     if chunk_count % 1000 == 0:
                         logger.info(
-                            f"Downloaded {total_size / (1024*1024):.1f} MB for session {session.session_id}")
+                            f"Downloaded {total_size / (1024*1024):.1f} MB for session {session.session_id}"
+                        )
 
-        logger.info(
-            f"Download complete. Total size: {total_size / (1024*1024):.1f} MB")
+        logger.info(f"Download complete. Total size: {total_size / (1024*1024):.1f} MB")
 
         # Upload to Azure Blob Storage using SDK with retry logic
         blob_service_client = None
@@ -416,26 +488,35 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
         # Retry blob client creation for network issues
         for client_attempt in range(3):
             try:
-                logger.info(f'AZURE_CONNECTION_STRING Found : {"Found" if settings.AZURE_CONNECTION_STRING else "Not Found"}')
+                logger.info(
+                    f'AZURE_CONNECTION_STRING Found : {"Found" if settings.AZURE_CONNECTION_STRING else "Not Found"}'
+                )
                 blob_service_client = BlobServiceClient.from_connection_string(
-                    settings.AZURE_CONNECTION_STRING)
+                    settings.AZURE_CONNECTION_STRING
+                )
 
                 # logger.info(f"Blog Account Name: {settings.AZURE_ACCOUNT_NAME} and Account Key: {settings.AZURE_ACCOUNT_KEY} and Custom Domain: {settings.AZURE_CUSTOM_DOMAIN} and Container Name: {settings.AZURE_CONTAINER_NAME}")
                 # blob_service_client = BlobServiceClient(
                 #     account_url=f"https://{settings.AZURE_CUSTOM_DOMAIN}", account_key=settings.AZURE_ACCOUNT_KEY)
                 blob_client = blob_service_client.get_blob_client(
-                    container=settings.AZURE_CONTAINER_NAME, blob=blob_path)
+                    container=settings.AZURE_CONTAINER_NAME, blob=blob_path
+                )
                 logger.info(
-                    f"Successfully created blob client on attempt {client_attempt + 1}")
+                    f"Successfully created blob client on attempt {client_attempt + 1}"
+                )
                 break
             except Exception as client_error:
                 if client_attempt < 2:
                     logger.warning(
-                        f"Blob client creation attempt {client_attempt + 1} failed: {client_error}. Retrying...")
+                        f"Blob client creation attempt {client_attempt + 1} failed: {client_error}. Retrying..."
+                    )
                     time.sleep(5)
                 else:
                     logger.error(
-                        f"Failed to create blob client after 3 attempts: {client_error}", exc_info=True, stack_info=True)
+                        f"Failed to create blob client after 3 attempts: {client_error}",
+                        exc_info=True,
+                        stack_info=True,
+                    )
                     raise client_error
 
         if not blob_client:
@@ -454,54 +535,61 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
                 uploaded_mb = current / (1024 * 1024)
                 total_mb = total / (1024 * 1024)
                 logger.info(
-                    f"Upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)")
+                    f"Upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)"
+                )
 
         for attempt in range(max_retries):
             try:
                 # Validate file exists and get size
                 if not os.path.exists(temp_file_path):
-                    raise FileNotFoundError(
-                        f"Video file not found: {temp_file_path}")
+                    raise FileNotFoundError(f"Video file not found: {temp_file_path}")
 
                 file_size = os.path.getsize(temp_file_path)
                 if file_size == 0:
                     raise ValueError("Video file is empty")
 
                 logger.info(
-                    f"{'=='*50}\n\nVideo File Size: {file_size / (1024*1024*1024):.2f} GB\n\n{'=='*50}")
+                    f"{'=='*50}\n\nVideo File Size: {file_size / (1024*1024*1024):.2f} GB\n\n{'=='*50}"
+                )
 
-                with open(temp_file_path, 'rb') as data:
+                with open(temp_file_path, "rb") as data:
                     # Try with progress callback first
                     try:
                         upload_options = {
-                            'data': data,
-                            'blob_type': BlobType.BLOCKBLOB,
-                            'overwrite': True,
-                            'content_settings': ContentSettings(content_type=content_type),
-                            'max_concurrency': 2,  # Reduced for stability with large files
-                            'length': file_size,
-                            'timeout': 7200,  # 2 hours timeout for very large files
-                            'progress_hook': progress_callback,  # Add progress tracking
+                            "data": data,
+                            "blob_type": BlobType.BLOCKBLOB,
+                            "overwrite": True,
+                            "content_settings": ContentSettings(
+                                content_type=content_type
+                            ),
+                            "max_concurrency": 2,  # Reduced for stability with large files
+                            "length": file_size,
+                            "timeout": 7200,  # 2 hours timeout for very large files
+                            "progress_hook": progress_callback,  # Add progress tracking
                         }
 
                         logger.info(
-                            f"Starting upload attempt {attempt + 1} with progress tracking...")
+                            f"Starting upload attempt {attempt + 1} with progress tracking..."
+                        )
                         blob_client.upload_blob(**upload_options)
                     except TypeError as progress_error:
                         if "progress_callback" in str(progress_error):
                             logger.warning(
-                                "Progress callback failed, retrying without progress tracking...")
+                                "Progress callback failed, retrying without progress tracking..."
+                            )
                             # Reset file pointer
                             data.seek(0)
                             # Upload without progress callback
                             upload_options_simple = {
-                                'data': data,
-                                'blob_type': BlobType.BLOCKBLOB,
-                                'overwrite': True,
-                                'content_settings': ContentSettings(content_type=content_type),
-                                'max_concurrency': 2,
-                                'length': file_size,
-                                'timeout': 7200,
+                                "data": data,
+                                "blob_type": BlobType.BLOCKBLOB,
+                                "overwrite": True,
+                                "content_settings": ContentSettings(
+                                    content_type=content_type
+                                ),
+                                "max_concurrency": 2,
+                                "length": file_size,
+                                "timeout": 7200,
                             }
                             blob_client.upload_blob(**upload_options_simple)
                         else:
@@ -509,7 +597,8 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
 
                 upload_success = True
                 logger.info(
-                    f"Successfully uploaded video to Azure on attempt {attempt + 1}")
+                    f"Successfully uploaded video to Azure on attempt {attempt + 1}"
+                )
                 break
 
             except Exception as e:
@@ -517,14 +606,24 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
                 logger.warning(f"Upload attempt {attempt + 1} failed: {e}")
 
                 # Check for specific network errors
-                if any(keyword in error_str for keyword in ['dns', 'resolve', 'connection', 'network', 'timeout']):
+                if any(
+                    keyword in error_str
+                    for keyword in [
+                        "dns",
+                        "resolve",
+                        "connection",
+                        "network",
+                        "timeout",
+                    ]
+                ):
                     logger.warning(
-                        "Network-related error detected, will retry with longer delay...")
+                        "Network-related error detected, will retry with longer delay..."
+                    )
                     # Longer backoff for network issues
-                    wait_time = retry_delay * (3 ** attempt)
+                    wait_time = retry_delay * (3**attempt)
                 else:
                     # Standard exponential backoff
-                    wait_time = retry_delay * (2 ** attempt)
+                    wait_time = retry_delay * (2**attempt)
 
                 if attempt < max_retries - 1:
                     logger.info(f"Retrying in {wait_time} seconds...")
@@ -537,7 +636,8 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
                     try:
                         logger.info("Trying direct upload method...")
                         upload_success = upload_file_direct(
-                            blob_client, temp_file_path, content_type, file_size)
+                            blob_client, temp_file_path, content_type, file_size
+                        )
                         if upload_success:
                             logger.info("Direct upload successful!")
                             break
@@ -549,16 +649,19 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
                         try:
                             logger.info("Trying chunked upload method...")
                             upload_success = upload_large_file_chunked(
-                                blob_client, temp_file_path, content_type, file_size)
+                                blob_client, temp_file_path, content_type, file_size
+                            )
                             if upload_success:
                                 logger.info("Chunked upload successful!")
                                 break
                         except Exception as chunked_error:
-                            logger.error(
-                                f"Chunked upload also failed: {chunked_error}")
+                            logger.error(f"Chunked upload also failed: {chunked_error}")
 
                     logger.error(
-                        f"All upload methods failed: {e}", exc_info=True, stack_info=True)
+                        f"All upload methods failed: {e}",
+                        exc_info=True,
+                        stack_info=True,
+                    )
                     raise e
 
         # Clean up temp file
@@ -569,9 +672,9 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
 
         if not upload_success:
             return {
-                'success': False,
-                'blob_url': None,
-                'error': "Upload failed after retries"
+                "success": False,
+                "blob_url": None,
+                "error": "Upload failed after retries",
             }
 
         # Get full blob URL
@@ -580,26 +683,30 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
         session.save()
 
         return {
-            'success': True,
-            'blob_url': blob_url,
-            'message': 'Downloaded and uploaded successfully',
-            'file_size_mb': os.path.getsize(temp_file_path) / (1024 * 1024)
+            "success": True,
+            "blob_url": blob_url,
+            "message": "Downloaded and uploaded successfully",
+            "file_size_mb": os.path.getsize(temp_file_path) / (1024 * 1024),
         }
 
     except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to download video for session {session_id}: {e}", exc_info=True, stack_info=True)
+        logger.error(
+            f"Failed to download video for session {session_id}: {e}",
+            exc_info=True,
+            stack_info=True,
+        )
         return {
-            'success': False,
-            'blob_url': None,
-            'error': f"Download error: {str(e)}"
+            "success": False,
+            "blob_url": None,
+            "error": f"Download error: {str(e)}",
         }
 
     except Exception as e:
         logger.error(f"Unexpected error processing session {session_id}: {e}")
         return {
-            'success': False,
-            'blob_url': None,
-            'error': f"Internal error: {str(e)}"
+            "success": False,
+            "blob_url": None,
+            "error": f"Internal error: {str(e)}",
         }
 
 
@@ -618,23 +725,24 @@ def upload_result_data_to_azure_blob(session, result_data):
         # Check if already uploaded to prevent duplicates
         if session.result_blob_url:
             logger.info(
-                f"Result data already uploaded for session {session.session_id}")
+                f"Result data already uploaded for session {session.session_id}"
+            )
             return {
-                'success': True,
-                'blob_url': session.result_blob_url,
-                'message': 'Already uploaded'
+                "success": True,
+                "blob_url": session.result_blob_url,
+                "message": "Already uploaded",
             }
 
         logger.info(
-            f"Uploading result data for session {session.session_id} to Azure blob")
+            f"Uploading result data for session {session.session_id} to Azure blob"
+        )
 
         # Create proper file path structure for Azure blob storage
-        file_path = TraceVisionStoragePaths.get_session_result_path(
-            session.session_id)
+        file_path = TraceVisionStoragePaths.get_session_result_path(session.session_id)
 
         # Create ContentFile with the JSON data
         json_content = json.dumps(result_data, indent=2, ensure_ascii=False)
-        file_content = ContentFile(json_content.encode('utf-8'))
+        file_content = ContentFile(json_content.encode("utf-8"))
 
         # Save to Azure Blob Storage
         logger.info(f"Uploading result data to Azure blob: {file_path}")
@@ -651,23 +759,23 @@ def upload_result_data_to_azure_blob(session, result_data):
         data_size_kb = len(json_content) / 1024
         logger.info(
             f"Successfully uploaded result data for session {session.session_id}: "
-            f"Size: {data_size_kb:.2f} KB, saved to {blob_url}")
+            f"Size: {data_size_kb:.2f} KB, saved to {blob_url}"
+        )
 
         return {
-            'success': True,
-            'blob_url': blob_url,
-            'message': 'Uploaded successfully',
-            'data_size_kb': data_size_kb
+            "success": True,
+            "blob_url": blob_url,
+            "message": "Uploaded successfully",
+            "data_size_kb": data_size_kb,
         }
 
     except Exception as e:
         logger.error(
-            f"Error uploading result data for session {session.session_id}: {e}", exc_info=True, stack_info=True)
-        return {
-            'success': False,
-            'blob_url': None,
-            'error': f"Upload error: {str(e)}"
-        }
+            f"Error uploading result data for session {session.session_id}: {e}",
+            exc_info=True,
+            stack_info=True,
+        )
+        return {"success": False, "blob_url": None, "error": f"Upload error: {str(e)}"}
 
 
 def parse_and_store_session_data(session, result_data):
@@ -691,70 +799,75 @@ def parse_and_store_session_data(session, result_data):
     try:
         with transaction.atomic():
             logger.info(
-                f"Starting to parse session data for session {session.session_id}")
+                f"Starting to parse session data for session {session.session_id}"
+            )
 
             session.trace_objects.all().delete()
             session.highlights.all().delete()
 
             # Get or create TracePlayer objects
-            objects_data = result_data.get('objects', [])
+            objects_data = result_data.get("objects", [])
             player_map = {}
 
-            logger.info(
-                f"Processing {len(objects_data)} objects to get/create players")
+            logger.info(f"Processing {len(objects_data)} objects to get/create players")
 
             for obj_data in objects_data:
-                object_id = obj_data.get('object_id')
-                side = obj_data.get('side', '')
+                object_id = obj_data.get("object_id")
+                side = obj_data.get("side", "")
                 team = None
                 jersey_number = 0
 
                 if object_id:
                     # Parse object_id to extract team and jersey number
-                    if object_id.startswith('away_'):
+                    if object_id.startswith("away_"):
                         team = session.away_team
                         try:
-                            jersey_number = int(object_id.split('_')[1])
+                            jersey_number = int(object_id.split("_")[1])
                         except (ValueError, IndexError):
                             jersey_number = 0
-                    elif object_id.startswith('home_'):
+                    elif object_id.startswith("home_"):
                         team = session.home_team
                         try:
-                            jersey_number = int(object_id.split('_')[1])
+                            jersey_number = int(object_id.split("_")[1])
                         except (ValueError, IndexError):
                             jersey_number = 0
                     else:
                         # Fallback to side field if object_id doesn't match expected pattern
-                        team = session.home_team if side.lower() == 'home' else session.away_team
-                        jersey_number = obj_data.get('jersey_number', 0)
+                        team = (
+                            session.home_team
+                            if side.lower() == "home"
+                            else session.away_team
+                        )
+                        jersey_number = obj_data.get("jersey_number", 0)
 
                 # Extract player information from object data
-                player_name = obj_data.get('name', f'Player {object_id}')
-                position = obj_data.get('position', 'Unknown')
+                player_name = obj_data.get("name", f"Player {object_id}")
+                position = obj_data.get("position", "Unknown")
 
                 # Validate that we have a team assigned
                 if not team:
                     logger.warning(
-                        f"Could not determine team for object_id: {object_id}, skipping player")
+                        f"Could not determine team for object_id: {object_id}, skipping player"
+                    )
                     continue
 
                 # Check if player already exists for this object_id and team (across all sessions)
                 existing_player = TracePlayer.objects.filter(
-                    object_id=object_id,
-                    team=team
+                    object_id=object_id, team=team
                 ).first()
 
                 if existing_player:
                     # Use existing player from any session
                     trace_player = existing_player
                     logger.info(
-                        f"Using existing player {object_id} (jersey: {jersey_number}, team: {team.name}) from session {existing_player.session.session_id}")
+                        f"Using existing player {object_id} (jersey: {jersey_number}, team: {team.name}) from session {existing_player.session.session_id}"
+                    )
                 else:
                     # Create new player
-                    team_name = team.name if hasattr(
-                        team, 'name') else str(team)
+                    team_name = team.name if hasattr(team, "name") else str(team)
                     logger.info(
-                        f"Creating new player {object_id} for team {team_name} with jersey number {jersey_number}")
+                        f"Creating new player {object_id} for team {team_name} with jersey number {jersey_number}"
+                    )
 
                     trace_player = TracePlayer.objects.create(
                         object_id=object_id,
@@ -763,33 +876,31 @@ def parse_and_store_session_data(session, result_data):
                         position=position,
                         session=session,
                         team=team,
-                        user=None  # Will be mapped later via Celery task
+                        user=None,  # Will be mapped later via Celery task
                     )
 
                 player_map[object_id] = trace_player
 
-            logger.info(
-                f"Processed {len(player_map)} players (existing + new)")
+            logger.info(f"Processed {len(player_map)} players (existing + new)")
 
             # Step 2: Create TraceObject objects linked to players
             trace_objects = []
-            logger.info(
-                f"Creating trace objects for {len(objects_data)} objects")
+            logger.info(f"Creating trace objects for {len(objects_data)} objects")
 
             for obj_data in objects_data:
-                object_id = obj_data.get('object_id')
+                object_id = obj_data.get("object_id")
                 player = player_map.get(object_id)
 
                 if player:
                     # Create TraceObject linked to the player
                     trace_object = TraceObject(
                         object_id=object_id,
-                        type=obj_data.get('type', ''),
-                        side=obj_data.get('side', ''),
-                        appearance_fv=obj_data.get('appearance_fv'),
-                        color_fv=obj_data.get('color_fv'),
-                        tracking_url=obj_data.get('tracking_url', ''),
-                        role=obj_data.get('role'),
+                        type=obj_data.get("type", ""),
+                        side=obj_data.get("side", ""),
+                        appearance_fv=obj_data.get("appearance_fv"),
+                        color_fv=obj_data.get("color_fv"),
+                        tracking_url=obj_data.get("tracking_url", ""),
+                        role=obj_data.get("role"),
                         session=session,
                         player=player,  # Link to TracePlayer instead of user
                     )
@@ -797,39 +908,45 @@ def parse_and_store_session_data(session, result_data):
 
             # Bulk create objects
             if trace_objects:
-                created_objects = TraceObject.objects.bulk_create(
-                    trace_objects)
+                created_objects = TraceObject.objects.bulk_create(trace_objects)
                 logger.info(f"Created {len(created_objects)} trace objects")
 
                 # Download tracking data for each object
                 logger.info(
-                    f"Downloading tracking data for {len(created_objects)} objects")
+                    f"Downloading tracking data for {len(created_objects)} objects"
+                )
                 updated_objects = []
 
                 for trace_object in created_objects:
                     try:
                         if trace_object.tracking_url:
                             result = fetch_tracking_data_and_save_to_azure_blob(
-                                trace_object)
-                            if result['success']:
+                                trace_object
+                            )
+                            if result["success"]:
                                 logger.info(
-                                    f"Successfully downloaded tracking data for {trace_object.object_id}")
+                                    f"Successfully downloaded tracking data for {trace_object.object_id}"
+                                )
                                 updated_objects.append(trace_object)
                             else:
                                 logger.warning(
-                                    f"Failed to download tracking data for {trace_object.object_id}: {result.get('error', 'Unknown error')}")
+                                    f"Failed to download tracking data for {trace_object.object_id}: {result.get('error', 'Unknown error')}"
+                                )
                         else:
                             logger.warning(
-                                f"No tracking URL for object {trace_object.object_id}")
+                                f"No tracking URL for object {trace_object.object_id}"
+                            )
                     except Exception as e:
                         logger.exception(
-                            f"Exception downloading tracking data for {trace_object.object_id}: {e}")
+                            f"Exception downloading tracking data for {trace_object.object_id}: {e}"
+                        )
 
                 logger.info(
-                    f"Successfully downloaded tracking data for {len(updated_objects)}/{len(created_objects)} objects")
+                    f"Successfully downloaded tracking data for {len(updated_objects)}/{len(created_objects)} objects"
+                )
 
             # Step 3: Create TraceHighlight objects linked to players
-            highlights_data = result_data.get('highlights', [])
+            highlights_data = result_data.get("highlights", [])
             trace_highlights = []
             highlight_objects_bulk = []
 
@@ -843,88 +960,93 @@ def parse_and_store_session_data(session, result_data):
                     filtered_highlights.append(highlight_data)
                 else:
                     logger.debug(
-                        f"Filtered out highlight {highlight_data.get('highlight_id')} - not relevant")
+                        f"Filtered out highlight {highlight_data.get('highlight_id')} - not relevant"
+                    )
 
             logger.info(
-                f"After filtering: {len(filtered_highlights)} relevant highlights out of {len(highlights_data)}")
+                f"After filtering: {len(filtered_highlights)} relevant highlights out of {len(highlights_data)}"
+            )
 
             for highlight_data in filtered_highlights:
                 # Try to find the primary player involved in this highlight
-                highlight_objects = highlight_data.get('objects', [])
+                highlight_objects = highlight_data.get("objects", [])
                 primary_player = None
 
                 # Get the first player from the highlight objects
                 if highlight_objects:
-                    first_object_id = highlight_objects[0].get('object_id')
+                    first_object_id = highlight_objects[0].get("object_id")
                     primary_player = player_map.get(first_object_id)
 
                 # Calculate which half this highlight belongs to
                 half = determine_game_half_from_highlight_offset(
-                    highlight_data.get('start_offset', 0),
+                    highlight_data.get("start_offset", 0),
                     session.match_start_time,
                     session.first_half_end_time,
                     session.second_half_start_time,
-                    session.match_end_time
+                    session.match_end_time,
                 )
 
                 # Create TraceHighlight linked to player
                 trace_highlight = TraceHighlight(
-                    highlight_id=highlight_data.get('highlight_id'),
-                    video_id=highlight_data.get('video_id', 0),
-                    start_offset=highlight_data.get('start_offset', 0),
-                    duration=highlight_data.get('duration', 0),
-                    tags=highlight_data.get('tags', []),
-                    video_stream=highlight_data.get('video_stream', ''),
-                    event_type='touch',  # Default for TraceVision highlights
-                    source='tracevision',
+                    highlight_id=highlight_data.get("highlight_id"),
+                    video_id=highlight_data.get("video_id", 0),
+                    start_offset=highlight_data.get("start_offset", 0),
+                    duration=highlight_data.get("duration", 0),
+                    tags=highlight_data.get("tags", []),
+                    video_stream=highlight_data.get("video_stream", ""),
+                    event_type="touch",  # Default for TraceVision highlights
+                    source="tracevision",
                     session=session,
                     player=primary_player,  # Link to TracePlayer instead of user
-                    half=half  # Set the calculated half
+                    half=half,  # Set the calculated half
                 )
                 trace_highlights.append(trace_highlight)
 
             # Bulk create highlights
             if trace_highlights:
                 created_highlights = TraceHighlight.objects.bulk_create(
-                    trace_highlights)
-                logger.info(
-                    f"Created {len(created_highlights)} trace highlights")
+                    trace_highlights
+                )
+                logger.info(f"Created {len(created_highlights)} trace highlights")
 
                 # Create highlight-object relationships
                 for i, highlight_data in enumerate(filtered_highlights):
-                    highlight_objects = highlight_data.get('objects', [])
+                    highlight_objects = highlight_data.get("objects", [])
                     created_highlight = created_highlights[i]
 
                     for obj_data in highlight_objects:
-                        object_id = obj_data.get('object_id')
+                        object_id = obj_data.get("object_id")
                         if object_id in player_map:
                             player = player_map[object_id]
                             # Find the corresponding trace object
                             trace_object = TraceObject.objects.filter(
-                                session=session,
-                                object_id=object_id
+                                session=session, object_id=object_id
                             ).first()
 
                             if trace_object:
-                                highlight_objects_bulk.append(TraceHighlightObject(
-                                    highlight=created_highlight,
-                                    trace_object=trace_object,
-                                    player=player  # Link to TracePlayer
-                                ))
+                                highlight_objects_bulk.append(
+                                    TraceHighlightObject(
+                                        highlight=created_highlight,
+                                        trace_object=trace_object,
+                                        player=player,  # Link to TracePlayer
+                                    )
+                                )
 
                 if highlight_objects_bulk:
-                    TraceHighlightObject.objects.bulk_create(
-                        highlight_objects_bulk)
+                    TraceHighlightObject.objects.bulk_create(highlight_objects_bulk)
                     logger.info(
-                        f"Created {len(highlight_objects_bulk)} highlight-object relationships")
+                        f"Created {len(highlight_objects_bulk)} highlight-object relationships"
+                    )
 
             logger.info(
-                f"Successfully parsed and stored all session data for session {session.session_id}")
+                f"Successfully parsed and stored all session data for session {session.session_id}"
+            )
             return True
 
     except Exception as e:
         logger.exception(
-            f"Error parsing session data for session {session.session_id}: {e}")
+            f"Error parsing session data for session {session.session_id}: {e}"
+        )
         return False
 
 
@@ -942,7 +1064,10 @@ def create_silent_notification(session):
 
         if not notification_service.is_available():
             logger.error(
-                "Notification service not available, cannot create notification", exc_info=True, stack_info=True)
+                "Notification service not available, cannot create notification",
+                exc_info=True,
+                stack_info=True,
+            )
             return
 
         # Prepare session data for notification
@@ -953,7 +1078,7 @@ def create_silent_notification(session):
             "home_team": session.home_team,
             "away_team": session.away_team,
             "home_score": session.home_score,
-            "away_score": session.away_score
+            "away_score": session.away_score,
         }
 
         # Create silent notifications for all devices of the user
@@ -963,14 +1088,17 @@ def create_silent_notification(session):
 
         if notifications:
             logger.info(
-                f"Created {len(notifications)} silent notifications for user {session.user.phone_no} for session {session.session_id}")
+                f"Created {len(notifications)} silent notifications for user {session.user.phone_no} for session {session.session_id}"
+            )
         else:
             logger.warning(
-                f"No devices found or failed to create notifications for user {session.user.phone_no}")
+                f"No devices found or failed to create notifications for user {session.user.phone_no}"
+            )
 
     except Exception as e:
         logger.exception(
-            f"Error in create_silent_notification for session {session.session_id}: {e}")
+            f"Error in create_silent_notification for session {session.session_id}: {e}"
+        )
 
 
 @shared_task
@@ -983,13 +1111,13 @@ def process_trace_sessions_task(trace_session_id=None):
         # Query all sessions that are not already processed or in error state
         if not trace_session_id:
             sessions = TraceSession.objects.exclude(
-                status__in=["processed", "process_error"])
+                status__in=["processed", "process_error"]
+            )
         else:
             sessions = TraceSession.objects.filter(id=trace_session_id)
 
         if not sessions.exists():
-            logger.info(
-                "All sessions are already processed or in final state.")
+            logger.info("All sessions are already processed or in final state.")
             return f"No sessions to process"
 
         logger.info(f"Found {sessions.count()} sessions to process")
@@ -1002,11 +1130,13 @@ def process_trace_sessions_task(trace_session_id=None):
         for session in sessions:
             try:
                 logger.info(
-                    f"Checking session status for ID: {session.id} | {session.session_id}")
+                    f"Checking session status for ID: {session.id} | {session.session_id}"
+                )
 
                 # Query TraceVision API for status update using service
                 status_data = tracevision_service.get_session_status(
-                    session, force_refresh=True)
+                    session, force_refresh=True
+                )
 
                 if not status_data:
                     continue
@@ -1019,81 +1149,126 @@ def process_trace_sessions_task(trace_session_id=None):
                 session.save()
 
                 logger.info(
-                    f"Updated session {session.session_id} status from {previous_status} to {new_status}")
-
-                
+                    f"Updated session {session.session_id} status from {previous_status} to {new_status}"
+                )
 
                 # Handle final status changes (processed or process_error)
                 if new_status in ["processed", "process_error"]:
                     # Check if we need to process this session
                     should_process = False
-                    
+
                     # Normal processing - old status was not processed, new status is processed
                     if previous_status != "processed" and new_status == "processed":
                         should_process = True
-                        logger.info(f"Normal processing: Session {session.session_id} transitioning from {previous_status} to {new_status}")
-                    
+                        logger.info(
+                            f"Normal processing: Session {session.session_id} transitioning from {previous_status} to {new_status}"
+                        )
+
                     # Recovery processing - old status was processed but no objects/highlights exist
                     elif previous_status == "processed" and new_status == "processed":
                         # Check if objects or highlights exist for this session
                         objects_count = session.trace_objects.count()
                         highlights_count = session.highlights.count()
-                        
+
                         if objects_count == 0 and highlights_count == 0:
                             should_process = True
-                            logger.info(f"Recovery processing: Session {session.session_id} was processed but has no objects ({objects_count}) or highlights ({highlights_count}). Reprocessing...")
+                            logger.info(
+                                f"Recovery processing: Session {session.session_id} was processed but has no objects ({objects_count}) or highlights ({highlights_count}). Reprocessing..."
+                            )
                         else:
                             should_process = False
-                            logger.info(f"Skipping processing: Session {session.session_id} already processed with {objects_count} objects and {highlights_count} highlights")
-                    
+                            logger.info(
+                                f"Skipping processing: Session {session.session_id} already processed with {objects_count} objects and {highlights_count} highlights"
+                            )
+
                     if should_process:
-                        status_description = "processed" if new_status == "processed" else "encountered process error"
-                        logger.info(f"Session {session.session_id} {status_description}.")
+                        status_description = (
+                            "processed"
+                            if new_status == "processed"
+                            else "encountered process error"
+                        )
+                        logger.info(
+                            f"Session {session.session_id} {status_description}."
+                        )
 
                         # Fetch and save result data for both statuses (may contain error details for process_error)
                         result_data = tracevision_service.get_session_result(session)
                         if result_data:
                             # Upload result data to Azure blob instead of storing in database
-                            upload_result = upload_result_data_to_azure_blob(session, result_data)
+                            upload_result = upload_result_data_to_azure_blob(
+                                session, result_data
+                            )
 
-                            if upload_result['success']:
-                                logger.info(f"Result data uploaded successfully for session {session.session_id}")
+                            if upload_result["success"]:
+                                logger.info(
+                                    f"Result data uploaded successfully for session {session.session_id}"
+                                )
                             else:
-                                logger.error(f"Failed to upload result data for session {session.session_id}: {upload_result.get('error')}", exc_info=True, stack_info=True)
+                                logger.error(
+                                    f"Failed to upload result data for session {session.session_id}: {upload_result.get('error')}",
+                                    exc_info=True,
+                                    stack_info=True,
+                                )
 
                             # For processed sessions, parse and store structured data
                             if new_status == "processed":
-                                logger.info(f"Parsing structured data for session {session.session_id}")
-                                parsing_success = parse_and_store_session_data(session, result_data)
+                                logger.info(
+                                    f"Parsing structured data for session {session.session_id}"
+                                )
+                                parsing_success = parse_and_store_session_data(
+                                    session, result_data
+                                )
 
                                 if parsing_success:
-                                    logger.info(f"Successfully parsed structured data for session {session.session_id}")
+                                    logger.info(
+                                        f"Successfully parsed structured data for session {session.session_id}"
+                                    )
                                     # Only save session and create notification if parsing was successful
                                     session.save()
                                     create_silent_notification(session)
 
                                     # Enqueue player-to-user mapping task
                                     try:
-                                        map_players_to_users_task.delay(session.session_id)
-                                        logger.info(f"Queued player-to-user mapping for session {session.session_id}")
+                                        map_players_to_users_task.delay(
+                                            session.session_id
+                                        )
+                                        logger.info(
+                                            f"Queued player-to-user mapping for session {session.session_id}"
+                                        )
                                     except Exception as e:
-                                        logger.exception(f"Failed to enqueue player mapping for session {session.session_id}: {e}")
+                                        logger.exception(
+                                            f"Failed to enqueue player mapping for session {session.session_id}: {e}"
+                                        )
 
                                     # Enqueue Excel highlights processing FIRST (before other calculations)
                                     try:
-                                        process_excel_match_highlights_task.delay(session.session_id)
-                                        logger.info(f"Queued Excel highlights processing for session {session.session_id}")
+                                        process_excel_match_highlights_task.delay(
+                                            session.session_id
+                                        )
+                                        logger.info(
+                                            f"Queued Excel highlights processing for session {session.session_id}"
+                                        )
                                     except Exception as e:
-                                        logger.exception(f"Failed to enqueue Excel highlights processing for session {session.session_id}: {e}")
+                                        logger.exception(
+                                            f"Failed to enqueue Excel highlights processing for session {session.session_id}: {e}"
+                                        )
 
                                     # # Enqueue aggregates computation (idempotent)
                                     try:
-                                        compute_aggregates_task.delay(session.session_id)
-                                        logger.info(f"Queued aggregates computation for session {session.session_id}")
+                                        compute_aggregates_task.delay(
+                                            session.session_id
+                                        )
+                                        logger.info(
+                                            f"Queued aggregates computation for session {session.session_id}"
+                                        )
                                     except Exception as e:
-                                        logger.exception(f"Failed to enqueue aggregates for session {session.session_id}: {e}")
+                                        logger.exception(
+                                            f"Failed to enqueue aggregates for session {session.session_id}: {e}"
+                                        )
                                 else:
-                                    logger.error(f"Failed to parse structured data for session {session.session_id}. Not updating session status.")
+                                    logger.error(
+                                        f"Failed to parse structured data for session {session.session_id}. Not updating session status."
+                                    )
                                     # Don't update the session status if parsing failed
                                     session.status = previous_status
                                     session.save()
@@ -1103,23 +1278,34 @@ def process_trace_sessions_task(trace_session_id=None):
                                 session.save()
                                 create_silent_notification(session)
 
-                            logger.info(f"Saved result data for {new_status} session {session.session_id}")
+                            logger.info(
+                                f"Saved result data for {new_status} session {session.session_id}"
+                            )
                         else:
-                            logger.error(f"Failed to fetch result for {new_status} session {session.session_id}", exc_info=True, stack_info=True)
+                            logger.error(
+                                f"Failed to fetch result for {new_status} session {session.session_id}",
+                                exc_info=True,
+                                stack_info=True,
+                            )
 
                             # Don't update status if we couldn't fetch result data
                             session.status = previous_status
                             session.save()
                             continue
                     else:
-                        logger.info(f"Skipping processing for session {session.session_id} - no processing needed")
+                        logger.info(
+                            f"Skipping processing for session {session.session_id} - no processing needed"
+                        )
 
                 processed_count += 1
 
             except Exception as e:
                 error_count += 1
                 logger.error(
-                    f"Error processing session {session.session_id}: {e}", exc_info=True, stack_info=True)
+                    f"Error processing session {session.session_id}: {e}",
+                    exc_info=True,
+                    stack_info=True,
+                )
 
         return f"Processed {processed_count} sessions, {error_count} errors"
 
@@ -1133,6 +1319,7 @@ def compute_aggregates_task(session_id):
     """Compute CSV-equivalent aggregates in background and store them in DB."""
     try:
         from tracevision.services import TraceVisionAggregationService
+
         # Get the session
         try:
             session = TraceSession.objects.get(session_id=session_id)
@@ -1141,7 +1328,7 @@ def compute_aggregates_task(session_id):
             logger.error(error_msg)
             return {"success": False, "error": error_msg}
 
-        if session.status != 'processed':
+        if session.status != "processed":
             msg = f"Session {session_id} not processed yet"
             logger.warning(msg)
             return {"success": False, "error": msg}
@@ -1154,26 +1341,33 @@ def compute_aggregates_task(session_id):
         try:
             generate_overlay_highlights_task.delay(session_id)
             logger.info(
-                f"Queued overlay highlights generation for session {session_id}")
+                f"Queued overlay highlights generation for session {session_id}"
+            )
         except Exception as e:
             logger.exception(
-                f"Failed to enqueue overlay highlights generation for session {session_id}: {e}")
-        
+                f"Failed to enqueue overlay highlights generation for session {session_id}: {e}"
+            )
+
         return {"success": True, "details": {k: True for k in result.keys()}}
     except Exception as e:
         logger.error(
-            f"Error computing aggregates for session {session_id}: {e}", exc_info=True, stack_info=True)
+            f"Error computing aggregates for session {session_id}: {e}",
+            exc_info=True,
+            stack_info=True,
+        )
         return {"success": False, "error": str(e)}
 
 
 @shared_task
-def map_players_to_users_task(session_id):
+def map_players_to_users_task(session_id=None, user_id=None, game_id=None):
     """
     Map TracePlayer objects to WajoUser objects based on jersey numbers, names, etc.
     This task runs after session processing to link players to actual users.
 
     Args:
-        session_id (str): Session ID to process
+        session_id (str, optional): Session ID to process (existing behavior)
+        user_id (str, optional): User phone_no to map players for all their games (new)
+        game_id (str, optional): Game ID to map all unmapped players in this game (new)
 
     Returns:
         dict: Task results with success status and mapping details
@@ -1181,26 +1375,74 @@ def map_players_to_users_task(session_id):
     try:
         from accounts.models import WajoUser
         from teams.models import Team
+        from games.models import Game, GameUserRole
 
-        try:
-            session = TraceSession.objects.get(session_id=session_id)
-        except TraceSession.DoesNotExist:
-            error_msg = f"Session with ID {session_id} not found"
+        # Determine which mode to run in
+        session = None  # Initialize session variable
+        if game_id:
+            # Mode 3: Map all unmapped players in a specific game
+            try:
+                game = Game.objects.get(id=game_id)
+                if not game.trace_session:
+                    error_msg = f"Game {game_id} has no TraceSession"
+                    logger.error(error_msg)
+                    return {"success": False, "error": error_msg}
+                session = game.trace_session
+                unmapped_players = TracePlayer.objects.filter(
+                    session=session, user__isnull=True
+                )
+            except Game.DoesNotExist:
+                error_msg = f"Game with ID {game_id} not found"
+                logger.error(error_msg)
+                return {"success": False, "error": error_msg}
+        elif user_id:
+            # Mode 2: Map all players for games where this user has GameUserRole
+            try:
+                user = WajoUser.objects.get(phone_no=user_id)
+                user_games = Game.objects.filter(game_roles__user=user)
+                sessions = TraceSession.objects.filter(game__in=user_games)
+                unmapped_players = TracePlayer.objects.filter(
+                    session__in=sessions, user__isnull=True
+                )
+            except WajoUser.DoesNotExist:
+                error_msg = f"User with ID {user_id} not found"
+                logger.error(error_msg)
+                return {"success": False, "error": error_msg}
+        elif session_id:
+            # Mode 1: Map players for specific session (existing behavior)
+            try:
+                session = TraceSession.objects.get(session_id=session_id)
+                unmapped_players = session.trace_players.filter(user__isnull=True)
+            except TraceSession.DoesNotExist:
+                error_msg = f"Session with ID {session_id} not found"
+                logger.error(error_msg)
+                return {"success": False, "error": error_msg}
+        else:
+            error_msg = "Must provide session_id, user_id, or game_id"
             logger.error(error_msg)
             return {"success": False, "error": error_msg}
 
-        logger.info(
-            f"Starting player-to-user mapping for session: {session_id}")
-
-        # Get all unmapped players in this session
-        unmapped_players = session.trace_players.filter(user__isnull=True)
+        if session_id:
+            logger.info(f"Starting player-to-user mapping for session: {session_id}")
+        elif user_id:
+            logger.info(f"Starting player-to-user mapping for user: {user_id}")
+        elif game_id:
+            logger.info(f"Starting player-to-user mapping for game: {game_id}")
 
         if not unmapped_players.exists():
-            logger.info(f"No unmapped players found for session {session_id}")
-            return {"success": True, "message": "No unmapped players found", "mapped_count": 0}
+            if session_id:
+                logger.info(f"No unmapped players found for session {session_id}")
+            elif user_id:
+                logger.info(f"No unmapped players found for user {user_id}")
+            elif game_id:
+                logger.info(f"No unmapped players found for game {game_id}")
+            return {
+                "success": True,
+                "message": "No unmapped players found",
+                "mapped_count": 0,
+            }
 
-        logger.info(
-            f"Found {unmapped_players.count()} unmapped players to process")
+        logger.info(f"Found {unmapped_players.count()} unmapped players to process")
 
         mapped_count = 0
         mapping_details = []
@@ -1208,31 +1450,38 @@ def map_players_to_users_task(session_id):
         for player in unmapped_players:
             try:
                 # Log player details for debugging
-                team_name = player.team.name if hasattr(
-                    player.team, 'name') else str(player.team)
+                team_name = (
+                    player.team.name
+                    if hasattr(player.team, "name")
+                    else str(player.team)
+                )
                 logger.info(
-                    f"Attempting to map player: {player.object_id} (jersey: {player.jersey_number}, team: {team_name})")
+                    f"Attempting to map player: {player.object_id} (jersey: {player.jersey_number}, team: {team_name})"
+                )
 
                 # Strategy 1: Try to match by jersey number and team
+                # This matches: trace_player.team + trace_player.jersey_number == user.team + user.jersey_number
                 if player.jersey_number and player.team:
                     matching_user = WajoUser.objects.filter(
-                        jersey_number=player.jersey_number,
-                        team=player.team
+                        jersey_number=player.jersey_number, team=player.team
                     ).first()
 
                     if matching_user:
                         player.user = matching_user
                         player.save()
                         mapped_count += 1
-                        mapping_details.append({
-                            'player_id': player.object_id,
-                            'player_name': player.name,
-                            'jersey_number': player.jersey_number,
-                            'mapped_to_user': matching_user.phone_no,
-                            'method': 'jersey_number_and_team'
-                        })
+                        mapping_details.append(
+                            {
+                                "player_id": player.object_id,
+                                "player_name": player.name,
+                                "jersey_number": player.jersey_number,
+                                "mapped_to_user": matching_user.phone_no,
+                                "method": "jersey_number_and_team",
+                            }
+                        )
                         logger.info(
-                            f"Mapped player {player.name} ({player.jersey_number}) to user {matching_user.phone_no}")
+                            f"Mapped player {player.name} ({player.jersey_number}) to user {matching_user.phone_no}"
+                        )
                         continue
 
                 # Strategy 2: Try to match by name and team (fuzzy matching)
@@ -1240,61 +1489,89 @@ def map_players_to_users_task(session_id):
                     # Simple name matching - you can enhance this with fuzzy matching
                     matching_user = WajoUser.objects.filter(
                         name__icontains=player.name.split()[0],  # First name
-                        team=player.team
+                        team=player.team,
                     ).first()
 
                     if matching_user:
                         player.user = matching_user
                         player.save()
                         mapped_count += 1
-                        mapping_details.append({
-                            'player_id': player.object_id,
-                            'player_name': player.name,
-                            'jersey_number': player.jersey_number,
-                            'mapped_to_user': matching_user.phone_no,
-                            'method': 'name_and_team'
-                        })
+                        mapping_details.append(
+                            {
+                                "player_id": player.object_id,
+                                "player_name": player.name,
+                                "jersey_number": player.jersey_number,
+                                "mapped_to_user": matching_user.phone_no,
+                                "method": "name_and_team",
+                            }
+                        )
                         logger.info(
-                            f"Mapped player {player.name} to user {matching_user.phone_no} by name")
+                            f"Mapped player {player.name} to user {matching_user.phone_no} by name"
+                        )
                         continue
 
                 # Strategy 3: If session has only one user, map all unmapped players to that user
-                if session.user and not player.user:
+                # Only applies when we have a single session (session_id or game_id mode)
+                if session and session.user and not player.user:
                     # Check if this is a single-player session
                     total_players = session.trace_players.count()
                     if total_players == 1:
                         player.user = session.user
                         player.save()
                         mapped_count += 1
-                        mapping_details.append({
-                            'player_id': player.object_id,
-                            'player_name': player.name,
-                            'jersey_number': player.jersey_number,
-                            'mapped_to_user': session.user.phone_no,
-                            'method': 'single_player_session'
-                        })
+                        mapping_details.append(
+                            {
+                                "player_id": player.object_id,
+                                "player_name": player.name,
+                                "jersey_number": player.jersey_number,
+                                "mapped_to_user": session.user.phone_no,
+                                "method": "single_player_session",
+                            }
+                        )
                         logger.info(
-                            f"Mapped single player {player.name} to session user {session.user.phone_no}")
+                            f"Mapped single player {player.name} to session user {session.user.phone_no}"
+                        )
 
             except Exception as e:
-                logger.exception(
-                    f"Error mapping player {player.object_id}: {e}")
+                logger.exception(f"Error mapping player {player.object_id}: {e}")
 
         logger.info(
-            f"Successfully mapped {mapped_count}/{unmapped_players.count()} players to users")
+            f"Successfully mapped {mapped_count}/{unmapped_players.count()} players to users"
+        )
 
-        return {
+        result = {
             "success": True,
-            "session_id": session_id,
             "total_players": unmapped_players.count(),
             "mapped_count": mapped_count,
             "unmapped_count": unmapped_players.count() - mapped_count,
             "mapping_details": mapping_details,
-            "message": f"Mapped {mapped_count} players to users"
+            "message": f"Mapped {mapped_count} players to users",
         }
 
+        if session_id:
+            result["session_id"] = session_id
+        if user_id:
+            result["user_id"] = user_id
+        if game_id:
+            result["game_id"] = game_id
+
+        return result
+
     except Exception as e:
-        error_msg = f"Error in map_players_to_users_task for session {session_id}: {str(e)}"
+        if session_id:
+            error_msg = (
+                f"Error in map_players_to_users_task for session {session_id}: {str(e)}"
+            )
+        elif user_id:
+            error_msg = (
+                f"Error in map_players_to_users_task for user {user_id}: {str(e)}"
+            )
+        elif game_id:
+            error_msg = (
+                f"Error in map_players_to_users_task for game {game_id}: {str(e)}"
+            )
+        else:
+            error_msg = f"Error in map_players_to_users_task: {str(e)}"
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}
 
@@ -1305,10 +1582,10 @@ def extract_player_events(player: dict, session, source: str) -> list:
     Includes team name and category (goals, discipline, substitution).
     """
     events = []
-    team_side = determine_team_side(player['Team'], session)
-    team_name = player.get('Team')
-    jersey_number = player.get('Number')
-    player_name = player.get('Name', '').strip()
+    team_side = determine_team_side(player["Team"], session)
+    team_name = player.get("Team")
+    jersey_number = player.get("Number")
+    player_name = player.get("Name", "").strip()
 
     # Skip invalid rows
     if not player_name or not jersey_number:
@@ -1321,34 +1598,37 @@ def extract_player_events(player: dict, session, source: str) -> list:
         pass
 
     # ---- Goals ----
-    if player.get('Goals') and isinstance(player['Goals'], list):
-        for g in player['Goals']:
+    if player.get("Goals") and isinstance(player["Goals"], list):
+        for g in player["Goals"]:
             try:
                 minute = int(str(g).replace("'", "").strip())
-                events.append({
-                    "type": "goal",
-                    "category": "goals",
-                    "player_name": player_name,
-                    "jersey_number": jersey_number,
-                    "minute": minute,
-                    "match_time": parse_match_time(minute),
-                    "team_side": team_side,
-                    "team_name": team_name,
-                    "source": source
-                })
+                events.append(
+                    {
+                        "type": "goal",
+                        "category": "goals",
+                        "player_name": player_name,
+                        "jersey_number": jersey_number,
+                        "minute": minute,
+                        "match_time": parse_match_time(minute),
+                        "team_side": team_side,
+                        "team_name": team_name,
+                        "source": source,
+                    }
+                )
             except:
                 continue
 
     # ---- Cards ----
-    if player.get('Cards') and isinstance(player['Cards'], str):
+    if player.get("Cards") and isinstance(player["Cards"], str):
         # Parse card string format like "Yellow 41'" or "Red 67'"
-        card_str = player['Cards'].strip()
+        card_str = player["Cards"].strip()
         minute = 0
         card_type = card_str
 
         # Extract minute from card string (e.g., "Yellow 41'" -> minute=41, card_type="Yellow")
         # Handle both regular minutes and extra time (e.g., "Yellow 90+3'" -> minute=93)
         import re
+
         minute_match = re.search(r"(\d+)(?:\+(\d+))?'", card_str)
         if minute_match:
             minute = int(minute_match.group(1))
@@ -1356,54 +1636,60 @@ def extract_player_events(player: dict, session, source: str) -> list:
             if minute_match.group(2):
                 minute += int(minute_match.group(2))
             # Extract card type (everything before the minute)
-            card_type = card_str[:minute_match.start()].strip().lower()
+            card_type = card_str[: minute_match.start()].strip().lower()
 
-        events.append({
-            "type": f"{card_type}_card",
-            "category": "discipline",
-            "player_name": player_name,
-            "jersey_number": jersey_number,
-            "card": card_type,
-            "minute": minute,
-            "match_time": parse_match_time(minute),
-            "team_side": team_side,
-            "team_name": team_name,
-            "source": source
-        })
-
-    # ---- Substitution off ----
-    if player.get('SubOffMinute') is not None:
-        try:
-            minute = int(player['SubOffMinute'])
-            events.append({
-                "type": "substitution_off",
-                "category": "substitution",
+        events.append(
+            {
+                "type": f"{card_type}_card",
+                "category": "discipline",
                 "player_name": player_name,
                 "jersey_number": jersey_number,
+                "card": card_type,
                 "minute": minute,
                 "match_time": parse_match_time(minute),
                 "team_side": team_side,
                 "team_name": team_name,
-                "source": source
-            })
+                "source": source,
+            }
+        )
+
+    # ---- Substitution off ----
+    if player.get("SubOffMinute") is not None:
+        try:
+            minute = int(player["SubOffMinute"])
+            events.append(
+                {
+                    "type": "substitution_off",
+                    "category": "substitution",
+                    "player_name": player_name,
+                    "jersey_number": jersey_number,
+                    "minute": minute,
+                    "match_time": parse_match_time(minute),
+                    "team_side": team_side,
+                    "team_name": team_name,
+                    "source": source,
+                }
+            )
         except:
             pass
 
     # ---- Substitution on ---- (from replacements sheet)
-    if player.get('ReplacerMinute') is not None:
+    if player.get("ReplacerMinute") is not None:
         try:
-            minute = int(player['ReplacerMinute'])
-            events.append({
-                "type": "substitution_on",
-                "category": "substitution",
-                "player_name": player_name,
-                "jersey_number": jersey_number,
-                "minute": minute,
-                "match_time": parse_match_time(minute),
-                "team_side": team_side,
-                "team_name": team_name,
-                "source": source
-            })
+            minute = int(player["ReplacerMinute"])
+            events.append(
+                {
+                    "type": "substitution_on",
+                    "category": "substitution",
+                    "player_name": player_name,
+                    "jersey_number": jersey_number,
+                    "minute": minute,
+                    "match_time": parse_match_time(minute),
+                    "team_side": team_side,
+                    "team_name": team_name,
+                    "source": source,
+                }
+            )
         except:
             pass
 
@@ -1425,51 +1711,61 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
         dict: Task results with success status and details
     """
     try:
-        from .video_generator import TrackingDataCache, create_clip_reel_overlay_video, upload_video_to_storage, download_video_from_storage
+        from .video_generator import (
+            TrackingDataCache,
+            create_clip_reel_overlay_video,
+            upload_video_to_storage,
+            download_video_from_storage,
+        )
         from .models import TraceClipReel, TraceSession
         from tracevision.utils import cleanup_temp_files
         from django.db.models import Prefetch
 
         # Build base filter for clip reels
         clip_reel_filter = {
-            'video_type': 'with_overlay',
-            'generation_status__in': ['pending', 'failed'],
+            "video_type": "with_overlay",
+            "generation_status__in": ["pending", "failed"],
             # 'primary_player__user__isnull': False,
-
         }
 
         if session_id:
-            clip_reel_filter['session__session_id'] = session_id
+            clip_reel_filter["session__session_id"] = session_id
         if clip_reel_ids:
-            clip_reel_filter['id__in'] = clip_reel_ids
+            clip_reel_filter["id__in"] = clip_reel_ids
 
         # Get sessions with prefetched clip reels using database-level grouping
-        sessions = TraceSession.objects.filter(
-            clip_reels__video_type='with_overlay',
-            clip_reels__generation_status__in=['pending', 'failed'],
-            # clip_reels__primary_player__user__isnull=False,
-        ).prefetch_related(
-            Prefetch(
-                'clip_reels',
-                queryset=TraceClipReel.objects.filter(**clip_reel_filter)
-                .select_related('highlight')
-                .prefetch_related('involved_players'),
-                to_attr='pending_clip_reels'
+        sessions = (
+            TraceSession.objects.filter(
+                clip_reels__video_type="with_overlay",
+                clip_reels__generation_status__in=["pending", "failed"],
+                # clip_reels__primary_player__user__isnull=False,
             )
-        ).distinct()
+            .prefetch_related(
+                Prefetch(
+                    "clip_reels",
+                    queryset=TraceClipReel.objects.filter(**clip_reel_filter)
+                    .select_related("highlight")
+                    .prefetch_related("involved_players"),
+                    to_attr="pending_clip_reels",
+                )
+            )
+            .distinct()
+        )
 
         logger.info(f"Sessions: {sessions}")
 
         # Convert to sessions_data format, only including sessions with clip reels
         sessions_data = {}
         total_clip_reels = 0
-        
+
         for session in sessions:
             if session.pending_clip_reels:  # Only include sessions with clip reels
-                logger.info(f"TraceClipReel: {session.pending_clip_reels} for session: {session.session_id}")
+                logger.info(
+                    f"TraceClipReel: {session.pending_clip_reels} for session: {session.session_id}"
+                )
                 sessions_data[session.session_id] = {
-                    'session': session,
-                    'clip_reels': session.pending_clip_reels
+                    "session": session,
+                    "clip_reels": session.pending_clip_reels,
                 }
                 total_clip_reels += len(session.pending_clip_reels)
 
@@ -1477,7 +1773,9 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
             logger.info("No clip reels to process")
             return {"success": True, "message": "No clip reels to process"}
 
-        logger.info(f"Found {len(sessions_data)} sessions with {total_clip_reels} total clip reels to process")
+        logger.info(
+            f"Found {len(sessions_data)} sessions with {total_clip_reels} total clip reels to process"
+        )
 
         # Initialize tracking data cache
         tracking_cache = TrackingDataCache()
@@ -1491,20 +1789,28 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
 
         # Process each session
         for session_key, session_data in sessions_data.items():
-            session = session_data['session']
-            session_clip_reels = session_data['clip_reels']
-            
-            logger.info(f"Processing session {session_key} with {len(session_clip_reels)} clip reels")
-            
+            session = session_data["session"]
+            session_clip_reels = session_data["clip_reels"]
+
+            logger.info(
+                f"Processing session {session_key} with {len(session_clip_reels)} clip reels"
+            )
+
             # Download video once per session and cache it
             session_video_path = None
             try:
                 if session.blob_video_url:
-                    logger.info(f"Downloading video for session {session_key} from Azure Blob: {session.blob_video_url}")
-                    session_video_path = download_video_from_storage(session.blob_video_url)
+                    logger.info(
+                        f"Downloading video for session {session_key} from Azure Blob: {session.blob_video_url}"
+                    )
+                    session_video_path = download_video_from_storage(
+                        session.blob_video_url
+                    )
                     temp_files_to_cleanup.append(session_video_path)
                 elif session.video_url:
-                    logger.info(f"Downloading video for session {session_key} from URL: {session.video_url}")
+                    logger.info(
+                        f"Downloading video for session {session_key} from URL: {session.video_url}"
+                    )
                     session_video_path = download_video_from_storage(session.video_url)
                     temp_files_to_cleanup.append(session_video_path)
                 else:
@@ -1513,19 +1819,21 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
                     for clip_reel in session_clip_reels:
                         clip_reel.mark_generation_failed("No video URL available")
                         total_failed += 1
-                        all_results.append({
-                            'clip_reel_id': str(clip_reel.id),
-                            'highlight_id': clip_reel.highlight.highlight_id,
-                            'video_type': clip_reel.video_type,
-                            'status': 'failed',
-                            'error': 'No video URL available'
-                        })
+                        all_results.append(
+                            {
+                                "clip_reel_id": str(clip_reel.id),
+                                "highlight_id": clip_reel.highlight.highlight_id,
+                                "video_type": clip_reel.video_type,
+                                "status": "failed",
+                                "error": "No video URL available",
+                            }
+                        )
                     continue
 
                 # Process all clip reels for this session
                 session_processed = 0
                 session_failed = 0
-                
+
                 for clip_reel in session_clip_reels:
                     # Skip clip reels without primary players as they can't be processed for overlay videos
                     # if not clip_reel.primary_player:
@@ -1540,9 +1848,11 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
                     #         'error': 'No primary player available'
                     #     })
                     #     continue
-                    
+
                     try:
-                        logger.info(f"Processing clip reel {clip_reel.id} for highlight {clip_reel.highlight.highlight_id}")
+                        logger.info(
+                            f"Processing clip reel {clip_reel.id} for highlight {clip_reel.highlight.highlight_id}"
+                        )
 
                         # Mark as generating
                         clip_reel.mark_generation_started()
@@ -1565,7 +1875,7 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
                         clip_reel.mark_generation_completed(
                             video_url=video_blob_url,
                             video_size_mb=video_size_mb,
-                            video_duration_seconds=clip_reel.duration_ms / 1000.0
+                            video_duration_seconds=clip_reel.duration_ms / 1000.0,
                         )
 
                         # Clean up the generated overlay video immediately
@@ -1574,28 +1884,34 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
                             temp_files_to_cleanup.remove(temp_video_path)
 
                         session_processed += 1
-                        all_results.append({
-                            'clip_reel_id': str(clip_reel.id),
-                            'highlight_id': clip_reel.highlight.highlight_id,
-                            'video_type': clip_reel.video_type,
-                            'status': 'completed',
-                            'video_url': video_blob_url,
-                            'video_size_mb': video_size_mb
-                        })
+                        all_results.append(
+                            {
+                                "clip_reel_id": str(clip_reel.id),
+                                "highlight_id": clip_reel.highlight.highlight_id,
+                                "video_type": clip_reel.video_type,
+                                "status": "completed",
+                                "video_url": video_blob_url,
+                                "video_size_mb": video_size_mb,
+                            }
+                        )
 
                         logger.info(f"Successfully processed clip reel {clip_reel.id}")
 
                     except Exception as e:
-                        logger.exception(f"Error processing clip reel {clip_reel.id}: {e}")
+                        logger.exception(
+                            f"Error processing clip reel {clip_reel.id}: {e}"
+                        )
                         clip_reel.mark_generation_failed(str(e))
                         session_failed += 1
-                        all_results.append({
-                            'clip_reel_id': str(clip_reel.id),
-                            'highlight_id': clip_reel.highlight.highlight_id,
-                            'video_type': clip_reel.video_type,
-                            'status': 'failed',
-                            'error': str(e)
-                        })
+                        all_results.append(
+                            {
+                                "clip_reel_id": str(clip_reel.id),
+                                "highlight_id": clip_reel.highlight.highlight_id,
+                                "video_type": clip_reel.video_type,
+                                "status": "failed",
+                                "error": str(e),
+                            }
+                        )
 
                 # Clean up session video after processing all clip reels
                 if session_video_path and os.path.exists(session_video_path):
@@ -1605,23 +1921,29 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
 
                 total_processed += session_processed
                 total_failed += session_failed
-                
-                logger.info(f"Completed session {session_key}: {session_processed} processed, {session_failed} failed")
+
+                logger.info(
+                    f"Completed session {session_key}: {session_processed} processed, {session_failed} failed"
+                )
 
             except Exception as e:
                 logger.exception(f"Error processing session {session_key}: {e}")
                 # Mark all remaining clip reels for this session as failed
                 for clip_reel in session_clip_reels:
-                    if clip_reel.generation_status == 'generating':
-                        clip_reel.mark_generation_failed(f"Session processing error: {str(e)}")
+                    if clip_reel.generation_status == "generating":
+                        clip_reel.mark_generation_failed(
+                            f"Session processing error: {str(e)}"
+                        )
                         total_failed += 1
-                        all_results.append({
-                            'clip_reel_id': str(clip_reel.id),
-                            'highlight_id': clip_reel.highlight.highlight_id,
-                            'video_type': clip_reel.video_type,
-                            'status': 'failed',
-                            'error': f"Session processing error: {str(e)}"
-                        })
+                        all_results.append(
+                            {
+                                "clip_reel_id": str(clip_reel.id),
+                                "highlight_id": clip_reel.highlight.highlight_id,
+                                "video_type": clip_reel.video_type,
+                                "status": "failed",
+                                "error": f"Session processing error: {str(e)}",
+                            }
+                        )
 
         # Clear tracking cache
         tracking_cache.clear_cache()
@@ -1629,7 +1951,9 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
         # Clean up any remaining temporary files
         cleanup_temp_files(temp_files_to_cleanup)
 
-        logger.info(f"Overlay highlights generation completed. Processed: {total_processed}, Failed: {total_failed}")
+        logger.info(
+            f"Overlay highlights generation completed. Processed: {total_processed}, Failed: {total_failed}"
+        )
 
         return {
             "success": True,
@@ -1637,13 +1961,13 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
             "failed": total_failed,
             "total": total_processed + total_failed,
             "sessions_processed": len(sessions_data),
-            "results": all_results
+            "results": all_results,
         }
 
     except Exception as e:
         logger.exception(f"Error in generate_overlay_highlights_task: {e}")
         # Clean up any remaining temporary files on error
-        if 'temp_files_to_cleanup' in locals():
+        if "temp_files_to_cleanup" in locals():
             cleanup_temp_files(temp_files_to_cleanup)
         return {"success": False, "error": str(e)}
 
@@ -1666,39 +1990,45 @@ def determine_team_side(excel_team_name, session):
 
         if not excel_team_name or not isinstance(excel_team_name, str):
             logger.warning(
-                f"Invalid team name: '{excel_team_name}'. Defaulting to 'away'.")
-            return 'away'
+                f"Invalid team name: '{excel_team_name}'. Defaulting to 'away'."
+            )
+            return "away"
 
         excel_team_clean = excel_team_name.strip().lower()
 
         # Try exact match first
         if home_team_name and excel_team_clean == home_team_name.lower():
-            return 'home'
+            return "home"
         elif away_team_name and excel_team_clean == away_team_name.lower():
-            return 'away'
+            return "away"
 
         # Try partial match (in case of slight differences)
         if home_team_name and home_team_name.lower() in excel_team_clean:
-            return 'home'
+            return "home"
         elif away_team_name and away_team_name.lower() in excel_team_clean:
-            return 'away'
+            return "away"
 
         # Try reverse partial match
         if home_team_name and excel_team_clean in home_team_name.lower():
-            return 'home'
+            return "home"
         elif away_team_name and excel_team_clean in away_team_name.lower():
-            return 'away'
+            return "away"
 
         # If no match found, log warning and default to 'away'
-        logger.warning(f"Could not determine team side for '{excel_team_name}'. "
-                       f"Session teams: home='{home_team_name}', away='{away_team_name}'. "
-                       f"Defaulting to 'away'.")
-        return 'away'
+        logger.warning(
+            f"Could not determine team side for '{excel_team_name}'. "
+            f"Session teams: home='{home_team_name}', away='{away_team_name}'. "
+            f"Defaulting to 'away'."
+        )
+        return "away"
 
     except Exception as e:
         logger.error(
-            f"Error determining team side for '{excel_team_name}': {e}", exc_info=True, stack_info=True)
-        return 'away'
+            f"Error determining team side for '{excel_team_name}': {e}",
+            exc_info=True,
+            stack_info=True,
+        )
+        return "away"
 
 
 def parse_excel_match_data(excel_file_path, session):
@@ -1717,122 +2047,140 @@ def parse_excel_match_data(excel_file_path, session):
         excel_data = pd.read_excel(excel_file_path, sheet_name=None)
 
         match_data = {
-            'match_summary': {},
-            'starting_lineups': [],
-            'replacements': [],
-            'bench': [],
-            'coaches': [],
-            'referees': [],
-            'events': [],
-            'player_mappings': {}  # New field for player name mappings
+            "match_summary": {},
+            "starting_lineups": [],
+            "replacements": [],
+            "bench": [],
+            "coaches": [],
+            "referees": [],
+            "events": [],
+            "player_mappings": {},  # New field for player name mappings
         }
 
         # Parse Match_Summary sheet
-        if 'Match_Summary' in excel_data:
-            summary_df = excel_data['Match_Summary']
+        if "Match_Summary" in excel_data:
+            summary_df = excel_data["Match_Summary"]
             summary_df = summary_df.where(pd.notna(summary_df), None)
             if not summary_df.empty:
-                match_data['match_summary'] = summary_df.iloc[0].to_dict()
+                match_data["match_summary"] = summary_df.iloc[0].to_dict()
 
-        if 'Starting_Lineups' in excel_data:
-            lineups_df = excel_data['Starting_Lineups']
+        if "Starting_Lineups" in excel_data:
+            lineups_df = excel_data["Starting_Lineups"]
             lineups_df = lineups_df.where(pd.notna(lineups_df), None)
-            lineups = [clean_record(player)
-                       for player in lineups_df.to_dict('records')]
+            lineups = [clean_record(player) for player in lineups_df.to_dict("records")]
 
             # Fix Goals and Cards: convert None/'' → []
             for player in lineups:
-                if 'Goals' in player and (player['Goals'] is None or str(player['Goals']).strip() == ''):
-                    player['Goals'] = []
-                if 'Cards' in player and (player['Cards'] is None or str(player['Cards']).strip() == ''):
-                    player['Cards'] = None
-                if 'SubOffMinute' in player and player['SubOffMinute'] is None:
-                    player['SubOffMinute'] = None
+                if "Goals" in player and (
+                    player["Goals"] is None or str(player["Goals"]).strip() == ""
+                ):
+                    player["Goals"] = []
+                if "Cards" in player and (
+                    player["Cards"] is None or str(player["Cards"]).strip() == ""
+                ):
+                    player["Cards"] = None
+                if "SubOffMinute" in player and player["SubOffMinute"] is None:
+                    player["SubOffMinute"] = None
 
-            match_data['starting_lineups'] = lineups
+            match_data["starting_lineups"] = lineups
 
-        if 'Replacements' in excel_data:
-            replacements_df = excel_data['Replacements']
-            replacements_df = replacements_df.where(
-                pd.notna(replacements_df), None)
-            replacements = [clean_record(
-                player) for player in replacements_df.to_dict('records')]
+        if "Replacements" in excel_data:
+            replacements_df = excel_data["Replacements"]
+            replacements_df = replacements_df.where(pd.notna(replacements_df), None)
+            replacements = [
+                clean_record(player) for player in replacements_df.to_dict("records")
+            ]
 
             # Fix Goals and Cards: convert None/'' → []
             for player in replacements:
-                if 'Goals' in player and (player['Goals'] is None or str(player['Goals']).strip() == ''):
-                    player['Goals'] = []
-                if 'Cards' in player and (player['Cards'] is None or str(player['Cards']).strip() == ''):
-                    player['Cards'] = None
-                if 'ReplacerMinute' in player and player['ReplacerMinute'] is None:
-                    player['ReplacerMinute'] = None
-                match_data['replacements'] = replacements
+                if "Goals" in player and (
+                    player["Goals"] is None or str(player["Goals"]).strip() == ""
+                ):
+                    player["Goals"] = []
+                if "Cards" in player and (
+                    player["Cards"] is None or str(player["Cards"]).strip() == ""
+                ):
+                    player["Cards"] = None
+                if "ReplacerMinute" in player and player["ReplacerMinute"] is None:
+                    player["ReplacerMinute"] = None
+                match_data["replacements"] = replacements
 
         # Parse Bench sheet
-        if 'Bench' in excel_data:
-            bench_df = excel_data['Bench']
+        if "Bench" in excel_data:
+            bench_df = excel_data["Bench"]
             bench_df = bench_df.where(pd.notna(bench_df), None)
-            match_data['bench'] = bench_df.to_dict('records')
+            match_data["bench"] = bench_df.to_dict("records")
 
         # Parse Coaches sheet
-        if 'Coaches' in excel_data:
-            coaches_df = excel_data['Coaches']
+        if "Coaches" in excel_data:
+            coaches_df = excel_data["Coaches"]
             coaches_df = coaches_df.where(pd.notna(coaches_df), None)
-            match_data['coaches'] = coaches_df.to_dict('records')
+            match_data["coaches"] = coaches_df.to_dict("records")
 
         # Parse Referees sheet
-        if 'Referees' in excel_data:
-            referees_df = excel_data['Referees']
+        if "Referees" in excel_data:
+            referees_df = excel_data["Referees"]
             referees_df = referees_df.where(pd.notna(referees_df), None)
-            match_data['referees'] = referees_df.to_dict('records')
+            match_data["referees"] = referees_df.to_dict("records")
 
         # Create player mappings from all player data
         player_mappings = {}
 
         # Map Starting_Lineups
-        for player in match_data['starting_lineups']:
+        for player in match_data["starting_lineups"]:
             # Skip invalid entries (empty values, headers, etc.)
             logger.info(f"Player: {player}")
-            if (not player.get('Team') or
-                not player.get('Number') or
-                not player.get('Name') or
-                player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
-                    player.get('Team').strip() in ['', 'no.']):
+            if (
+                not player.get("Team")
+                or not player.get("Number")
+                or not player.get("Name")
+                or player.get("Name").strip()
+                in ["", "GOALS TABLE", "CARD TABLE", "name", "card colour"]
+                or player.get("Team").strip() in ["", "no."]
+            ):
                 continue
 
             # Determine team side by comparing with session teams
-            team_side = determine_team_side(player['Team'], session)
-            jersey_number = int(player['Number'])
-            player_name = player['Name'].strip()
+            team_side = determine_team_side(player["Team"], session)
+            jersey_number = int(player["Number"])
+            player_name = player["Name"].strip()
 
             # Skip if player name is empty or invalid
             if not player_name or len(player_name) < 2:
                 continue
-            role_val = player.get('Role')
+            role_val = player.get("Role")
             # Create mapping key
             mapping_key = f"{team_side}_{jersey_number}"
             player_mappings[mapping_key] = {
-                'name': player_name,
-                'jersey_number': jersey_number,
-                'team_side': team_side,
-                'team_name': player['Team'],
-                'role': '' if role_val is None or (isinstance(role_val, float) and pd.isna(role_val)) else str(role_val),
-                'source': 'starting_lineup'
+                "name": player_name,
+                "jersey_number": jersey_number,
+                "team_side": team_side,
+                "team_name": player["Team"],
+                "role": (
+                    ""
+                    if role_val is None
+                    or (isinstance(role_val, float) and pd.isna(role_val))
+                    else str(role_val)
+                ),
+                "source": "starting_lineup",
             }
 
         # Map replacements
-        for player in match_data['replacements']:
+        for player in match_data["replacements"]:
             # Skip invalid entries (empty values, headers, etc.)
-            if (not player.get('Team') or
-                not player.get('Number') or
-                not player.get('Name') or
-                player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
-                    player.get('Team').strip() in ['', 'no.']):
+            if (
+                not player.get("Team")
+                or not player.get("Number")
+                or not player.get("Name")
+                or player.get("Name").strip()
+                in ["", "GOALS TABLE", "CARD TABLE", "name", "card colour"]
+                or player.get("Team").strip() in ["", "no."]
+            ):
                 continue
 
-            team_side = determine_team_side(player['Team'], session)
-            jersey_number = int(player['Number'])
-            player_name = player['Name'].strip()
+            team_side = determine_team_side(player["Team"], session)
+            jersey_number = int(player["Number"])
+            player_name = player["Name"].strip()
 
             # Skip if player name is empty or invalid
             if not player_name or len(player_name) < 2:
@@ -1840,29 +2188,34 @@ def parse_excel_match_data(excel_file_path, session):
 
             # Create mapping key
             mapping_key = f"{team_side}_{jersey_number}"
-            if mapping_key not in player_mappings:  # Only add if not already in starting lineup
+            if (
+                mapping_key not in player_mappings
+            ):  # Only add if not already in starting lineup
                 player_mappings[mapping_key] = {
-                    'name': player_name,
-                    'jersey_number': jersey_number,
-                    'team_side': team_side,
-                    'team_name': player['Team'],
-                    'role': player.get('Role', '') or '',
-                    'source': 'replacement'
+                    "name": player_name,
+                    "jersey_number": jersey_number,
+                    "team_side": team_side,
+                    "team_name": player["Team"],
+                    "role": player.get("Role", "") or "",
+                    "source": "replacement",
                 }
 
         # Map bench players
-        for player in match_data['bench']:
+        for player in match_data["bench"]:
             # Skip invalid entries (empty values, headers, etc.)
-            if (not player.get('Team') or
-                not player.get('Number') or
-                not player.get('Name') or
-                player.get('Name').strip() in ['', 'GOALS TABLE', 'CARD TABLE', 'name', 'card colour'] or
-                    player.get('Team').strip() in ['', 'no.']):
+            if (
+                not player.get("Team")
+                or not player.get("Number")
+                or not player.get("Name")
+                or player.get("Name").strip()
+                in ["", "GOALS TABLE", "CARD TABLE", "name", "card colour"]
+                or player.get("Team").strip() in ["", "no."]
+            ):
                 continue
 
-            team_side = determine_team_side(player['Team'], session)
-            jersey_number = int(player['Number'])
-            player_name = player['Name'].strip()
+            team_side = determine_team_side(player["Team"], session)
+            jersey_number = int(player["Number"])
+            player_name = player["Name"].strip()
 
             # Skip if player name is empty or invalid
             if not player_name or len(player_name) < 2:
@@ -1872,15 +2225,15 @@ def parse_excel_match_data(excel_file_path, session):
             mapping_key = f"{team_side}_{jersey_number}"
             if mapping_key not in player_mappings:  # Only add if not already mapped
                 player_mappings[mapping_key] = {
-                    'name': player_name,
-                    'jersey_number': jersey_number,
-                    'team_side': team_side,
-                    'team_name': player['Team'],
-                    'role': '',
-                    'source': 'bench'
+                    "name": player_name,
+                    "jersey_number": jersey_number,
+                    "team_side": team_side,
+                    "team_name": player["Team"],
+                    "role": "",
+                    "source": "bench",
                 }
 
-        match_data['player_mappings'] = player_mappings
+        match_data["player_mappings"] = player_mappings
 
         # Extract events from match data
         # events = []
@@ -1925,7 +2278,11 @@ def parse_excel_match_data(excel_file_path, session):
         return match_data
 
     except Exception as e:
-        logger.error(f"Error parsing Excel file {excel_file_path}: {e}", exc_info=True, stack_info=True)
+        logger.error(
+            f"Error parsing Excel file {excel_file_path}: {e}",
+            exc_info=True,
+            stack_info=True,
+        )
         raise
 
 
@@ -1943,7 +2300,7 @@ def parse_goals_from_text(goals_text, team_side):
     events = []
 
     # Pattern to match player name and minutes: "NAME 16', 77'"
-    pattern = r'([A-Z\s]+?)\s+(\d+)(?:\'|min)'
+    pattern = r"([A-Z\s]+?)\s+(\d+)(?:\'|min)"
     matches = re.findall(pattern, goals_text)
 
     for match in matches:
@@ -1951,19 +2308,21 @@ def parse_goals_from_text(goals_text, team_side):
         minute = int(match[1])
         match_time = parse_match_time(minute)
 
-        events.append({
-            'type': 'goal',
-            'player_name': player_name,
-            'minute': minute,
-            'match_time': match_time,
-            'team_side': team_side,
-            'event_metadata': {
-                'scorer': player_name,
-                'minute': minute,
-                'match_time': match_time,
-                'team_side': team_side
+        events.append(
+            {
+                "type": "goal",
+                "player_name": player_name,
+                "minute": minute,
+                "match_time": match_time,
+                "team_side": team_side,
+                "event_metadata": {
+                    "scorer": player_name,
+                    "minute": minute,
+                    "match_time": match_time,
+                    "team_side": team_side,
+                },
             }
-        })
+        )
 
     return events
 
@@ -1984,7 +2343,7 @@ def parse_cards_from_text(cards_text, player_data, player_type, session):
     events = []
 
     # Pattern to match card type and minute: "Yellow 41'" or "Red 27'"
-    pattern = r'(Yellow|Red)\s+(\d+)(?:\'|min)'
+    pattern = r"(Yellow|Red)\s+(\d+)(?:\'|min)"
     matches = re.findall(pattern, cards_text)
 
     for match in matches:
@@ -1993,25 +2352,27 @@ def parse_cards_from_text(cards_text, player_data, player_type, session):
         match_time = parse_match_time(minute)
 
         # Determine team side using session teams
-        team_side = determine_team_side(player_data.get('Team', ''), session)
+        team_side = determine_team_side(player_data.get("Team", ""), session)
 
-        events.append({
-            'type': f'{card_type}_card',
-            'player_name': player_data.get('Name', 'Unknown'),
-            'jersey_number': player_data.get('Number', 0),
-            'minute': minute,
-            'match_time': match_time,
-            'team_side': team_side,
-            'event_metadata': {
-                'player': player_data.get('Name', 'Unknown'),
-                'jersey_number': player_data.get('Number', 0),
-                'card_type': card_type,
-                'minute': minute,
-                'match_time': match_time,
-                'team_side': team_side,
-                'player_type': player_type
+        events.append(
+            {
+                "type": f"{card_type}_card",
+                "player_name": player_data.get("Name", "Unknown"),
+                "jersey_number": player_data.get("Number", 0),
+                "minute": minute,
+                "match_time": match_time,
+                "team_side": team_side,
+                "event_metadata": {
+                    "player": player_data.get("Name", "Unknown"),
+                    "jersey_number": player_data.get("Number", 0),
+                    "card_type": card_type,
+                    "minute": minute,
+                    "match_time": match_time,
+                    "team_side": team_side,
+                    "player_type": player_type,
+                },
             }
-        })
+        )
 
     return events
 
@@ -2036,54 +2397,64 @@ def update_trace_player_names(session, player_mappings):
             try:
                 # Find TracePlayer by object_id pattern
                 trace_player = TracePlayer.objects.filter(
-                    session=session,
-                    object_id=mapping_key
+                    session=session, object_id=mapping_key
                 ).first()
 
                 if trace_player:
                     # Update player name and other details
                     old_name = trace_player.name
-                    trace_player.name = player_data['name']
+                    trace_player.name = player_data["name"]
                     trace_player.position = player_data.get(
-                        'role', trace_player.position)
+                        "role", trace_player.position
+                    )
                     trace_player.save()
 
                     updated_count += 1
-                    update_details.append({
-                        'object_id': mapping_key,
-                        'old_name': old_name,
-                        'new_name': player_data['name'],
-                        'jersey_number': player_data['jersey_number'],
-                        'team_side': player_data['team_side'],
-                        'source': player_data['source']
-                    })
+                    update_details.append(
+                        {
+                            "object_id": mapping_key,
+                            "old_name": old_name,
+                            "new_name": player_data["name"],
+                            "jersey_number": player_data["jersey_number"],
+                            "team_side": player_data["team_side"],
+                            "source": player_data["source"],
+                        }
+                    )
 
                     logger.info(
-                        f"Updated player {mapping_key}: '{old_name}' -> '{player_data['name']}'")
+                        f"Updated player {mapping_key}: '{old_name}' -> '{player_data['name']}'"
+                    )
                 else:
                     not_found_count += 1
                     logger.warning(
-                        f"TracePlayer not found for mapping key: {mapping_key}")
+                        f"TracePlayer not found for mapping key: {mapping_key}"
+                    )
 
             except Exception as e:
-                logger.error(f"Error updating player {mapping_key}: {e}", exc_info=True, stack_info=True)
+                logger.error(
+                    f"Error updating player {mapping_key}: {e}",
+                    exc_info=True,
+                    stack_info=True,
+                )
                 continue
 
         return {
-            'updated_count': updated_count,
-            'not_found_count': not_found_count,
-            'total_mappings': len(player_mappings),
-            'update_details': update_details
+            "updated_count": updated_count,
+            "not_found_count": not_found_count,
+            "total_mappings": len(player_mappings),
+            "update_details": update_details,
         }
 
     except Exception as e:
-        logger.error(f"Error in update_trace_player_names: {e}", exc_info=True, stack_info=True)
+        logger.error(
+            f"Error in update_trace_player_names: {e}", exc_info=True, stack_info=True
+        )
         return {
-            'updated_count': 0,
-            'not_found_count': 0,
-            'total_mappings': len(player_mappings),
-            'update_details': [],
-            'error': str(e)
+            "updated_count": 0,
+            "not_found_count": 0,
+            "total_mappings": len(player_mappings),
+            "update_details": [],
+            "error": str(e),
         }
 
 
@@ -2102,13 +2473,11 @@ def map_player_to_trace_player(player_name, jersey_number, team_side, session):
     """
     try:
         # Get the team based on side
-        team = session.home_team if team_side == 'home' else session.away_team
+        team = session.home_team if team_side == "home" else session.away_team
 
         # Try to find by jersey number and team first
         trace_player = TracePlayer.objects.filter(
-            session=session,
-            jersey_number=jersey_number,
-            team=team
+            session=session, jersey_number=jersey_number, team=team
         ).first()
 
         if trace_player:
@@ -2118,7 +2487,7 @@ def map_player_to_trace_player(player_name, jersey_number, team_side, session):
         trace_player = TracePlayer.objects.filter(
             session=session,
             team=team,
-            name__icontains=player_name.split()[0]  # First name match
+            name__icontains=player_name.split()[0],  # First name match
         ).first()
 
         if trace_player:
@@ -2127,19 +2496,21 @@ def map_player_to_trace_player(player_name, jersey_number, team_side, session):
         # Try to find by object_id pattern (home_X or away_X)
         object_id_pattern = f"{team_side}_{jersey_number}"
         trace_object = TraceObject.objects.filter(
-            session=session,
-            object_id=object_id_pattern
+            session=session, object_id=object_id_pattern
         ).first()
 
         if trace_object and trace_object.player:
             return trace_object.player
 
         logger.warning(
-            f"Could not map player {player_name} (#{jersey_number}) from {team_side} team")
+            f"Could not map player {player_name} (#{jersey_number}) from {team_side} team"
+        )
         return None
 
     except Exception as e:
-        logger.error(f"Error mapping player {player_name}: {e}", exc_info=True, stack_info=True)
+        logger.error(
+            f"Error mapping player {player_name}: {e}", exc_info=True, stack_info=True
+        )
         return None
 
 
@@ -2157,7 +2528,7 @@ def parse_match_time(time_input):
         # Just minutes, default to :00 seconds
         return f"{time_input:02d}:00"
     elif isinstance(time_input, str):
-        if ':' in time_input:
+        if ":" in time_input:
             # Already in MM:SS format
             return time_input
         elif "'" in time_input:
@@ -2169,6 +2540,7 @@ def parse_match_time(time_input):
             minute = int(time_input)
             return f"{minute:02d}:00"
     return "00:00"
+
 
 @shared_task
 def process_excel_match_highlights_task(session_id, excel_file_path=None):
@@ -2191,8 +2563,7 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
             logger.error(error_msg)
             return {"success": False, "error": error_msg}
 
-        logger.info(
-            f"Starting Excel highlights processing for session: {session_id}")
+        logger.info(f"Starting Excel highlights processing for session: {session_id}")
 
         # Check if session is processed
         if session.status != "processed":
@@ -2213,15 +2584,16 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
 
                 # Download Excel file from Azure Blob storage
                 logger.info(
-                    f"Downloading Excel file from session's basic_game_stats: {session.basic_game_stats.url}")
+                    f"Downloading Excel file from session's basic_game_stats: {session.basic_game_stats.url}"
+                )
                 temp_excel_path = download_excel_file_from_storage(
-                    session.basic_game_stats.url)
+                    session.basic_game_stats.url
+                )
                 excel_file_path = temp_excel_path
                 temp_files_to_cleanup.append(temp_excel_path)
             else:
                 # Use provided file path (for testing or direct file access)
-                logger.info(
-                    f"Using provided Excel file path: {excel_file_path}")
+                logger.info(f"Using provided Excel file path: {excel_file_path}")
 
             # Parse Excel data
             try:
@@ -2237,10 +2609,12 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
         # Update TracePlayer names from Excel data
         logger.info(f"Updating TracePlayer names from Excel data...")
         player_update_result = update_trace_player_names(
-            session, match_data.get('player_mappings', {}))
+            session, match_data.get("player_mappings", {})
+        )
 
         logger.info(
-            f"Player name updates: {player_update_result['updated_count']}/{player_update_result['total_mappings']} players updated")
+            f"Player name updates: {player_update_result['updated_count']}/{player_update_result['total_mappings']} players updated"
+        )
         # Write match_data to a JSON file with proper spacing
         # output_json_path = None
         # try:
@@ -2261,52 +2635,52 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
         errors = []
 
         with transaction.atomic():
-            for event in match_data.get('events', []):
+            for event in match_data.get("events", []):
                 try:
                     # Map player to TracePlayer
                     trace_player = map_player_to_trace_player(
-                        event['player_name'],
-                        event.get('jersey_number', 0),
-                        event['team_side'],
-                        session
+                        event["player_name"],
+                        event.get("jersey_number", 0),
+                        event["team_side"],
+                        session,
                     )
 
                     if not trace_player:
                         logger.warning(
-                            f"Skipping event for unmapped player: {event['player_name']}")
+                            f"Skipping event for unmapped player: {event['player_name']}"
+                        )
                         continue
 
                     # Convert game time to video milliseconds using session timeline
                     start_offset = convert_game_time_to_video_milliseconds(
-                        session,
-                        event['minute'],
-                        event.get('second', 0)
+                        session, event["minute"], event.get("second", 0)
                     )
 
                     # Determine highlight duration based on event type
                     duration = 10000  # 10 seconds default
-                    if event['type'] == 'goal':
+                    if event["type"] == "goal":
                         duration = 15000  # 15 seconds for goals
-                    elif event['type'] in ['red_card', 'yellow_card']:
-                        duration = 8000   # 8 seconds for cards
+                    elif event["type"] in ["red_card", "yellow_card"]:
+                        duration = 8000  # 8 seconds for cards
 
                     # Create unique highlight ID
                     highlight_id = f"excel-{event['type']}-{session_id}-{event['match_time'].replace(':', '')}-{trace_player.object_id}"
 
                     # Check if highlight already exists
-                    if TraceHighlight.objects.filter(highlight_id=highlight_id).exists():
+                    if TraceHighlight.objects.filter(
+                        highlight_id=highlight_id
+                    ).exists():
                         logger.info(
-                            f"Highlight {highlight_id} already exists, skipping")
+                            f"Highlight {highlight_id} already exists, skipping"
+                        )
                         continue
 
                     # Determine half dynamically based on session timeline
-                    half = determine_game_half_from_minute(
-                        session, event['minute'])
+                    half = determine_game_half_from_minute(session, event["minute"])
 
-                    tags = [event['team_side'], event['type'],
-                              f"{event['match_time']}"]
+                    tags = [event["team_side"], event["type"], f"{event['match_time']}"]
 
-                    if "card" in event.get('type', ''):
+                    if "card" in event.get("type", ""):
                         tags.append("card")
 
                     # Create TraceHighlight
@@ -2317,41 +2691,42 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
                         duration=duration,
                         tags=tags,
                         video_stream=session.video_url,
-                        event_type=event['type'],
-                        source='excel_import',
-                        match_time=event['match_time'],
+                        event_type=event["type"],
+                        source="excel_import",
+                        match_time=event["match_time"],
                         half=half,
-                        event_metadata=event['event_metadata'],
+                        event_metadata=event["event_metadata"],
                         session=session,
-                        player=trace_player
+                        player=trace_player,
                     )
 
                     logger.info(f"Highlight: {highlight}")
                     # Calculate performance impact
-                    highlight.performance_impact = highlight.calculate_performance_impact()
+                    highlight.performance_impact = (
+                        highlight.calculate_performance_impact()
+                    )
                     # Team impact is half of player impact
-                    highlight.team_impact = abs(
-                        highlight.performance_impact) * 0.5
+                    highlight.team_impact = abs(highlight.performance_impact) * 0.5
                     highlight.save()
 
                     # Create highlight-object relationship if trace object exists
                     trace_object = TraceObject.objects.filter(
-                        session=session,
-                        player=trace_player
+                        session=session, player=trace_player
                     ).first()
 
                     if trace_object:
                         TraceHighlightObject.objects.create(
                             highlight=highlight,
                             trace_object=trace_object,
-                            player=trace_player
+                            player=trace_player,
                         )
                     logger.info(f"TraceObject: {trace_object}")
                     highlights_created += 1
                     events_processed += 1
 
                     logger.info(
-                        f"Created highlight {highlight_id} for {event['type']} by {event['player_name']} at {event['match_time']}")
+                        f"Created highlight {highlight_id} for {event['type']} by {event['player_name']} at {event['match_time']}"
+                    )
 
                 except Exception as e:
                     error_msg = f"Error processing event {event}: {str(e)}"
@@ -2360,9 +2735,9 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
                     continue
 
         # Update session with Excel processing status
-        session.result['excel_highlights_processed'] = True
-        session.result['excel_highlights_count'] = highlights_created
-        session.result['excel_events_processed'] = events_processed
+        session.result["excel_highlights_processed"] = True
+        session.result["excel_highlights_count"] = highlights_created
+        session.result["excel_events_processed"] = events_processed
         session.save()
 
         # Clean up all temporary files before returning
@@ -2376,11 +2751,19 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
             "player_updates": player_update_result,
             "errors": errors,
             "match_data_summary": {
-                "total_events": len(match_data.get('events', [])),
-                "goals": len([e for e in match_data.get('events', []) if e['type'] == 'goal']),
-                "cards": len([e for e in match_data.get('events', []) if e['type'] in ['yellow_card', 'red_card']]),
-                "total_player_mappings": len(match_data.get('player_mappings', {})),
-            }
+                "total_events": len(match_data.get("events", [])),
+                "goals": len(
+                    [e for e in match_data.get("events", []) if e["type"] == "goal"]
+                ),
+                "cards": len(
+                    [
+                        e
+                        for e in match_data.get("events", [])
+                        if e["type"] in ["yellow_card", "red_card"]
+                    ]
+                ),
+                "total_player_mappings": len(match_data.get("player_mappings", {})),
+            },
         }
         return result
 

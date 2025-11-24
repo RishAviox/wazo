@@ -35,34 +35,37 @@ def extract_relative_path_from_azure_url(azure_url: str) -> str:
         return azure_url
 
     # URL format: https://account.blob.core.windows.net/container/path
-    url_parts = azure_url.split('/')
+    url_parts = azure_url.split("/")
 
     # Find the container name in the URL
     container_index = None
     for i, part in enumerate(url_parts):
-        if part.endswith('.blob.core.windows.net'):
+        if part.endswith(".blob.core.windows.net"):
             container_index = i + 1
             break
 
     if container_index and container_index < len(url_parts):
         container_name = url_parts[container_index]
         # Extract path after container name
-        relative_path = '/'.join(url_parts[container_index:])
+        relative_path = "/".join(url_parts[container_index:])
 
         # Handle different containers based on Django settings
         from django.conf import settings
-        django_container = getattr(settings, 'AZURE_CONTAINER_NAME', 'media')
+
+        django_container = getattr(settings, "AZURE_CONTAINER_NAME", "media")
 
         if container_name == django_container:
             # Same container as Django settings - remove container name from path
-            path_after_container = '/'.join(url_parts[container_index + 1:])
+            path_after_container = "/".join(url_parts[container_index + 1 :])
             logger.info(
-                f"Using Django container '{django_container}', path: {path_after_container}")
+                f"Using Django container '{django_container}', path: {path_after_container}"
+            )
             return path_after_container
         else:
             # Different container - keep full path with container name
             logger.info(
-                f"Using different container '{container_name}', full path: {relative_path}")
+                f"Using different container '{container_name}', full path: {relative_path}"
+            )
             return relative_path
     else:
         logger.warning(f"Could not extract path from Azure URL: {azure_url}")
@@ -75,7 +78,9 @@ class TrackingDataCache:
     def __init__(self):
         self.cache = {}
 
-    def get_tracking_data(self, tracking_blob_url: str, video_start_time_ms: int = 0) -> pd.DataFrame:
+    def get_tracking_data(
+        self, tracking_blob_url: str, video_start_time_ms: int = 0
+    ) -> pd.DataFrame:
         """Get tracking data with caching"""
         cache_key = f"{tracking_blob_url}_{video_start_time_ms}"
 
@@ -91,7 +96,9 @@ class TrackingDataCache:
         self.cache.clear()
 
 
-def load_tracking_data_from_storage(tracking_blob_url: str, video_start_time_ms: int = 0) -> pd.DataFrame:
+def load_tracking_data_from_storage(
+    tracking_blob_url: str, video_start_time_ms: int = 0
+) -> pd.DataFrame:
     """
     Load tracking data from Azure Blob Storage or local storage.
 
@@ -110,18 +117,17 @@ def load_tracking_data_from_storage(tracking_blob_url: str, video_start_time_ms:
 
         if tracking_blob_url.startswith("https://"):
             # Full Azure Blob URL - extract the relative path
-            relative_path = extract_relative_path_from_azure_url(
-                tracking_blob_url)
+            relative_path = extract_relative_path_from_azure_url(tracking_blob_url)
             logger.info(f"Relative path: {relative_path}")
             response = default_storage.open(relative_path)
             logger.info(f"Response of the {tracking_blob_url}: {response}")
 
         elif settings.DEBUG and not tracking_blob_url.startswith("https"):
             # Local development - handle file path properly
-            if tracking_blob_url.startswith('/media/'):
+            if tracking_blob_url.startswith("/media/"):
                 # Remove leading /media/ for local storage
                 file_path = tracking_blob_url[7:]  # Remove '/media/'
-            elif tracking_blob_url.startswith('media/'):
+            elif tracking_blob_url.startswith("media/"):
                 # Already has media/ prefix
                 file_path = tracking_blob_url
             else:
@@ -150,12 +156,13 @@ def load_tracking_data_from_storage(tracking_blob_url: str, video_start_time_ms:
         return tracking_df
 
     except Exception as e:
-        logger.error(
-            f"Error loading tracking data from {tracking_blob_url}: {e}")
+        logger.error(f"Error loading tracking data from {tracking_blob_url}: {e}")
         return pd.DataFrame()  # Return empty DataFrame on error
 
 
-def download_video_from_storage(video_blob_url: str, temp_dir: Optional[str] = None) -> str:
+def download_video_from_storage(
+    video_blob_url: str, temp_dir: Optional[str] = None
+) -> str:
     """Download video from Azure Blob or local storage to temporary file for OpenCV processing"""
     if temp_dir is None:
         temp_dir = tempfile.gettempdir()
@@ -177,10 +184,10 @@ def download_video_from_storage(video_blob_url: str, temp_dir: Optional[str] = N
 
         elif settings.DEBUG and not video_blob_url.startswith("https"):
             # Local development - handle file path properly
-            if video_blob_url.startswith('/media/'):
+            if video_blob_url.startswith("/media/"):
                 # Remove leading /media/ for local storage
                 file_path = video_blob_url[7:]  # Remove '/media/'
-            elif video_blob_url.startswith('media/'):
+            elif video_blob_url.startswith("media/"):
                 # Already has media/ prefix
                 file_path = video_blob_url
             else:
@@ -196,26 +203,28 @@ def download_video_from_storage(video_blob_url: str, temp_dir: Optional[str] = N
         # with open(temp_path, 'wb') as f:
         #     f.write(response.read())
         # response.close()
-        with open(temp_path, 'wb') as f:
+        with open(temp_path, "wb") as f:
             # Optimized 2MB chunks for large video files (3-4GB)
             chunk_size = 2 * 1024 * 1024  # 2MB chunks (2,097,152 bytes)
             total_bytes = 0
             last_logged_mb = 0
-            
+
             while True:
                 chunk = response.read(chunk_size)
                 if not chunk:
                     break
                 f.write(chunk)
                 total_bytes += len(chunk)
-                
+
                 # Log progress every 200MB
                 current_mb = total_bytes / (1024 * 1024)
                 if int(current_mb) - last_logged_mb >= 200:
                     last_logged_mb = int(current_mb)
                     logger.info(f"Downloaded {current_mb:.1f} MB of video file")
-            
-            logger.info(f"Video download completed: {total_bytes / (1024 * 1024):.1f} MB total")
+
+            logger.info(
+                f"Video download completed: {total_bytes / (1024 * 1024):.1f} MB total"
+            )
         response.close()
         # temp_path = "./media/video_data/test_video.mp4"
         if os.path.exists(temp_path):
@@ -247,24 +256,29 @@ def add_bbox_overlay_to_frame(
         # Convert normalized coords to pixel coords
         cur_x = tracking_df.loc[cur_index]["x"] * w / 1000
         cur_y = tracking_df.loc[cur_index]["y"] * h / 1000
-        head_y = cur_y - \
-            (tracking_df.loc[cur_index]["h"] * h / 1000) * 0.5 - 10
+        head_y = cur_y - (tracking_df.loc[cur_index]["h"] * h / 1000) * 0.5 - 10
         # Slight upward shift
-        foot_y = cur_y + \
-            (tracking_df.loc[cur_index]["h"] * h / 1000) * 0.5 - 10
+        foot_y = cur_y + (tracking_df.loc[cur_index]["h"] * h / 1000) * 0.5 - 10
         rotation_angle = 360
         ellipse_width = int(tracking_df.loc[cur_index]["w"] * w / 1000 / 0.5)
         ellipse_height = int(tracking_df.loc[cur_index]["h"] * h / 1000 / 3)
 
         # ---- Create transparent overlay (no sparkle) ----
         overlay = np.zeros_like(frame, dtype=np.uint8)
-        alpha_mask = np.zeros(
-            (frame.shape[0], frame.shape[1]), dtype=np.float32)
+        alpha_mask = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.float32)
 
         # Draw ellipse border on mask (solid)
-        cv2.ellipse(alpha_mask, (int(cur_x), int(foot_y)),
-                    (ellipse_width, ellipse_height),
-                    rotation_angle, 0, 360, 1.0, 4, lineType=cv2.LINE_AA)
+        cv2.ellipse(
+            alpha_mask,
+            (int(cur_x), int(foot_y)),
+            (ellipse_width, ellipse_height),
+            rotation_angle,
+            0,
+            360,
+            1.0,
+            4,
+            lineType=cv2.LINE_AA,
+        )
 
         # No blur or normalization -> crisp border
 
@@ -294,9 +308,15 @@ def add_bbox_overlay_to_frame(
 
         # ---- Draw object label ----
         if object_id is not None:
-            cv2.putText(frame, player_name,
-                        (int(cur_x - 20), int(head_y)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.putText(
+                frame,
+                player_name,
+                (int(cur_x - 20), int(head_y)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+            )
 
     return frame
 
@@ -305,22 +325,55 @@ def convert_to_browser_friendly(input_video_path: str, fps: float) -> str:
     """Convert video to browser/Flutter-friendly H.264 format using ffmpeg."""
     try:
         # Check ffmpeg availability
-        subprocess.run(['ffmpeg', '-version'], capture_output=True, timeout=5, check=True)
-    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        subprocess.run(
+            ["ffmpeg", "-version"], capture_output=True, timeout=5, check=True
+        )
+    except (
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+        subprocess.CalledProcessError,
+    ):
         logger.warning("ffmpeg not available, skipping browser-friendly conversion")
         return input_video_path
-    
-    temp_output = input_video_path + '.h264.mp4'
+
+    temp_output = input_video_path + ".h264.mp4"
     try:
         cmd = [
-            'ffmpeg', '-loglevel', 'error', '-i', input_video_path,
-            '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
-            '-pix_fmt', 'yuv420p', '-profile:v', 'baseline', '-level', '3.1',
-            '-movflags', '+faststart', '-vsync', 'cfr', '-r', str(int(fps)),
-            '-an', '-f', 'mp4', '-y', temp_output
+            "ffmpeg",
+            "-loglevel",
+            "error",
+            "-i",
+            input_video_path,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-profile:v",
+            "baseline",
+            "-level",
+            "3.1",
+            "-movflags",
+            "+faststart",
+            "-vsync",
+            "cfr",
+            "-r",
+            str(int(fps)),
+            "-an",
+            "-f",
+            "mp4",
+            "-y",
+            temp_output,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if result.returncode == 0 and os.path.exists(temp_output) and os.path.getsize(temp_output) > 0:
+        if (
+            result.returncode == 0
+            and os.path.exists(temp_output)
+            and os.path.getsize(temp_output) > 0
+        ):
             os.remove(input_video_path)
             os.rename(temp_output, input_video_path)
             logger.info(f"Video converted to browser-friendly H.264 format")
@@ -350,7 +403,8 @@ def create_video_with_tracking_overlay(
     Adapted from WAZO.py
     """
     logger.info(
-        f"Creating video with tracking overlay from {video_time_min_ms}ms to {video_time_max_ms}ms")
+        f"Creating video with tracking overlay from {video_time_min_ms}ms to {video_time_max_ms}ms"
+    )
 
     # Find relevant tracking data for the specified time range:
     use_tracking_df = {}
@@ -359,8 +413,7 @@ def create_video_with_tracking_overlay(
             dict_tracking_df[object_id]["video_time_ms"] >= video_time_min_ms
         ) & (dict_tracking_df[object_id]["video_time_ms"] <= video_time_max_ms)
         if mask_df.sum() == 0:
-            logger.warning(
-                f"No tracking data found for {object_id} during time range")
+            logger.warning(f"No tracking data found for {object_id} during time range")
             continue
         use_tracking_df[object_id] = (
             dict_tracking_df[object_id].loc[mask_df, :].reset_index(drop=True)
@@ -372,15 +425,15 @@ def create_video_with_tracking_overlay(
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     logger.info(f"Video properties - fps: {fps}, width: {w}, height: {h}")
-    
+
     # Check if video properties are valid
     if not cap.isOpened():
         raise ValueError(f"Failed to open video file: {video_filepath}")
-    
+
     if fps is None or fps <= 0:
         logger.warning(f"Invalid FPS ({fps}), using default FPS of 30")
         fps = 30.0
-    
+
     if w <= 0 or h <= 0:
         raise ValueError(f"Invalid video dimensions: {w}x{h}")
 
@@ -455,24 +508,31 @@ def create_video_with_tracking_overlay(
     # Close input and output videos:
     sav.release()
     cap.release()
-    
+
     # Validate output file
-    if not os.path.exists(out_video_filepath) or os.path.getsize(out_video_filepath) == 0:
+    if (
+        not os.path.exists(out_video_filepath)
+        or os.path.getsize(out_video_filepath) == 0
+    ):
         raise ValueError(f"Output video file is empty or missing: {out_video_filepath}")
-    
+
     logger.info(f"Video generation completed: {out_video_filepath}")
-    
+
     # Convert to browser/Flutter-friendly format
     try:
         out_video_filepath = convert_to_browser_friendly(out_video_filepath, fps)
     except Exception as e:
         logger.error(f"Browser-friendly conversion failed: {e}")
         raise RuntimeError(f"Failed to convert video to browser-friendly format: {e}")
-    
+
     return out_video_filepath
 
 
-def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Optional[TrackingDataCache] = None, session_video_path: Optional[str] = None) -> str:
+def create_clip_reel_overlay_video(
+    clip_reel: TraceClipReel,
+    tracking_cache: Optional[TrackingDataCache] = None,
+    session_video_path: Optional[str] = None,
+) -> str:
     """
     Create overlay video for a single TraceClipReel object.
 
@@ -491,7 +551,7 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
 
     # Get session and video file
     session = clip_reel.session
-    
+
     # Use provided session video path if available, otherwise download
     if session_video_path and os.path.exists(session_video_path):
         temp_video_path = session_video_path
@@ -500,8 +560,7 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
         video_file_url = session.blob_video_url or session.video_url
 
         if not video_file_url:
-            raise ValueError(
-                f"No video URL available for session {session.session_id}")
+            raise ValueError(f"No video URL available for session {session.session_id}")
 
         # Download video from storage to temporary file
         temp_video_path = download_video_from_storage(video_file_url)
@@ -514,14 +573,17 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
         # for player in involved_players:
         # Get TraceObject for this player in this session
         trace_object = TraceObject.objects.filter(
-            session=session,
-            player=clip_reel.primary_player
+            session=session, player=clip_reel.primary_player
         ).first()
 
-        logger.info(f"Looking for TraceObject for session {session.id}, player {clip_reel.primary_player.id if clip_reel.primary_player else 'None'}")
+        logger.info(
+            f"Looking for TraceObject for session {session.id}, player {clip_reel.primary_player.id if clip_reel.primary_player else 'None'}"
+        )
         logger.info(f"Found TraceObject: {trace_object}")
         if trace_object:
-            logger.info(f"TraceObject tracking_blob_url: {trace_object.tracking_blob_url}")
+            logger.info(
+                f"TraceObject tracking_blob_url: {trace_object.tracking_blob_url}"
+            )
 
         if trace_object and trace_object.tracking_blob_url:
             # Load tracking data with caching
@@ -530,19 +592,23 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
             )
 
             logger.info(
-                f"Tracking Data Df is downloaded with the URL: {trace_object.tracking_blob_url}, {player_tracking_df}")
+                f"Tracking Data Df is downloaded with the URL: {trace_object.tracking_blob_url}, {player_tracking_df}"
+            )
 
             if not player_tracking_df.empty:
                 tracking_data[clip_reel.primary_player.object_id] = player_tracking_df
                 logger.info(
-                    f"Loaded tracking data for player {clip_reel.primary_player.object_id}")
+                    f"Loaded tracking data for player {clip_reel.primary_player.object_id}"
+                )
             else:
                 logger.warning(
-                    f"No tracking data found for player {clip_reel.primary_player.object_id}")
+                    f"No tracking data found for player {clip_reel.primary_player.object_id}"
+                )
 
         if not tracking_data:
             raise ValueError(
-                f"No tracking data found for any involved players in clip reel {clip_reel.id}")
+                f"No tracking data found for any involved players in clip reel {clip_reel.id}"
+            )
 
         # Create text string from highlight tags
         text_str = " | ".join(clip_reel.tags or [])
@@ -562,7 +628,7 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
             player_name = "Unknown Player"
 
         # Create temporary output file
-        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_file:
             output_path = temp_file.name
 
         # Generate video using existing function
@@ -581,7 +647,11 @@ def create_clip_reel_overlay_video(clip_reel: TraceClipReel, tracking_cache: Opt
     finally:
         # Clean up temporary video file only if we downloaded it ourselves
         # (not if it was provided as session_video_path)
-        if not session_video_path and 'temp_video_path' in locals() and os.path.exists(temp_video_path):
+        if (
+            not session_video_path
+            and "temp_video_path" in locals()
+            and os.path.exists(temp_video_path)
+        ):
             os.unlink(temp_video_path)
             logger.info(f"Cleaned up temporary video file: {temp_video_path}")
 
@@ -598,11 +668,13 @@ def upload_video_to_storage(video_file_path: str, clip_reel: TraceClipReel) -> s
         video_type = clip_reel.video_type
 
         from tracevision.utils import TraceVisionStoragePaths
+
         blob_path = TraceVisionStoragePaths.get_highlight_video_path(
-            session_id, highlight_id, video_type)
+            session_id, highlight_id, video_type
+        )
 
         # Ensure blob path is clean and valid
-        blob_path = blob_path.replace('//', '/').strip('/')
+        blob_path = blob_path.replace("//", "/").strip("/")
         logger.info(f"Uploading video to storage: {blob_path}")
 
         # Validate file exists and get properties
@@ -617,25 +689,30 @@ def upload_video_to_storage(video_file_path: str, clip_reel: TraceClipReel) -> s
 
         # Determine content type
         content_type = "video/mp4"
-        if video_file_path.lower().endswith('.mp4'):
+        if video_file_path.lower().endswith(".mp4"):
             content_type = "video/mp4"
-        elif video_file_path.lower().endswith('.avi'):
+        elif video_file_path.lower().endswith(".avi"):
             content_type = "video/avi"
-        elif video_file_path.lower().endswith('.mov'):
+        elif video_file_path.lower().endswith(".mov"):
             content_type = "video/quicktime"
 
         # Handle different storage types based on DEBUG setting
         from django.conf import settings
 
         # Check if we're using Azure Blob Storage (regardless of DEBUG setting)
-        if hasattr(settings, 'AZURE_CONNECTION_STRING') and settings.AZURE_CONNECTION_STRING:
+        if (
+            hasattr(settings, "AZURE_CONNECTION_STRING")
+            and settings.AZURE_CONNECTION_STRING
+        ):
             # Azure Blob Storage - use robust upload
             logger.info("Using robust Azure Blob Storage upload")
-            return upload_video_to_azure_blob_robust(video_file_path, blob_path, content_type, file_size)
+            return upload_video_to_azure_blob_robust(
+                video_file_path, blob_path, content_type, file_size
+            )
         else:
             # Local development - use default_storage
             logger.info("Using local storage (default_storage)")
-            with open(video_file_path, 'rb') as video_file:
+            with open(video_file_path, "rb") as video_file:
                 saved_path = default_storage.save(blob_path, video_file)
             storage_url = default_storage.url(saved_path)
             logger.info(f"Video uploaded to local storage: {storage_url}")
@@ -646,7 +723,9 @@ def upload_video_to_storage(video_file_path: str, clip_reel: TraceClipReel) -> s
         raise
 
 
-def upload_video_to_azure_blob_robust(video_file_path: str, blob_path: str, content_type: str, file_size: int) -> str:
+def upload_video_to_azure_blob_robust(
+    video_file_path: str, blob_path: str, content_type: str, file_size: int
+) -> str:
     """
     Robust upload to Azure Blob Storage with retry logic, using shared code from tasks.py.
     """
@@ -662,20 +741,25 @@ def upload_video_to_azure_blob_robust(video_file_path: str, blob_path: str, cont
     for client_attempt in range(3):
         try:
             blob_service_client = BlobServiceClient.from_connection_string(
-                settings.AZURE_CONNECTION_STRING)
+                settings.AZURE_CONNECTION_STRING
+            )
             blob_client = blob_service_client.get_blob_client(
-                container=settings.AZURE_CONTAINER_NAME, blob=blob_path)
+                container=settings.AZURE_CONTAINER_NAME, blob=blob_path
+            )
             logger.info(
-                f"Successfully created blob client on attempt {client_attempt + 1}")
+                f"Successfully created blob client on attempt {client_attempt + 1}"
+            )
             break
         except Exception as client_error:
             if client_attempt < 2:
                 logger.warning(
-                    f"Blob client creation attempt {client_attempt + 1} failed: {client_error}. Retrying...")
+                    f"Blob client creation attempt {client_attempt + 1} failed: {client_error}. Retrying..."
+                )
                 time.sleep(5)
             else:
                 logger.error(
-                    f"Failed to create blob client after 3 attempts: {client_error}")
+                    f"Failed to create blob client after 3 attempts: {client_error}"
+                )
                 raise client_error
 
     if not blob_client:
@@ -692,43 +776,48 @@ def upload_video_to_azure_blob_robust(video_file_path: str, blob_path: str, cont
             uploaded_mb = current / (1024 * 1024)
             total_mb = total / (1024 * 1024)
             logger.info(
-                f"Upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)")
+                f"Upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)"
+            )
 
     # Try primary upload method first
     for attempt in range(max_retries):
         try:
-            with open(video_file_path, 'rb') as data:
+            with open(video_file_path, "rb") as data:
                 # Try with progress callback first
                 try:
                     upload_options = {
-                        'data': data,
-                        'blob_type': BlobType.BLOCKBLOB,
-                        'overwrite': True,
-                        'content_settings': ContentSettings(content_type=content_type),
-                        'max_concurrency': 2,
-                        'length': file_size,
-                        'timeout': 7200,  # 2 hours timeout for large files
-                        'progress_hook': progress_callback,
+                        "data": data,
+                        "blob_type": BlobType.BLOCKBLOB,
+                        "overwrite": True,
+                        "content_settings": ContentSettings(content_type=content_type),
+                        "max_concurrency": 2,
+                        "length": file_size,
+                        "timeout": 7200,  # 2 hours timeout for large files
+                        "progress_hook": progress_callback,
                     }
 
                     logger.info(
-                        f"Starting upload attempt {attempt + 1} with progress tracking...")
+                        f"Starting upload attempt {attempt + 1} with progress tracking..."
+                    )
                     blob_client.upload_blob(**upload_options)
                 except TypeError as progress_error:
                     if "progress_callback" in str(progress_error):
                         logger.warning(
-                            "Progress callback failed, retrying without progress tracking...")
+                            "Progress callback failed, retrying without progress tracking..."
+                        )
                         # Reset file pointer
                         data.seek(0)
                         # Upload without progress callback
                         upload_options_simple = {
-                            'data': data,
-                            'blob_type': BlobType.BLOCKBLOB,
-                            'overwrite': True,
-                            'content_settings': ContentSettings(content_type=content_type),
-                            'max_concurrency': 2,
-                            'length': file_size,
-                            'timeout': 7200,
+                            "data": data,
+                            "blob_type": BlobType.BLOCKBLOB,
+                            "overwrite": True,
+                            "content_settings": ContentSettings(
+                                content_type=content_type
+                            ),
+                            "max_concurrency": 2,
+                            "length": file_size,
+                            "timeout": 7200,
                         }
                         blob_client.upload_blob(**upload_options_simple)
                     else:
@@ -736,7 +825,8 @@ def upload_video_to_azure_blob_robust(video_file_path: str, blob_path: str, cont
 
             upload_success = True
             logger.info(
-                f"Successfully uploaded video to Azure on attempt {attempt + 1}")
+                f"Successfully uploaded video to Azure on attempt {attempt + 1}"
+            )
             break
 
         except Exception as e:
@@ -744,14 +834,18 @@ def upload_video_to_azure_blob_robust(video_file_path: str, blob_path: str, cont
             logger.warning(f"Upload attempt {attempt + 1} failed: {e}")
 
             # Check for specific network errors
-            if any(keyword in error_str for keyword in ['dns', 'resolve', 'connection', 'network', 'timeout']):
+            if any(
+                keyword in error_str
+                for keyword in ["dns", "resolve", "connection", "network", "timeout"]
+            ):
                 logger.warning(
-                    "Network-related error detected, will retry with longer delay...")
+                    "Network-related error detected, will retry with longer delay..."
+                )
                 # Longer backoff for network issues
-                wait_time = retry_delay * (3 ** attempt)
+                wait_time = retry_delay * (3**attempt)
             else:
                 # Standard exponential backoff
-                wait_time = retry_delay * (2 ** attempt)
+                wait_time = retry_delay * (2**attempt)
 
             if attempt < max_retries - 1:
                 logger.info(f"Retrying in {wait_time} seconds...")
@@ -764,7 +858,8 @@ def upload_video_to_azure_blob_robust(video_file_path: str, blob_path: str, cont
                 try:
                     logger.info("Trying direct upload method...")
                     upload_success = upload_video_direct(
-                        blob_client, video_file_path, content_type, file_size)
+                        blob_client, video_file_path, content_type, file_size
+                    )
                     if upload_success:
                         logger.info("Direct upload successful!")
                         break
@@ -776,16 +871,17 @@ def upload_video_to_azure_blob_robust(video_file_path: str, blob_path: str, cont
                     try:
                         logger.info("Trying chunked upload method...")
                         upload_success = upload_video_chunked(
-                            blob_client, video_file_path, content_type, file_size)
+                            blob_client, video_file_path, content_type, file_size
+                        )
                         if upload_success:
                             logger.info("Chunked upload successful!")
                             break
                     except Exception as chunked_error:
-                        logger.error(
-                            f"Chunked upload also failed: {chunked_error}")
+                        logger.error(f"Chunked upload also failed: {chunked_error}")
 
                 logger.error(
-                    f"All upload methods failed: {e}", exc_info=True, stack_info=True)
+                    f"All upload methods failed: {e}", exc_info=True, stack_info=True
+                )
                 raise e
 
     if not upload_success:
@@ -805,22 +901,25 @@ def upload_video_direct(blob_client, file_path, content_type, file_size):
     try:
         from azure.storage.blob import BlobType, ContentSettings
 
-        with open(file_path, 'rb') as data:
+        with open(file_path, "rb") as data:
             blob_client.upload_blob(
                 data=data,
                 blob_type=BlobType.BLOCKBLOB,
                 overwrite=True,
-                content_settings=ContentSettings(content_type=content_type)
+                content_settings=ContentSettings(content_type=content_type),
             )
         logger.info(
-            f"Successfully uploaded {file_size / (1024*1024):.1f} MB using direct method")
+            f"Successfully uploaded {file_size / (1024*1024):.1f} MB using direct method"
+        )
         return True
     except Exception as e:
         logger.error(f"Direct upload failed: {e}")
         return False
 
 
-def upload_video_chunked(blob_client, file_path, content_type, file_size, chunk_size=2*1024*1024):
+def upload_video_chunked(
+    blob_client, file_path, content_type, file_size, chunk_size=2 * 1024 * 1024
+):
     """
     Upload large files using chunked approach for better reliability.
     Uses the same pattern as tasks.py upload_large_file_chunked.
@@ -833,7 +932,7 @@ def upload_video_chunked(blob_client, file_path, content_type, file_size, chunk_
 
         # Clear any existing blocks first
         try:
-            blob_client.delete_blob(delete_snapshots='include')
+            blob_client.delete_blob(delete_snapshots="include")
             logger.info("Cleared existing blob before chunked upload")
         except Exception as clear_error:
             logger.info(f"No existing blob to clear: {clear_error}")
@@ -843,7 +942,7 @@ def upload_video_chunked(blob_client, file_path, content_type, file_size, chunk_
         block_number = 0
         total_uploaded = 0
 
-        with open(file_path, 'rb') as file_data:
+        with open(file_path, "rb") as file_data:
             while True:
                 chunk = file_data.read(chunk_size)
                 if not chunk:
@@ -851,7 +950,8 @@ def upload_video_chunked(blob_client, file_path, content_type, file_size, chunk_
 
                 # Generate unique block ID
                 block_id = base64.b64encode(
-                    f"block-{block_number:06d}-{int(time.time())}".encode()).decode()
+                    f"block-{block_number:06d}-{int(time.time())}".encode()
+                ).decode()
                 block_ids.append(BlobBlock(block_id=block_id))
 
                 # Upload the chunk with retry logic
@@ -861,13 +961,13 @@ def upload_video_chunked(blob_client, file_path, content_type, file_size, chunk_
                         # Validate chunk before upload
                         if not chunk or len(chunk) == 0:
                             logger.warning(
-                                f"Chunk {block_number} is empty, skipping...")
+                                f"Chunk {block_number} is empty, skipping..."
+                            )
                             break
 
                         # Ensure block_id is properly formatted
                         if not block_id or len(block_id) == 0:
-                            logger.error(
-                                f"Invalid block_id for chunk {block_number}")
+                            logger.error(f"Invalid block_id for chunk {block_number}")
                             break
 
                         # Add small delay between chunks to avoid rate limiting
@@ -881,12 +981,14 @@ def upload_video_chunked(blob_client, file_path, content_type, file_size, chunk_
                     except Exception as chunk_error:
                         if chunk_attempt < 2:
                             logger.warning(
-                                f"Chunk {block_number} upload attempt {chunk_attempt + 1} failed: {chunk_error}. Retrying...")
+                                f"Chunk {block_number} upload attempt {chunk_attempt + 1} failed: {chunk_error}. Retrying..."
+                            )
                             # Exponential backoff
-                            time.sleep(2 ** chunk_attempt)
+                            time.sleep(2**chunk_attempt)
                         else:
                             logger.error(
-                                f"Chunk {block_number} upload failed after 3 attempts: {chunk_error}")
+                                f"Chunk {block_number} upload failed after 3 attempts: {chunk_error}"
+                            )
                             raise chunk_error
 
                 if not chunk_uploaded:
@@ -900,14 +1002,16 @@ def upload_video_chunked(blob_client, file_path, content_type, file_size, chunk_
                     uploaded_mb = total_uploaded / (1024 * 1024)
                     total_mb = file_size / (1024 * 1024)
                     logger.info(
-                        f"Chunked upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)")
+                        f"Chunked upload progress: {percentage:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)"
+                    )
 
         # Commit the block list
         if block_ids:
             logger.info(f"Committing {len(block_ids)} blocks...")
             blob_client.commit_block_list(block_ids)
             logger.info(
-                f"Successfully uploaded {file_size / (1024*1024):.1f} MB using chunked method")
+                f"Successfully uploaded {file_size / (1024*1024):.1f} MB using chunked method"
+            )
             return True
         else:
             logger.error("No blocks to commit")
