@@ -437,6 +437,7 @@ class TracePossessionSegmentAdmin(admin.ModelAdmin):
 class TraceClipReelAdmin(admin.ModelAdmin):
     list_display = [
         "session",
+        "ratio",
         "event_id",
         "video_type",
         "video_variant_name",
@@ -449,11 +450,12 @@ class TraceClipReelAdmin(admin.ModelAdmin):
     list_filter = [
         "side",
         "video_type",
+        "ratio",
         "generation_status",
         "event_type",
         "created_at",
     ]
-    search_fields = ["session__session_id", "event_id", "primary_player__name", "label"]
+    search_fields = ["session__session_id", "event_id", "ratio", "primary_player__name", "label"]
     readonly_fields = [
         "id",
         "created_at",
@@ -482,6 +484,7 @@ class TraceClipReelAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "video_type",
+                    "ratio",
                     "video_variant_name",
                     "label",
                     "description",

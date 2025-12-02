@@ -14,6 +14,26 @@ from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 
+
+class HighlightPagination(PageNumberPagination):
+    """Custom pagination class for highlights"""
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+    page_query_param = 'page'
+    
+    def get_paginated_response(self, data):
+        """Override to return custom pagination response format with highlights"""
+        return Response({
+            'count': self.page.paginator.count,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'page': self.page.number,
+            'page_size': self.get_page_size(self.request),
+            'total_pages': self.page.paginator.num_pages,
+            'highlights': data  # Use 'highlights' instead of 'results'
+        })
+
 from teams.models import Team
 from tracevision.models import (
     TraceClipReel,
@@ -22,6 +42,7 @@ from tracevision.models import (
     TracePlayer,
     TracePossessionSegment,
     TracePossessionStats,
+    TraceHighlight,
 )
 from tracevision.tasks import (
     download_video_and_save_to_azure_blob,
@@ -38,6 +59,7 @@ from tracevision.serializers import (
     MatchInfoSerializer,
     PossessionTeamMetricsSerializer,
     PossessionPlayerMetricsSerializer,
+    GenerateHighlightClipReelSerializer,
 )
 from tracevision.services import TraceVisionService
 from tracevision.utils import check_duplicate_game, get_or_create_canonical_game
@@ -895,18 +917,17 @@ class GetTracePlayerReelsView(ListAPIView):
     URL: highlights/<session_id>/
     Query Parameters:
     - player_id: Filter by specific player ID (optional)
-    - video_type: Filter by video type (optional)
-    - generation_status: Filter by generation status (optional)
+    - generation_status: Filter by generation status of clip reels (optional)
     - event_type: Filter by event type (optional)
     - half: Filter by half (1 or 2) (optional)
     """
 
     permission_classes = [IsAuthenticated]
     serializer_class = HighlightClipReelSerializer
-    pagination_class = PageNumberPagination
+    pagination_class = HighlightPagination
 
     def get_queryset(self):
-        """Get optimized queryset for clip reels"""
+        """Get optimized queryset for highlights"""
         session_id = self.kwargs.get("session_id")
 
         # Get games where user has GameUserRole
@@ -930,28 +951,22 @@ class GetTracePlayerReelsView(ListAPIView):
                 .get()
             )
         except TraceSession.DoesNotExist:
-            return TraceClipReel.objects.none()
+            return TraceHighlight.objects.none()
 
         # Base queryset with optimized selects
         queryset = (
-            TraceClipReel.objects.filter(session=session)
-            .select_related(
-                "primary_player__team",
-                "session__home_team",
-                "session__away_team",
-                "highlight",
-            )
-            .prefetch_related("involved_players__team")
+            TraceHighlight.objects.filter(session=session)
+            .select_related("player__team", "session__home_team", "session__away_team")
+            .prefetch_related("clip_reels")  # Prefetch clip reels for videos
         )
 
         # Apply filters from query parameters
-        video_type = self.request.query_params.get("video_type")
-        if video_type:
-            queryset = queryset.filter(video_type=video_type)
-
+        # video_type filter removed - not needed anymore
+        
         generation_status = self.request.query_params.get("generation_status")
         if generation_status:
-            queryset = queryset.filter(generation_status=generation_status)
+            # Filter highlights that have clip reels with this status
+            queryset = queryset.filter(clip_reels__generation_status=generation_status).distinct()
 
         event_type = self.request.query_params.get("event_type")
         if event_type:
@@ -963,12 +978,12 @@ class GetTracePlayerReelsView(ListAPIView):
             try:
                 player_id = int(player_id)
                 queryset = queryset.filter(
-                    models.Q(primary_player_id=player_id)
-                    | models.Q(involved_players__id=player_id)
+                    models.Q(player_id=player_id)
+                    | models.Q(highlight_objects__player_id=player_id)
                 ).distinct()
             except ValueError:
                 # Invalid player_id - return empty queryset
-                return TraceClipReel.objects.none()
+                return TraceHighlight.objects.none()
 
         # Filter by half if specified
         half = self.request.query_params.get("half")
@@ -976,13 +991,13 @@ class GetTracePlayerReelsView(ListAPIView):
             try:
                 half_num = int(half)
                 if half_num in [1, 2]:
-                    queryset = queryset.filter(highlight__half=half_num)
+                    queryset = queryset.filter(half=half_num)
                 else:
                     # Invalid half - return empty queryset
-                    return TraceClipReel.objects.none()
+                    return TraceHighlight.objects.none()
             except ValueError:
                 # Invalid half - return empty queryset
-                return TraceClipReel.objects.none()
+                return TraceHighlight.objects.none()
 
         return queryset
 
@@ -1078,36 +1093,52 @@ class GetTracePlayerReelsView(ListAPIView):
                     status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Get queryset and paginate
+        # Get queryset and apply filters
         queryset = self.filter_queryset(self.get_queryset())
+        
+        # Order queryset for consistent pagination
+        queryset = queryset.order_by('-created_at', '-id')
 
-        # Serialize highlights
+        # Paginate queryset at database level (more efficient)
+        page = self.paginate_queryset(queryset)
+        
+        if page is not None:
+            # Serialize only the paginated results
+            serializer = self.get_serializer(page, many=True)
+            highlights = serializer.data
+            
+            # Get paginated response
+            paginated_response = self.get_paginated_response(highlights)
+            
+            # Serialize match_info with request context for perspective transformation
+            match_info_serializer = MatchInfoSerializer(
+                session, context={"request": request}
+            )
+            match_info = match_info_serializer.data
+            
+            # Build response with match_info
+            response_data = paginated_response.data
+            response_data['match_info'] = match_info
+            
+            return Response(response_data, status=http_status.HTTP_200_OK)
+
+        # Fallback if pagination is not applied (shouldn't happen with ListAPIView)
         serializer = self.get_serializer(queryset, many=True)
         highlights = serializer.data
-
-        # Serialize match_info with request context for perspective transformation
+        
+        # Serialize match_info
         match_info_serializer = MatchInfoSerializer(
             session, context={"request": request}
         )
         match_info = match_info_serializer.data
-
-        # Pagination
-        paginator = self.pagination_class()
-        paginator.page_size = 10
-        paginated_highlights = paginator.paginate_queryset(highlights, request)
-
-        # Build response
-        response_data = {
-            "highlights": paginated_highlights if paginated_highlights else highlights,
+        
+        return Response({
+            "highlights": highlights,
             "match_info": match_info,
-            "count": (
-                paginator.page.paginator.count if paginator.page else len(highlights)
-            ),
-            "next": paginator.get_next_link(),
-            "previous": paginator.get_previous_link(),
-        }
-
-        return Response(response_data, status=http_status.HTTP_200_OK)
+            "count": len(highlights),
+            "next": None,
+            "previous": None,
+        }, status=http_status.HTTP_200_OK)
 
 
 class GetAvailableHighlightDatesView(APIView):
@@ -1427,6 +1458,143 @@ class LinkUserToGameView(APIView):
 
         except Exception as e:
             logger.exception(f"Error linking user to game: {str(e)}")
+            return Response(
+                {"error": "Internal server error", "details": str(e)},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GenerateHighlightClipReelView(APIView):
+    """
+    API endpoint to generate highlight clip reel with specific tags and ratio.
+    
+    Request body:
+    - highlight_id: ID of the TraceHighlight (required)
+    - tags: List of overlay tags (e.g., ["with_player_title", "without_circle"]) (required)
+    - ratio: Video aspect ratio - "original" or "9:16" (required)
+    - is_default: Whether this should be the default video (optional, default: False)
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            # Validate input using serializer
+            serializer = GenerateHighlightClipReelSerializer(data=request.data)
+            
+            if not serializer.is_valid():
+                return Response(
+                    {"error": "Validation failed", "details": serializer.errors},
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Extract validated data
+            validated_data = serializer.validated_data
+            highlight_id = validated_data["highlight_id"]
+            tags = validated_data["tags"]
+            ratio = validated_data["ratio"]
+            is_default = validated_data.get("is_default", False)
+
+            # Get the TraceHighlight with related objects
+            try:
+                highlight = TraceHighlight.objects.select_related(
+                    "session",
+                    "player",
+                    "player__user",
+                ).get(id=highlight_id)
+            except TraceHighlight.DoesNotExist:
+                return Response(
+                    {"error": f"TraceHighlight with id {highlight_id} not found"},
+                    status=http_status.HTTP_404_NOT_FOUND,
+                )
+
+            session = highlight.session
+
+            # Check if user is the primary player of this highlight
+            if not highlight.player:
+                return Response(
+                    {
+                        "error": "Highlight has no primary player",
+                        "details": "This highlight is not associated with any player",
+                    },
+                    status=http_status.HTTP_404_NOT_FOUND,
+                )
+
+            if highlight.player.user != request.user:
+                return Response(
+                    {
+                        "error": "Unauthorized",
+                        "details": "You must be the primary player of this highlight to generate clip reels",
+                    },
+                    status=http_status.HTTP_404_NOT_FOUND,
+                )
+
+            # Check if a TraceClipReel already exists with the same highlight, tags, and ratio
+            # Sort tags for consistent comparison
+            sorted_tags = sorted(tags)
+            existing_clip_reels = TraceClipReel.objects.filter(
+                highlight=highlight, ratio=ratio
+            )  # Get all existing clip reels for this highlight and ratio
+
+            # Check if any existing clip reel has the same tags (sorted)
+            for clip_reel in existing_clip_reels:
+                existing_tags = sorted(clip_reel.tags) if clip_reel.tags else []
+                if existing_tags == sorted_tags:
+                    return Response(
+                        {
+                            "success": False,
+                            "message": "Clip reel already exists",
+                            "details": "A clip reel with the same tags and ratio already exists for this highlight",
+                            "data": {
+                                "clip_reel_id": clip_reel.id,
+                                "highlight_id": highlight.highlight_id,
+                                "tags": clip_reel.tags,
+                                "ratio": clip_reel.ratio,
+                                "generation_status": clip_reel.generation_status,
+                                "video_url": clip_reel.video_url if clip_reel.video_url else None,
+                            },
+                        },
+                        status=http_status.HTTP_200_OK,
+                    )
+
+            # Print the information (as requested for now)
+            print("=" * 80)
+            print("HIGHLIGHT CLIP REEL GENERATION REQUEST")
+            print("=" * 80)
+            print(f"Highlight ID: {highlight.id} (highlight_id: {highlight.highlight_id})")
+            print(f"Session ID: {session.id}")
+            print(f"Primary Player: {highlight.player.name} (User: {request.user})")
+            print(f"Tags: {tags}")
+            print(f"Ratio: {ratio}")
+            print(f"Is Default: {is_default}")
+            print(f"Event Type: {highlight.event_type}")
+            print(f"Start Offset: {highlight.start_offset}ms")
+            print(f"Duration: {highlight.duration}ms")
+            print("=" * 80)
+
+            # TODO: Here you would trigger the actual video generation
+            # For now, we just print the information as requested
+            # In the future, this would call a task like:
+            # generate_highlight_clip_reel_task.delay(highlight_id, tags, ratio, is_default)
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "Highlight generation request received",
+                    "data": {
+                        "highlight_id": highlight.id,
+                        "highlight_id_string": highlight.highlight_id,
+                        "session_id": session.id,
+                        "tags": tags,
+                        "ratio": ratio,
+                        "is_default": is_default,
+                    },
+                },
+                status=http_status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.exception(f"Error in GenerateHighlightClipReelView: {str(e)}")
             return Response(
                 {"error": "Internal server error", "details": str(e)},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,

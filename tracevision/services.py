@@ -3,7 +3,7 @@ import requests
 from datetime import datetime, timedelta
 from django.core.cache import cache
 from django.conf import settings
-from django.db import models
+from django.db.models import Q
 
 from tracevision.models import (
     TraceClipReel,
@@ -588,24 +588,47 @@ class TraceVisionAggregationService:
             return f"{h}:{m:02d}:{s:02d}.{int(ms % 1000):03d}"
         return f"{m}:{s:02d}.{int(ms % 1000):03d}"
 
-    def _get_video_variant_name(self, video_type, primary_player):
-        """Generate a descriptive name for the video variant"""
-        if video_type == "original":
-            return "Original View"
-        elif video_type == "with_overlay":
-            return "With Overlay"
-        elif video_type == "zoomed_player" and primary_player:
-            return f"Focused on {primary_player.name}"
-        elif video_type == "zoomed_team":
-            return "Team View"
-        elif video_type == "tactical_view":
-            return "Tactical View"
-        elif video_type == "slow_motion":
-            return "Slow Motion"
-        elif video_type == "multi_angle":
-            return "Multi-Angle"
+    def _get_video_variant_name(self, tags=None, ratio=None, primary_player=None):
+        """
+        Generate a descriptive name for the video variant based on tags and ratio.
+        
+        Args:
+            tags: List of tags (e.g., ["with_name_overlay", "with_circle_overlay"])
+            ratio: Video ratio (e.g., "original", "9:16", "1:1")
+            primary_player: Optional primary player object
+        
+        Returns:
+            str: Descriptive name for the video variant
+        """
+        if not tags:
+            tags = []
+        
+        # Build name parts based on tags
+        name_parts = []
+        
+        # Determine overlay type from tags
+        has_name_overlay = "with_name_overlay" in tags
+        has_circle_overlay = "with_circle_overlay" in tags
+        
+        if not has_name_overlay and not has_circle_overlay:
+            name_parts.append("Original")
         else:
-            return video_type.replace("_", " ").title()
+            overlay_parts = []
+            if has_name_overlay:
+                overlay_parts.append("Name")
+            if has_circle_overlay:
+                overlay_parts.append("Circle")
+            name_parts.append("With " + " & ".join(overlay_parts))
+        
+        # Add ratio information
+        if ratio:
+            if ratio == "9:16":
+                name_parts.append("Vertical")
+            elif ratio == "1:1":
+                name_parts.append("Square")
+            # "original" ratio doesn't need a suffix
+        
+        return " ".join(name_parts) if name_parts else "Video"
 
     def _compute_clips(self, session):
         # from .models import TraceClipReel, TraceHighlight
@@ -637,38 +660,110 @@ class TraceVisionAggregationService:
                 elif "tackle" in h.tags:
                     event_type = "tackle"
 
-            # Create clip reel entries for different video types
-            video_types_to_create = ["with_overlay"]
+            # Create 6 clip reel entries: 3 tag combinations × 2 ratios
+            # Tag combinations:
+            # 1. without_name_overlay, without_circle_overlay (default=True for both ratios)
+            # 2. with_name_overlay, without_circle_overlay (default=False)
+            # 3. with_name_overlay, with_circle_overlay (default=False)
+            clip_reel_configs = [
+                {
+                    "ratio": "original",
+                    "tags": ["without_name_overlay", "without_circle_overlay"],
+                    "is_default": True,
+                    "video_type": None,
+                },
+                {
+                    "ratio": "9:16",
+                    "tags": ["without_name_overlay", "without_circle_overlay"],
+                    "is_default": True,
+                    "video_type": None,
+                },
+                {
+                    "ratio": "original",
+                    "tags": ["with_name_overlay", "without_circle_overlay"],
+                    "is_default": False,
+                    "video_type": None,
+                },
+                {
+                    "ratio": "9:16",
+                    "tags": ["with_name_overlay", "without_circle_overlay"],
+                    "is_default": False,
+                    "video_type": None,
+                },
+                {
+                    "ratio": "original",
+                    "tags": ["with_name_overlay", "with_circle_overlay"],
+                    "is_default": False,
+                    "video_type": None,
+                },
+                {
+                    "ratio": "9:16",
+                    "tags": ["with_name_overlay", "with_circle_overlay"],
+                    "is_default": False,
+                    "video_type": None,
+                },
+            ]
 
-            for video_type in video_types_to_create:
-                clip_reel, _ = TraceClipReel.objects.update_or_create(
+            for config in clip_reel_configs:
+                sorted_tags = sorted(config["tags"])
+                
+                tag_filters = Q()
+                for tag in config["tags"]:
+                    tag_filters &= Q(tags__contains=tag)  # Check if array contains this string value
+                
+                clip_reel = TraceClipReel.objects.filter(
                     highlight=h,
-                    video_type=video_type,
-                    defaults={
-                        "session": session,
-                        "event_id": h.highlight_id,
-                        "event_type": event_type,
-                        "side": side,
-                        "start_ms": h.start_offset,
-                        "duration_ms": h.duration,
-                        "start_clock": self._ms_to_clock(h.start_offset),
-                        "end_clock": self._ms_to_clock(h.start_offset + h.duration),
-                        "primary_player": primary_player,
-                        "label": f"{event_type.title()} - {side.title()}",
-                        "description": f"{event_type.title()} event for {side} team",
-                        "tags": h.tags or [],
-                        "video_stream": h.video_stream or "",
-                        "generation_status": "pending",
-                        "video_variant_name": self._get_video_variant_name(
-                            video_type, primary_player
-                        ),
-                        "generation_metadata": {
-                            "highlight_id": h.highlight_id,
-                            "video_id": h.video_id,
-                            "involved_players_count": len(involved_players),
-                            "created_from_aggregation": True,
-                        },
+                    ratio=config["ratio"],
+                ).filter(tag_filters).first()
+                
+                # Verify exact tag match (order-independent) - ensures no extra tags
+                if clip_reel:
+                    existing_tags = sorted(clip_reel.tags) if clip_reel.tags else []
+                    if existing_tags == sorted_tags:
+                        # Clip reel with exact same config already exists, skip
+                        # Just ensure involved players are set and continue
+                        if involved_players:
+                            clip_reel.involved_players.set(involved_players)
+                        continue
+                
+                # Clip reel doesn't exist or tags don't match exactly, create new one
+                defaults = {
+                    "session": session,
+                    "event_id": h.highlight_id,
+                    "event_type": event_type,
+                    "side": side,
+                    "start_ms": h.start_offset,
+                    "duration_ms": h.duration,
+                    "start_clock": self._ms_to_clock(h.start_offset),
+                    "end_clock": self._ms_to_clock(h.start_offset + h.duration),
+                    "primary_player": primary_player,
+                    "label": f"{event_type.title()} - {side.title()}",
+                    "description": f"{event_type.title()} event for {side} team",
+                    "tags": config["tags"],
+                    "ratio": config["ratio"],
+                    "is_default": config["is_default"],
+                    "video_type": config["video_type"],
+                    "video_stream": h.video_stream or "",
+                    "generation_status": "pending",
+                    "video_variant_name": self._get_video_variant_name(
+                        tags=config["tags"],
+                        ratio=config["ratio"],
+                        primary_player=primary_player
+                    ) if hasattr(self, "_get_video_variant_name") else "",
+                    "generation_metadata": {
+                        "highlight_id": h.highlight_id,
+                        "video_id": h.video_id,
+                        "involved_players_count": len(involved_players),
+                        "created_from_aggregation": True,
+                        "tags": config["tags"],
+                        "ratio": config["ratio"],
                     },
+                }
+                
+                # Create new clip reel
+                clip_reel = TraceClipReel.objects.create(
+                    highlight=h,
+                    **defaults,
                 )
 
                 # Add all involved players to the many-to-many relationship

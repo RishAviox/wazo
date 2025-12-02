@@ -6,7 +6,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 
-from tracevision.models import TraceSession, TraceClipReel, TracePlayer
+from tracevision.models import TraceSession, TraceClipReel, TracePlayer, TraceHighlight
 from tracevision.utils import (
     get_hex_from_color_name,
     get_viewer_team,
@@ -306,10 +306,20 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         # Check if user belongs to a team
         request = self.context.get('request')
         if request and request.user:
-            if not request.user.team:
+            user = request.user
+            has_team = False
+            
+            # For coaches, check teams_coached relationship
+            if user.role == 'Coach':
+                has_team = user.teams_coached.exists()
+            else:
+                # For players and other roles, check team ForeignKey
+                has_team = user.team is not None
+            
+            if not has_team:
                 raise serializers.ValidationError({
                     "error": "Team required",
-                    "message": "Please update your profile and select your team to create a game session."
+                    "message": "Please select your team in your profile to continue."
                 })
 
         # Ensure team names are different
@@ -615,55 +625,55 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         api_key = settings.TRACEVISION_API_KEY
         graphql_url = settings.TRACEVISION_GRAPHQL_URL
 
-        # session_payload = {
-        #     "query": """
-        #         mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
-        #             createSession(token: $token, sessionData: $sessionData) {
-        #                 session { session_id }
-        #                 success
-        #                 error
-        #             }
-        #         }
-        #     """,
-        #     "variables": {
-        #         "token": {
-        #             "customer_id": customer_id,
-        #             "token": api_key
-        #         },
-        #         "sessionData": {
-        #             "type": "soccer_game",
-        #             "game_info": {
-        #                 "home_team": {
-        #                     "name": home_team_name,
-        #                     "score": home_score,
-        #                     "color": home_color
-        #                 },
-        #                 "away_team": {
-        #                     "name": away_team_name,
-        #                     "score": away_score,
-        #                     "color": away_color
-        #                 }
-        #             },
-        #             "capabilities": ["tracking", "highlights"]
-        #         }
-        #     }
-        # }
+        session_payload = {
+            "query": """
+                mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
+                    createSession(token: $token, sessionData: $sessionData) {
+                        session { session_id }
+                        success
+                        error
+                    }
+                }
+            """,
+            "variables": {
+                "token": {
+                    "customer_id": customer_id,
+                    "token": api_key
+                },
+                "sessionData": {
+                    "type": "soccer_game",
+                    "game_info": {
+                        "home_team": {
+                            "name": home_team_name,
+                            "score": home_score,
+                            "color": home_color
+                        },
+                        "away_team": {
+                            "name": away_team_name,
+                            "score": away_score,
+                            "color": away_color
+                        }
+                    },
+                    "capabilities": ["tracking", "highlights"]
+                }
+            }
+        }
 
-        # session_response = requests.post(
-        #     graphql_url,
-        #     headers={"Content-Type": "application/json"},
-        #     json=session_payload
-        # )
-        # session_json = session_response.json()
+        session_response = requests.post(
+            graphql_url,
+            headers={"Content-Type": "application/json"},
+            json=session_payload
+        )
+        session_json = session_response.json()
 
-        # if session_response.status_code != 200 or not session_json.get("data", {}).get("createSession", {}).get("success"):
-        #     raise ValidationError({
-        #         "error": "TraceVision session creation failed",
-        #         "details": session_json
-        #     })
+        if session_response.status_code != 200 or not session_json.get("data", {}).get("createSession", {}).get("success"):
+            raise ValidationError({
+                "error": "TraceVision session creation failed",
+                "details": session_json
+            })
 
-        # session_id = session_json["data"]["createSession"]["session"]["session_id"]
-        session_id = "1234567890"
+        session_id = session_json["data"]["createSession"]["session"]["session_id"]
+        # session_id = "1234567890"
 
         # Check for duplicate by video_url BEFORE processing video
         video_url_for_db = None
@@ -1025,168 +1035,189 @@ class MatchInfoSerializer(serializers.ModelSerializer):
         return None
 
 
-class HighlightClipReelSerializer(serializers.ModelSerializer):
-    """Comprehensive serializer for TraceClipReel highlights"""
+class ClipReelVideoSerializer(serializers.ModelSerializer):
+    """Serializer for clip reel video information in highlight response"""
+    url = serializers.URLField(source="video_url", read_only=True, allow_null=True)
+    ratio = serializers.CharField(read_only=True)
+    tags = serializers.JSONField(read_only=True)
+    status = serializers.CharField(source="generation_status", read_only=True)
+    default = serializers.BooleanField(source="is_default", read_only=True)
+    
+    class Meta:
+        model = TraceClipReel
+        fields = ["id", "url", "ratio", "tags", "status", "default"]
 
-    id = serializers.CharField(read_only=True)
+
+class HighlightClipReelSerializer(serializers.ModelSerializer):
+    """Serializer for TraceHighlight with related clip reel videos"""
+    
+    # Basic highlight fields
+    id = serializers.IntegerField(read_only=True)
+    highlight_id = serializers.CharField(read_only=True)
+    event_type = serializers.CharField(read_only=True)
+    event_name = serializers.SerializerMethodField()
+    side = serializers.SerializerMethodField()
+    start_ms = serializers.IntegerField(source="start_offset", read_only=True)
+    duration_ms = serializers.IntegerField(source="duration", read_only=True)
+    match_time = serializers.CharField(read_only=True, allow_null=True)
+    half = serializers.IntegerField(read_only=True, allow_null=True)
+    
+    # Videos list from related clip reels
+    videos = serializers.SerializerMethodField()
+    
+    # Session info (minimal)
     age_group = serializers.CharField(source="session.age_group", read_only=True)
     match_date = serializers.DateField(
         source="session.match_date", format="%Y-%m-%d", read_only=True
     )
-    event_name = serializers.SerializerMethodField()
-    start_clock = serializers.SerializerMethodField()
-    end_clock = serializers.SerializerMethodField()
-    primary_player = PlayerDetailSerializer(read_only=True)
-    involved_players = PlayerDetailSerializer(many=True, read_only=True)
-    session = serializers.CharField(source="session.id", read_only=True)
-    highlight = serializers.CharField(
-        source="highlight.id", read_only=True, allow_null=True
-    )
-    match_start_time = serializers.CharField(
-        source="session.match_start_time", read_only=True
-    )
-    first_half_end_time = serializers.CharField(
-        source="session.first_half_end_time", read_only=True
-    )
-    second_half_start_time = serializers.CharField(
-        source="session.second_half_start_time", read_only=True
-    )
-    match_end_time = serializers.CharField(
-        source="session.match_end_time", read_only=True
-    )
-    basic_game_stats = serializers.SerializerMethodField()
-    half = serializers.IntegerField(
-        source="highlight.half", read_only=True, allow_null=True
-    )
-    match_time = serializers.CharField(
-        source="highlight.match_time", read_only=True, allow_null=True
-    )
-    generation_started_at = serializers.DateTimeField(
-        format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True, allow_null=True
-    )
-    generation_completed_at = serializers.DateTimeField(
-        format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True, allow_null=True
-    )
-    created_at = serializers.DateTimeField(
-        format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True, allow_null=True
-    )
-    updated_at = serializers.DateTimeField(
-        format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True, allow_null=True
-    )
-    generation_errors = serializers.JSONField(default=list)
-    generation_metadata = serializers.JSONField(default=dict)
-    description = serializers.SerializerMethodField()
-    tags = serializers.SerializerMethodField()
-    # Override side field to apply transformation
-    side = serializers.SerializerMethodField()
+    
+    # Commented out fields not needed by frontend
+    # start_clock = serializers.SerializerMethodField()
+    # end_clock = serializers.SerializerMethodField()
+    # primary_player = PlayerDetailSerializer(read_only=True)
+    # involved_players = PlayerDetailSerializer(many=True, read_only=True)
+    # session = serializers.CharField(source="session.id", read_only=True)
+    # match_start_time = serializers.CharField(
+    #     source="session.match_start_time", read_only=True
+    # )
+    # first_half_end_time = serializers.CharField(
+    #     source="session.first_half_end_time", read_only=True
+    # )
+    # second_half_start_time = serializers.CharField(
+    #     source="session.second_half_start_time", read_only=True
+    # )
+    # match_end_time = serializers.CharField(
+    #     source="session.match_end_time", read_only=True
+    # )
+    # basic_game_stats = serializers.SerializerMethodField()
+    # generation_started_at = serializers.DateTimeField(
+    #     format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True, allow_null=True
+    # )
+    # generation_completed_at = serializers.DateTimeField(
+    #     format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True, allow_null=True
+    # )
+    # created_at = serializers.DateTimeField(
+    #     format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True, allow_null=True
+    # )
+    # updated_at = serializers.DateTimeField(
+    #     format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True, allow_null=True
+    # )
+    # generation_errors = serializers.JSONField(default=list)
+    # generation_metadata = serializers.JSONField(default=dict)
+    # description = serializers.SerializerMethodField()
+    # tags = serializers.SerializerMethodField()
+    # video_type = serializers.CharField(read_only=True)
+    # video_variant_name = serializers.CharField(read_only=True)
+    # video_url = serializers.URLField(read_only=True)
+    # video_thumbnail_url = serializers.URLField(read_only=True)
+    # video_size_mb = serializers.FloatField(read_only=True)
+    # video_duration_seconds = serializers.FloatField(read_only=True)
+    # resolution = serializers.CharField(read_only=True)
+    # frame_rate = serializers.IntegerField(read_only=True)
+    # bitrate = serializers.IntegerField(read_only=True)
+    # label = serializers.CharField(read_only=True)
+    # video_stream = serializers.URLField(read_only=True)
 
     class Meta:
-        model = TraceClipReel
+        model = TraceHighlight
         fields = [
             "id",
-            "age_group",
-            "match_date",
-            "event_id",
-            "video_type",
-            "video_variant_name",
+            "highlight_id",
             "event_type",
             "event_name",
             "side",
             "start_ms",
             "duration_ms",
-            "start_clock",
-            "end_clock",
-            "generation_status",
-            "video_url",
-            "video_thumbnail_url",
-            "video_size_mb",
-            "video_duration_seconds",
-            "generation_started_at",
-            "generation_completed_at",
-            "generation_errors",
-            "generation_metadata",
-            "resolution",
-            "frame_rate",
-            "bitrate",
-            "label",
-            "description",
-            "tags",
-            "video_stream",
-            "created_at",
-            "updated_at",
-            "session",
-            "highlight",
-            "primary_player",
-            "involved_players",
-            "match_start_time",
-            "first_half_end_time",
-            "second_half_start_time",
-            "match_end_time",
-            "basic_game_stats",
-            "half",
             "match_time",
+            "half",
+            "videos",
+            "age_group",
+            "match_date",
         ]
 
     def get_event_name(self, obj):
-        """Get event name from highlight"""
-        if obj.highlight:
-            return obj.highlight.get_event_description()
-        return obj.event_type.capitalize() if obj.event_type else None
-
-    def get_start_clock(self, obj):
-        """Convert start_ms to clock format"""
-        from datetime import timedelta
-
-        start_td = timedelta(milliseconds=obj.start_ms)
-        return str(start_td)
-
-    def get_end_clock(self, obj):
-        """Convert end_ms to clock format"""
-        from datetime import timedelta
-
-        end_td = timedelta(milliseconds=obj.start_ms + obj.duration_ms)
-        return str(end_td)
-
-    def get_basic_game_stats(self, obj):
-        """Get basic game stats URL"""
-        if obj.session and obj.session.basic_game_stats:
-            return obj.session.basic_game_stats.url
-        return None
-
-    def get_description(self, obj):
-        """Get description or generate default"""
-        if obj.description:
-            return obj.description
-        return f"{obj.event_type.capitalize()} event for {obj.side} team"
-
-    def get_tags(self, obj):
-        """Get tags or generate default"""
-        if obj.tags:
-            return obj.tags
-        # Use transformed side for tags
-        side = self.get_side(obj)
-        return [side, obj.event_type] if side and obj.event_type else []
-
+        """Generate event name from event type and match time"""
+        time_str = obj.match_time or "Unknown time"
+        return f"{obj.get_event_type_display()} at {time_str}"
+    
     def get_side(self, obj):
-        """Transform side based on viewer perspective"""
-        original_side = obj.side
-        if not original_side:
-            return original_side
+        """Get side from highlight tags or player team"""
+        # Try to get from tags first
+        if obj.tags and isinstance(obj.tags, list):
+            for tag in obj.tags:
+                if tag in ["home", "away"]:
+                    side = tag
+                    # Apply perspective transformation
+                    request = self.context.get("request")
+                    if request and request.user:
+                        viewer_team = get_viewer_team(request.user)
+                        if viewer_team:
+                            viewer_perspective = determine_viewer_perspective(
+                                viewer_team, obj.session
+                            )
+                            if viewer_perspective:
+                                side = transform_side_by_perspective(side, viewer_perspective)
+                    return side
+        
+        # Fallback to player's team
+        if obj.player and obj.player.team:
+            session = obj.session
+            side = None
+            if session.home_team and session.home_team.id == obj.player.team.id:
+                side = "home"
+            elif session.away_team and session.away_team.id == obj.player.team.id:
+                side = "away"
+            
+            # Apply perspective transformation
+            if side:
+                request = self.context.get("request")
+                if request and request.user:
+                    viewer_team = get_viewer_team(request.user)
+                    if viewer_team:
+                        viewer_perspective = determine_viewer_perspective(
+                            viewer_team, session
+                        )
+                        if viewer_perspective:
+                            side = transform_side_by_perspective(side, viewer_perspective)
+                return side
+        
+        return None
+    
+    def get_videos(self, obj):
+        """Get all related clip reels as videos list"""
+        # Order: default videos first (is_default=True), then by ratio, then by id
+        clip_reels = obj.clip_reels.all().order_by('-is_default', 'ratio', 'id')
+        return ClipReelVideoSerializer(clip_reels, many=True).data
 
-        # Get viewer perspective from context
-        request = self.context.get("request")
-        if request and request.user:
-            viewer_team = get_viewer_team(request.user)
-            if viewer_team:
-                viewer_perspective = determine_viewer_perspective(
-                    viewer_team, obj.session
-                )
-                if viewer_perspective:
-                    return transform_side_by_perspective(
-                        original_side, viewer_perspective
-                    )
+    # Commented out methods not needed by frontend
+    # def get_start_clock(self, obj):
+    #     """Convert start_ms to clock format"""
+    #     from datetime import timedelta
+    #     start_td = timedelta(milliseconds=obj.start_offset)
+    #     return str(start_td)
 
-        return original_side
+    # def get_end_clock(self, obj):
+    #     """Convert end_ms to clock format"""
+    #     from datetime import timedelta
+    #     end_td = timedelta(milliseconds=obj.start_offset + obj.duration)
+    #     return str(end_td)
+
+    # def get_basic_game_stats(self, obj):
+    #     """Get basic game stats URL"""
+    #     if obj.session and obj.session.basic_game_stats:
+    #         return obj.session.basic_game_stats.url
+    #     return None
+
+    # def get_description(self, obj):
+    #     """Get description or generate default"""
+    #     return f"{obj.get_event_type_display()} event"
+
+    # def get_tags(self, obj):
+    #     """Get tags or generate default"""
+    #     if obj.tags:
+    #         return obj.tags
+    #     side = self.get_side(obj)
+    #     return [side, obj.event_type] if side and obj.event_type else []
 
 
 class PossessionTeamMetricsSerializer(serializers.Serializer):
@@ -1276,3 +1307,62 @@ class PossessionPlayerMetricsSerializer(serializers.Serializer):
             "team_name": team.name if team else None,
             "side": side,
         }
+
+
+class GenerateHighlightClipReelSerializer(serializers.Serializer):
+    """
+    Serializer for highlight clip reel generation request.
+    Validates input and ensures only expected fields are accepted.
+    """
+
+    highlight_id = serializers.IntegerField(
+        required=True,
+        help_text="ID of the TraceHighlight to generate clip reel for",
+    )
+    tags = serializers.ListField(
+        child=serializers.ChoiceField(
+            choices=[
+                "with_player_title",
+                "without_player_title",
+                "with_circle",
+                "without_circle",
+            ]
+        ),
+        required=True,
+        min_length=1,
+        help_text="List of overlay tags (e.g., ['with_player_title', 'without_circle'])",
+    )
+    ratio = serializers.ChoiceField(
+        choices=[("original", "Original (Horizontal)"), ("9:16", "Vertical (9:16)")],
+        required=True,
+        help_text="Video aspect ratio - 'original' or '9:16'",
+    )
+    is_default = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text="Whether this should be the default video variation",
+    )
+
+    def validate_tags(self, value):
+        """Ensure tags list is not empty and contains valid values."""
+        if not value:
+            raise serializers.ValidationError("Tags list cannot be empty")
+        
+        # Check for duplicates
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError("Tags list contains duplicate values")
+        
+        return value
+
+    def validate(self, attrs):
+        """Validate the entire data and reject any extra fields."""
+        # Get the original data to check for extra fields
+        if hasattr(self, 'initial_data'):
+            allowed_fields = {'highlight_id', 'tags', 'ratio', 'is_default'}
+            extra_fields = set(self.initial_data.keys()) - allowed_fields
+            if extra_fields:
+                raise serializers.ValidationError(
+                    f"Unexpected fields: {', '.join(sorted(extra_fields))}. "
+                    f"Allowed fields are: {', '.join(sorted(allowed_fields))}"
+                )
+        return attrs

@@ -32,6 +32,7 @@ from tracevision.utils import (
     determine_game_half_from_highlight_offset,
     download_excel_file_from_storage,
     parse_time_to_seconds,
+    extract_video_segment_from_azure,
 )
 
 logger = logging.getLogger(__name__)
@@ -859,6 +860,24 @@ def parse_and_store_session_data(session, result_data):
                 if existing_player:
                     # Use existing player from any session
                     trace_player = existing_player
+
+                    # Update player name only if it starts with "Player" (default/generated name)
+                    # This ensures we don't overwrite manually set names
+                    current_name = existing_player.name or ""
+                    if current_name.startswith("Player"):
+                        # Get name from WajoUser if player is mapped, otherwise leave empty
+                        if existing_player.user and existing_player.user.name:
+                            updated_name = existing_player.user.name
+                        else:
+                            updated_name = ""
+
+                        # Update the name if it's different
+                        if current_name != updated_name:
+                            existing_player.name = updated_name
+                            existing_player.save(update_fields=["name"])
+                            logger.info(
+                                f"Updated player {object_id} name from '{current_name}' to '{updated_name}' (mapped: {existing_player.user is not None})"
+                            )
                     logger.info(
                         f"Using existing player {object_id} (jersey: {jersey_number}, team: {team.name}) from session {existing_player.session.session_id}"
                     )
@@ -1175,11 +1194,6 @@ def process_trace_sessions_task(trace_session_id=None):
                             logger.info(
                                 f"Recovery processing: Session {session.session_id} was processed but has no objects ({objects_count}) or highlights ({highlights_count}). Reprocessing..."
                             )
-                        else:
-                            should_process = False
-                            logger.info(
-                                f"Skipping processing: Session {session.session_id} already processed with {objects_count} objects and {highlights_count} highlights"
-                            )
 
                     if should_process:
                         status_description = (
@@ -1339,7 +1353,7 @@ def compute_aggregates_task(session_id):
 
         # Trigger overlay highlights generation for clip reels
         try:
-            generate_overlay_highlights_task.delay(session_id)
+            # generate_overlay_highlights_task.delay(session_id)
             logger.info(
                 f"Queued overlay highlights generation for session {session_id}"
             )
@@ -1697,14 +1711,28 @@ def extract_player_events(player: dict, session, source: str) -> list:
 
 
 @shared_task
-def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_size=5):
+def generate_overlay_highlights_task(
+    session_id=None,
+    clip_reel_ids=None,
+    video_types=None,
+    ratios=None,
+    is_default=None,
+    tags=None,
+    batch_size=5,
+):
     """
-    Generate overlay highlight videos for TraceClipReel objects with video_type='with_overlay' and status='pending'.
+    Generate overlay highlight videos for TraceClipReel objects based on filters.
     Processes clip reels session-wise to avoid redundant video downloads.
 
     Args:
         session_id (str, optional): Process specific session
         clip_reel_ids (list, optional): Process specific clip reels
+        video_types (list, optional): List of video types to process (deprecated, kept for backward compatibility)
+        ratios (list, optional): List of ratios to process (default: ["original", "9:16"])
+            Valid values: "original" (Horizontal), "9:16" (Vertical)
+        is_default (bool, optional): Filter by is_default flag (default: True - only process default clip reels)
+        tags (list, optional): Filter by tags. Each tag in list must be present in clip_reel.tags
+            Example: ["with_name_overlay", "with_circle_overlay"]
         batch_size (int): Number of clips to process in parallel (default: 5)
 
     Returns:
@@ -1715,37 +1743,77 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
             TrackingDataCache,
             create_clip_reel_overlay_video,
             upload_video_to_storage,
-            download_video_from_storage,
         )
         from .models import TraceClipReel, TraceSession
-        from tracevision.utils import cleanup_temp_files
-        from django.db.models import Prefetch
+        from django.db.models import Prefetch, Q
+
+        # Set default is_default filter (True by default - only process default clip reels)
+        if is_default is None:
+            is_default = True
+
+        # Set default ratios if not provided
+        if ratios is None:
+            ratios = ["original", "9:16"]
 
         # Build base filter for clip reels
         clip_reel_filter = {
-            "video_type": "with_overlay",
             "generation_status__in": ["pending", "failed"],
-            # 'primary_player__user__isnull': False,
         }
+
+        # Add is_default filter
+        clip_reel_filter["is_default"] = is_default
+
+        # Add ratio filter
+        clip_reel_filter["ratio__in"] = ratios
+
+        # Add video_type filter if provided (for backward compatibility)
+        # If None, don't filter by video_type (allows None values)
+        if video_types is not None:
+            clip_reel_filter["video_type__in"] = video_types
+
+        # Add tag filters if provided
+        tag_filters = None
+        if tags:
+            tag_filters = Q()
+            for tag in tags:
+                tag_filters &= Q(tags__contains=tag)
+
+        logger.info(
+            f"Filtering clip reels: is_default={is_default}, ratios={ratios}, "
+            f"video_types={video_types}, tags={tags}"
+        )
 
         if session_id:
             clip_reel_filter["session__session_id"] = session_id
         if clip_reel_ids:
             clip_reel_filter["id__in"] = clip_reel_ids
 
+        # Build queryset for clip reels
+        clip_reel_queryset = TraceClipReel.objects.filter(**clip_reel_filter)
+
+        # Apply tag filters if provided
+        if tag_filters:
+            clip_reel_queryset = clip_reel_queryset.filter(tag_filters)
+
+        clip_reel_queryset = clip_reel_queryset.select_related(
+            "highlight"
+        ).prefetch_related("involved_players")
+
         # Get sessions with prefetched clip reels using database-level grouping
+        session_filter = {
+            "clip_reels__generation_status__in": ["pending", "failed"],
+            "clip_reels__is_default": is_default,
+            "clip_reels__ratio__in": ratios,
+        }
+        if video_types is not None:
+            session_filter["clip_reels__video_type__in"] = video_types
+
         sessions = (
-            TraceSession.objects.filter(
-                clip_reels__video_type="with_overlay",
-                clip_reels__generation_status__in=["pending", "failed"],
-                # clip_reels__primary_player__user__isnull=False,
-            )
+            TraceSession.objects.filter(**session_filter)
             .prefetch_related(
                 Prefetch(
                     "clip_reels",
-                    queryset=TraceClipReel.objects.filter(**clip_reel_filter)
-                    .select_related("highlight")
-                    .prefetch_related("involved_players"),
+                    queryset=clip_reel_queryset,
                     to_attr="pending_clip_reels",
                 )
             )
@@ -1796,23 +1864,11 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
                 f"Processing session {session_key} with {len(session_clip_reels)} clip reels"
             )
 
-            # Download video once per session and cache it
-            session_video_path = None
             try:
                 if session.blob_video_url:
-                    logger.info(
-                        f"Downloading video for session {session_key} from Azure Blob: {session.blob_video_url}"
-                    )
-                    session_video_path = download_video_from_storage(
-                        session.blob_video_url
-                    )
-                    temp_files_to_cleanup.append(session_video_path)
-                elif session.video_url:
-                    logger.info(
-                        f"Downloading video for session {session_key} from URL: {session.video_url}"
-                    )
-                    session_video_path = download_video_from_storage(session.video_url)
-                    temp_files_to_cleanup.append(session_video_path)
+                    logger.info(f"Session video available: {session.blob_video_url}")
+                    # We'll extract segments per clip reel instead of downloading full video
+                    session_video_url = session.blob_video_url
                 else:
                     logger.error(f"No video URL available for session {session_key}")
                     # Mark all clip reels for this session as failed
@@ -1857,11 +1913,53 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
                         # Mark as generating
                         clip_reel.mark_generation_started()
 
-                        # Generate overlay video using the cached session video
+                        # Extract video segment for this clip ree
+
+                        segment_video_path, time_offset_ms = (
+                            extract_video_segment_from_azure(
+                                blob_url=session_video_url,
+                                start_time_ms=clip_reel.start_ms,
+                                duration_ms=clip_reel.duration_ms,
+                            )
+                        )
+                        temp_files_to_cleanup.append(segment_video_path)
+
+                        logger.info(
+                            f"Extracted segment: {segment_video_path}, "
+                            f"time offset: {time_offset_ms}ms"
+                        )
+
+                        # Determine overlay settings based on tags
+                        ratio = clip_reel.ratio
+                        tags = clip_reel.tags or []
+
+                        # Determine overlay settings from tags
+                        show_player_name = "with_name_overlay" in tags
+                        with_circle = "with_circle_overlay" in tags
+                        add_overlay = show_player_name or with_circle
+
+                        logger.info(
+                            f"Clip reel {clip_reel.id} (event_id={clip_reel.event_id}): "
+                            f"ratio={ratio}, tags={tags}, "
+                            f"show_player_name={show_player_name}, with_circle={with_circle}, add_overlay={add_overlay}"
+                        )
+
+                        # Generate overlay video using the segment video
+                        # Pass time_offset_ms to normalize tracking data
+                        # Aspect ratio is determined inside create_clip_reel_overlay_video from clip_reel.ratio
                         temp_video_path = create_clip_reel_overlay_video(
-                            clip_reel, tracking_cache, session_video_path
+                            clip_reel,
+                            tracking_cache,
+                            session_video_path=segment_video_path,
+                            time_offset_ms=time_offset_ms,
+                            add_overlay=add_overlay,
                         )
                         temp_files_to_cleanup.append(temp_video_path)
+
+                        # Clean up segment video after processing
+                        if os.path.exists(segment_video_path):
+                            os.unlink(segment_video_path)
+                            temp_files_to_cleanup.remove(segment_video_path)
 
                         # Upload to storage
                         video_blob_url = upload_video_to_storage(
@@ -1913,11 +2011,7 @@ def generate_overlay_highlights_task(session_id=None, clip_reel_ids=None, batch_
                             }
                         )
 
-                # Clean up session video after processing all clip reels
-                if session_video_path and os.path.exists(session_video_path):
-                    os.unlink(session_video_path)
-                    temp_files_to_cleanup.remove(session_video_path)
-                    logger.info(f"Cleaned up session video for {session_key}")
+                # No need to clean up session video as we're using segments per clip reel
 
                 total_processed += session_processed
                 total_failed += session_failed

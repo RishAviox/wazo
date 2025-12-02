@@ -15,13 +15,13 @@ class Command(BaseCommand):
             # Test specific session
             # result = process_trace_sessions_task.delay(int(options['session_id']))
             # result = generate_overlay_highlights_task.delay(options['session_id'])
-            result = download_video_and_save_to_azure_blob.delay(options['session_id'])
+            # result = download_video_and_save_to_azure_blob.delay(options['session_id'])
             # 7a5e1ec970ba40fb87f67398c98a6cb4
 
             # result = process_excel_match_highlights_task.delay(options['session_id'])
             # result = compute_aggregates_task.delay(options['session_id'])
             # result = calculate_card_metrics_task.delay(options['session_id'])
-            # result = generate_overlay_highlights_task.delay(int((options['session_id'])), clip_reel_ids=[478,477, 1, 2])
+            result = generate_overlay_highlights_task.delay(int((options['session_id'])))
 
 
             # Process the excel file:

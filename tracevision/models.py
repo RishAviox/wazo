@@ -890,8 +890,9 @@ class TraceClipReel(models.Model):
     video_type = models.CharField(
         max_length=20,
         choices=VIDEO_TYPE_CHOICES,
-        default="original",
-        help_text="Type of video variation",
+        blank=True,
+        null=True,
+        help_text="Type of video variation (deprecated - use tags and ratio instead)",
     )
     video_variant_name = models.CharField(
         max_length=100,
@@ -955,10 +956,10 @@ class TraceClipReel(models.Model):
         null=True, blank=True, help_text="When video generation completed"
     )
     generation_errors = models.JSONField(
-        default=list, help_text="Any errors during generation"
+        default=list, null=True, blank=True, help_text="Any errors during generation"
     )
     generation_metadata = models.JSONField(
-        default=dict, help_text="Additional generation parameters and settings"
+        default=dict, null=True, blank=True, help_text="Additional generation parameters and settings"
     )
 
     # Video quality and settings
@@ -968,6 +969,18 @@ class TraceClipReel(models.Model):
     frame_rate = models.IntegerField(default=30, help_text="Video frame rate (FPS)")
     bitrate = models.IntegerField(default=0, help_text="Video bitrate (kbps)")
 
+    # Video aspect ratio
+    RATIO_CHOICES = [
+        ("original", "Original (Horizontal)"),
+        ("9:16", "Vertical (9:16)"),
+    ]
+    ratio = models.CharField(
+        max_length=20,
+        choices=RATIO_CHOICES,
+        default="original",
+        help_text="Video aspect ratio (original/horizontal or 9:16/vertical)",
+    )
+
     # Content and tags
     label = models.CharField(
         max_length=100, blank=True, help_text="Display label for the clip"
@@ -976,7 +989,12 @@ class TraceClipReel(models.Model):
         blank=True, help_text="Detailed description of the clip"
     )
     tags = models.JSONField(
-        default=list, help_text="Tags for categorization and filtering"
+        default=list,
+        help_text="Tags for overlay options: with_player_title, without_player_title, with_circle, without_circle",
+    )
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Whether this is the default video variation for the highlight",
     )
 
     # Legacy field for backward compatibility

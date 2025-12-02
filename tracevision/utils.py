@@ -1,7 +1,24 @@
+import re
 import os
-import webcolors
+import uuid
 import logging
-from typing import Dict, Tuple
+import tempfile
+import webcolors
+import subprocess
+from azure.storage.blob import (
+    BlobServiceClient,
+    generate_blob_sas,
+    BlobSasPermissions,
+)
+from django.conf import settings
+from django.utils import timezone
+from urllib.parse import urlparse, parse_qs
+from datetime import datetime, timedelta
+from typing import Dict, Tuple, Optional
+from django.core.files.storage import default_storage
+
+from cards.models import GPSAthleticSkills, GPSFootballAbilities
+
 
 logger = logging.getLogger(__name__)
 
@@ -217,9 +234,6 @@ def save_metrics_to_cards(
         game: Game instance (optional)
     """
     try:
-        from cards.models import GPSAthleticSkills, GPSFootballAbilities
-        from django.utils import timezone
-
         # Save GPS Athletic Skills
         gps_athletic, created = GPSAthleticSkills.objects.update_or_create(
             user=user,
@@ -259,12 +273,45 @@ class TraceVisionStoragePaths:
 
     @staticmethod
     def get_highlight_video_path(
-        session_id: str, highlight_id: str, video_type: str
+        session_id: str,
+        highlight_id: str,
+        video_type: str,
+        event_id: str = None,
+        ratio: str = None,
     ) -> str:
-        """Get path for highlight video files."""
-        return (
-            f"sessions/{session_id}/videos/highlights/{highlight_id}_{video_type}.mp4"
-        )
+        """
+        Get path for highlight video files.
+
+        Args:
+            session_id: Session ID
+            highlight_id: Highlight ID
+            video_type: Video type (e.g., "original", "with_overlay")
+            event_id: Event ID (optional, for unique naming)
+            ratio: Video ratio (e.g., "original", "9:16") (optional, for unique naming)
+
+        Returns:
+            str: Blob path in format: sessions/{session_id}/videos/highlights/{event_id}_{video_type}_{ratio}.mp4
+        """
+        # Build filename components
+        filename_parts = []
+
+        if event_id:
+            filename_parts.append(event_id)
+        else:
+            filename_parts.append(
+                highlight_id
+            )  # Fallback to highlight_id if event_id not provided
+
+        filename_parts.append(video_type)
+
+        if ratio:
+            # Replace ":" with "_" for filename compatibility (e.g., "9:16" -> "9_16")
+            ratio_safe = ratio.replace(":", "_")
+            filename_parts.append(ratio_safe)
+
+        filename = "_".join(filename_parts) + ".mp4"
+
+        return f"sessions/{session_id}/videos/highlights/{filename}"
 
     @staticmethod
     def get_tracking_data_path(session_id: str, object_id: str) -> str:
@@ -858,11 +905,6 @@ def download_excel_file_from_storage(blob_url: str) -> str:
     """
     temp_file_path = None
     try:
-        from django.core.files.storage import default_storage
-        from django.conf import settings
-        import tempfile
-        import os
-
         # Check if we're in development mode (local file storage)
         if settings.DEBUG and not hasattr(settings, "AZURE_CUSTOM_DOMAIN"):
             logger.info(
@@ -927,4 +969,297 @@ def download_excel_file_from_storage(blob_url: str) -> str:
                 )
 
         logger.error(f"Error downloading Excel file from {blob_url}: {e}")
+        raise
+
+
+def get_or_create_azure_sas_token(blob_url: str, validity_days: int = 1) -> str:
+    """
+    Get or create Azure SAS token for a blob URL.
+    Checks if existing token is valid, otherwise generates a new one.
+
+    Args:
+        blob_url: Azure blob URL (with or without existing SAS token)
+        validity_days: Number of days the SAS token should be valid (default: 3)
+
+    Returns:
+        str: Blob URL with valid SAS token
+    """
+    try:
+        parsed_url = urlparse(blob_url)
+        query_params = parse_qs(parsed_url.query)
+
+        # Check if SAS token exists and is still valid
+        if "sig" in query_params and "se" in query_params:
+            try:
+                expiry_str = query_params["se"][0]
+                expiry_time = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
+                # Check if token expires in less than 1 day (regenerate if close to expiry)
+                if expiry_time > datetime.now(expiry_time.tzinfo) + timedelta(days=1):
+                    logger.debug(f"Existing SAS token is valid until {expiry_time}")
+                    return blob_url
+                else:
+                    logger.info(
+                        f"Existing SAS token expires soon ({expiry_time}), regenerating"
+                    )
+            except (ValueError, KeyError) as e:
+                logger.warning(
+                    f"Could not parse existing SAS token expiry: {e}, regenerating"
+                )
+
+        # Generate new SAS token
+        logger.info(
+            f"Generating new SAS token for blob URL (validity: {validity_days} days)"
+        )
+
+        # Extract blob path from URL
+        url_parts = blob_url.split("/")
+        container_index = None
+        for i, part in enumerate(url_parts):
+            if part.endswith(".blob.core.windows.net"):
+                container_index = i + 1
+                break
+
+        if not container_index or container_index >= len(url_parts):
+            raise ValueError(
+                f"Could not extract container and blob path from URL: {blob_url}"
+            )
+
+        container_name = url_parts[container_index]
+        blob_path = "/".join(url_parts[container_index + 1 :])
+        # Remove query parameters if any
+        if "?" in blob_path:
+            blob_path = blob_path.split("?")[0]
+
+        # Get Azure storage credentials from Django settings
+        connection_string = getattr(settings, "AZURE_CONNECTION_STRING", None)
+        account_name = getattr(settings, "AZURE_ACCOUNT_NAME", None)
+        account_key = getattr(settings, "AZURE_ACCOUNT_KEY", None)
+
+        # Extract from connection string if available
+        if connection_string and (not account_name or not account_key):
+            match = re.search(r"AccountName=([^;]+)", connection_string)
+            if match:
+                account_name = match.group(1)
+            match = re.search(r"AccountKey=([^;]+)", connection_string)
+            if match:
+                account_key = match.group(1)
+
+        if not account_name or not account_key:
+            raise ValueError(
+                "Azure account name and key not configured. "
+                "Set AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY in Django settings"
+            )
+
+        # Get blob client for URL construction
+        if connection_string:
+            blob_service_client = BlobServiceClient.from_connection_string(
+                connection_string
+            )
+        else:
+            account_url = f"https://{account_name}.blob.core.windows.net"
+            blob_service_client = BlobServiceClient(
+                account_url=account_url, credential=account_key
+            )
+
+        blob_client = blob_service_client.get_blob_client(
+            container=container_name, blob=blob_path
+        )
+
+        # Set expiry time
+        expiry_time = datetime.utcnow() + timedelta(days=validity_days)
+
+        # Generate SAS token with read permissions
+        sas_token = generate_blob_sas(
+            account_name=account_name,
+            container_name=container_name,
+            blob_name=blob_path,
+            account_key=account_key,
+            permission=BlobSasPermissions(read=True),
+            expiry=expiry_time,
+        )
+
+        # Construct URL with SAS token
+        blob_url_with_sas = f"{blob_client.url}?{sas_token}"
+
+        logger.info(f"Generated SAS token valid until {expiry_time}")
+        return blob_url_with_sas
+
+    except Exception as e:
+        logger.error(f"Error generating SAS token: {e}")
+        # Return original URL if SAS token generation fails
+        return blob_url
+
+
+def get_video_fps(blob_url: str) -> float:
+    """
+    Get the frame rate of a video from Azure blob URL.
+
+    Args:
+        blob_url: Azure blob URL (will add SAS token if needed)
+
+    Returns:
+        float: Frame rate (FPS), or 30.0 as default if detection fails
+    """
+    try:
+        import subprocess
+
+        blob_url_with_sas = get_or_create_azure_sas_token(blob_url)
+
+        # Use ffprobe to get video FPS
+        cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=r_frame_rate",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            blob_url_with_sas,
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0 and result.stdout.strip():
+            # Parse frame rate (format: "30/1" or "29.97/1")
+            fps_str = result.stdout.strip()
+            if "/" in fps_str:
+                num, den = map(float, fps_str.split("/"))
+                fps = num / den if den > 0 else 30.0
+            else:
+                fps = float(fps_str)
+            logger.info(f"Detected video FPS: {fps:.2f}")
+            return fps
+    except Exception as e:
+        logger.warning(f"Could not detect FPS: {e}, using default 30.0")
+
+    return 30.0  # Default FPS
+
+
+def extract_video_segment_from_azure(
+    blob_url: str,
+    start_time_ms: int,
+    duration_ms: int,
+    output_path: Optional[str] = None,
+    temp_dir: Optional[str] = None,
+    reencode_for_cfr: bool = True,
+) -> Tuple[str, int]:
+    """
+    Extract a video segment from Azure Blob Storage using ffmpeg.
+    The segment video will start at 00:00, so tracking data needs to be normalized.
+
+    Args:
+        blob_url: Azure blob URL (will add SAS token if needed)
+        start_time_ms: Start time in milliseconds
+        duration_ms: Duration in milliseconds
+        output_path: Optional output file path
+        temp_dir: Optional temporary directory
+        reencode_for_cfr: If True, re-encode to ensure constant frame rate (prevents timing drift)
+
+    Returns:
+        Tuple[str, int]: (segment_video_path, time_offset_ms)
+            - segment_video_path: Path to extracted segment video
+            - time_offset_ms: Offset to normalize tracking data (start_time_ms)
+    """
+    try:
+        if temp_dir is None:
+            temp_dir = tempfile.gettempdir()
+
+        # Get or create SAS token for streamable access
+        blob_url_with_sas = get_or_create_azure_sas_token(blob_url)
+
+        # Generate output path if not provided
+        if output_path is None:
+            output_filename = f"segment_{uuid.uuid4().hex}.mp4"
+            output_path = os.path.join(temp_dir, output_filename)
+
+        # Convert milliseconds to seconds for ffmpeg
+        start_time_sec = start_time_ms / 1000.0
+        duration_sec = duration_ms / 1000.0
+
+        logger.info(
+            f"Extracting segment: {start_time_sec:.2f}s, duration: {duration_sec:.2f}s"
+        )
+        logger.info(f"From: {blob_url[:80]}...")
+
+        if reencode_for_cfr:
+            # Re-encode to ensure constant frame rate and accurate timestamps
+            # This prevents timing drift issues when matching frames to tracking data
+            logger.info(f"Re-encoding to constant frame rate for accurate timing...")
+            fps = get_video_fps(blob_url)
+
+            cmd = [
+                "ffmpeg",
+                "-loglevel",
+                "error",
+                "-ss",
+                str(start_time_sec),
+                "-i",
+                blob_url_with_sas,
+                "-t",
+                str(duration_sec),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",  # Fast encoding for segments
+                "-crf",
+                "23",  # Good quality
+                "-r",
+                str(int(fps)),  # Use detected FPS
+                "-vsync",
+                "cfr",  # Constant frame rate
+                "-c:a",
+                "copy",  # Copy audio if present
+                "-avoid_negative_ts",
+                "make_zero",
+                "-y",  # Overwrite output file
+                output_path,
+            ]
+        else:
+            # Fast copy mode (may have timing drift issues)
+            # -ss before -i: fast seeking (seeks in input)
+            # -t: duration
+            # -c copy: copy codecs (fast, no re-encoding)
+            # -avoid_negative_ts make_zero: reset timestamps to start at 0
+            cmd = [
+                "ffmpeg",
+                "-loglevel",
+                "error",
+                "-ss",
+                str(start_time_sec),
+                "-i",
+                blob_url_with_sas,
+                "-t",
+                str(duration_sec),
+                "-c",
+                "copy",
+                "-avoid_negative_ts",
+                "make_zero",
+                "-y",  # Overwrite output file
+                output_path,
+            ]
+
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=300  # 5 minute timeout
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg failed to extract segment: {result.stderr}")
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            raise RuntimeError("Extracted segment file is empty or doesn't exist")
+
+        file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+        logger.info(
+            f"Successfully extracted segment: {output_path} ({file_size_mb:.2f} MB)"
+        )
+
+        # Return segment path and time offset (segment starts at 00:00, so offset is start_time_ms)
+        return output_path, start_time_ms
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"ffmpeg timeout while extracting segment from {blob_url}")
+        raise RuntimeError("Video segment extraction timed out")
+    except Exception as e:
+        logger.error(f"Error extracting video segment: {e}")
         raise
