@@ -51,22 +51,25 @@ GRAPHQL_URL = settings.TRACEVISION_GRAPHQL_URL
 
 class HighlightPagination(PageNumberPagination):
     """Custom pagination class for highlights"""
+
     page_size = 10
-    page_size_query_param = 'page_size'
+    page_size_query_param = "page_size"
     max_page_size = 100
-    page_query_param = 'page'
-    
+    page_query_param = "page"
+
     def get_paginated_response(self, data):
         """Override to return custom pagination response format with highlights"""
-        return Response({
-            'count': self.page.paginator.count,
-            'next': self.get_next_link(),
-            'previous': self.get_previous_link(),
-            'page': self.page.number,
-            'page_size': self.get_page_size(self.request),
-            'total_pages': self.page.paginator.num_pages,
-            'highlights': data  # Use 'highlights' instead of 'results'
-        })
+        return Response(
+            {
+                "count": self.page.paginator.count,
+                "next": self.get_next_link(),
+                "previous": self.get_previous_link(),
+                "page": self.page.number,
+                "page_size": self.get_page_size(self.request),
+                "total_pages": self.page.paginator.num_pages,
+                "highlights": data,  # Use 'highlights' instead of 'results'
+            }
+        )
 
 
 class TraceVisionProcessesList(ListAPIView):
@@ -957,11 +960,13 @@ class GetTracePlayerReelsView(ListAPIView):
 
         # Apply filters from query parameters
         # video_type filter removed - not needed anymore
-        
+
         generation_status = self.request.query_params.get("generation_status")
         if generation_status:
             # Filter highlights that have clip reels with this status
-            queryset = queryset.filter(clip_reels__generation_status=generation_status).distinct()
+            queryset = queryset.filter(
+                clip_reels__generation_status=generation_status
+            ).distinct()
 
         event_type = self.request.query_params.get("event_type")
         if event_type:
@@ -1090,50 +1095,53 @@ class GetTracePlayerReelsView(ListAPIView):
 
         # Get queryset and apply filters
         queryset = self.filter_queryset(self.get_queryset())
-        
+
         # Order queryset for consistent pagination
-        queryset = queryset.order_by('-created_at', '-id')
+        queryset = queryset.order_by("-created_at", "-id")
 
         # Paginate queryset at database level (more efficient)
         page = self.paginate_queryset(queryset)
-        
+
         if page is not None:
             # Serialize only the paginated results
             serializer = self.get_serializer(page, many=True)
             highlights = serializer.data
-            
+
             # Get paginated response
             paginated_response = self.get_paginated_response(highlights)
-            
+
             # Serialize match_info with request context for perspective transformation
             match_info_serializer = MatchInfoSerializer(
                 session, context={"request": request}
             )
             match_info = match_info_serializer.data
-            
+
             # Build response with match_info
             response_data = paginated_response.data
-            response_data['match_info'] = match_info
-            
+            response_data["match_info"] = match_info
+
             return Response(response_data, status=http_status.HTTP_200_OK)
 
         # Fallback if pagination is not applied (shouldn't happen with ListAPIView)
         serializer = self.get_serializer(queryset, many=True)
         highlights = serializer.data
-        
+
         # Serialize match_info
         match_info_serializer = MatchInfoSerializer(
             session, context={"request": request}
         )
         match_info = match_info_serializer.data
-        
-        return Response({
-            "highlights": highlights,
-            "match_info": match_info,
-            "count": len(highlights),
-            "next": None,
-            "previous": None,
-        }, status=http_status.HTTP_200_OK)
+
+        return Response(
+            {
+                "highlights": highlights,
+                "match_info": match_info,
+                "count": len(highlights),
+                "next": None,
+                "previous": None,
+            },
+            status=http_status.HTTP_200_OK,
+        )
 
 
 class GetAvailableHighlightDatesView(APIView):
@@ -1148,44 +1156,54 @@ class GetAvailableHighlightDatesView(APIView):
         try:
             user = request.user
             user_role = user.role
-            
+
             # Check if user is a coach
             is_coach = user_role == "Coach"
-            
+
             if is_coach:
                 # For coaches: get sessions where coach's team is in the game OR coach is coaching players from either team
                 coach_team = user.team
-                coach_teams = list(user.teams_coached.values_list('id', flat=True))  # Get team IDs efficiently
-                
+                coach_teams = list(
+                    user.teams_coached.values_list("id", flat=True)
+                )  # Get team IDs efficiently
+
                 # Build query for coach access - must have highlights (clip_reels exist)
                 coach_queries = models.Q()
-                
+
                 # 1. Coach's team is one of the teams in the session
                 if coach_team:
-                    coach_queries |= models.Q(home_team=coach_team) | models.Q(away_team=coach_team)
-                
+                    coach_queries |= models.Q(home_team=coach_team) | models.Q(
+                        away_team=coach_team
+                    )
+
                 # 2. Coach is in the team's coach field for either home_team or away_team
                 if coach_teams:
-                    coach_queries |= models.Q(home_team_id__in=coach_teams) | models.Q(away_team_id__in=coach_teams)
-                
+                    coach_queries |= models.Q(home_team_id__in=coach_teams) | models.Q(
+                        away_team_id__in=coach_teams
+                    )
+
                 # 3. Coach is coaching players (through WajoUser.coach) who have highlights in the session
                 # Get TracePlayers for coached users in a single optimized query
                 coached_trace_player_ids = list(
-                    TracePlayer.objects.filter(user__coach=user)
-                    .values_list('id', flat=True)
+                    TracePlayer.objects.filter(user__coach=user).values_list(
+                        "id", flat=True
+                    )
                 )
                 if coached_trace_player_ids:
-                    coach_queries |= (
-                        models.Q(clip_reels__primary_player_id__in=coached_trace_player_ids)
-                        | models.Q(clip_reels__involved_players__id__in=coached_trace_player_ids)
+                    coach_queries |= models.Q(
+                        clip_reels__primary_player_id__in=coached_trace_player_ids
+                    ) | models.Q(
+                        clip_reels__involved_players__id__in=coached_trace_player_ids
                     )
-                
+
                 # Get all sessions where coach has access AND has highlights
                 # Using filter with clip_reels ensures we only get sessions with highlights
                 if coach_queries:
                     sessions_with_highlights = (
                         TraceSession.objects.filter(coach_queries)
-                        .filter(clip_reels__isnull=False)  # Ensure sessions have highlights
+                        .filter(
+                            clip_reels__isnull=False
+                        )  # Ensure sessions have highlights
                         .select_related("home_team", "away_team")
                         .distinct()
                         .order_by("-match_date", "-id")
@@ -1205,7 +1223,7 @@ class GetAvailableHighlightDatesView(APIView):
                         },
                         status=http_status.HTTP_404_NOT_FOUND,
                     )
-                
+
                 # Get sessions with teams where the player has highlights
                 sessions_with_highlights = (
                     TraceSession.objects.filter(
@@ -1363,7 +1381,7 @@ class CoachViewSpecificTeamPlayers(APIView):
             )
 
 
-class GeneratingAgainClipReelsView(APIView):
+class GenerateHighlightsWithIds(APIView):
     def post(self, request):
         if not request.user.is_authenticated:
             return Response(
@@ -1510,22 +1528,68 @@ class LinkUserToGameView(APIView):
 
 class GenerateHighlightClipReelView(APIView):
     """
-    API endpoint to generate highlight clip reel with specific tags and ratio.
-    
+    API endpoint to trigger highlight generation for a given clip reel ID.
+    Clip reel is already created in advance, this endpoint only triggers generation.
+
     Request body:
-    - highlight_id: ID of the TraceHighlight (required)
-    - tags: List of overlay tags (e.g., ["with_player_title", "without_circle"]) (required)
-    - ratio: Video aspect ratio - "original" or "9:16" (required)
-    - is_default: Whether this should be the default video (optional, default: False)
+    - clip_reel_id: TraceClipReel ID (required)
+
+    Authorization:
+    - Coach: Must be coach of the team that the clip reel's primary player belongs to
+    - Player: Must be the user of the primary player, or belong to the same team as the primary player
+    - Others: 403 Forbidden
     """
 
     permission_classes = [IsAuthenticated]
+
+    def _check_authorization_batch(
+        self, user, user_role, user_teams_coached_ids, clip_reel
+    ):
+        """
+        Batch authorization check (optimized to avoid N+1 queries).
+        Uses pre-fetched user_teams_coached_ids instead of querying for each clip reel.
+
+        Args:
+            user: The requesting user
+            user_role: The user's role
+            user_teams_coached_ids: Pre-fetched set of team IDs the user coaches (for Coach role)
+            clip_reel: The clip reel to check authorization for
+
+        Returns:
+            tuple: (is_authorized: bool, error_message: str or None)
+        """
+        primary_player = clip_reel.primary_player
+        player_team = primary_player.team
+        player_team_id = player_team.id if player_team else None
+
+        # Coach authorization: must be coach of the team that the primary player belongs to
+        if user_role == "Coach":
+            # Use pre-fetched teams_coached_ids (no query)
+            if player_team_id and player_team_id in user_teams_coached_ids:
+                return True, None
+            return (
+                False,
+                "You must be a coach of the team for which you are requesting highlights",
+            )
+
+        # Player authorization: must be the user of the primary player, or belong to the same team
+        if user_role == "Player":
+            # Check if user is the primary player's user (already prefetched)
+            if primary_player.user == user:
+                return True, None
+            # Check if user belongs to the same team as the primary player
+            if user.team and player_team_id and user.team.id == player_team_id:
+                return True, None
+            return False, "You must belong to the same team as the primary player"
+
+        # Others: 403 Forbidden
+        return False, "Only coaches and players can generate highlights"
 
     def post(self, request):
         try:
             # Validate input using serializer
             serializer = GenerateHighlightClipReelSerializer(data=request.data)
-            
+
             if not serializer.is_valid():
                 return Response(
                     {"error": "Validation failed", "details": serializer.errors},
@@ -1534,104 +1598,153 @@ class GenerateHighlightClipReelView(APIView):
 
             # Extract validated data
             validated_data = serializer.validated_data
-            highlight_id = validated_data["highlight_id"]
-            tags = validated_data["tags"]
-            ratio = validated_data["ratio"]
-            is_default = validated_data.get("is_default", False)
+            clip_reel_id = validated_data["clip_reel_id"]
 
-            # Get the TraceHighlight with related objects
+            # Fetch clip reel with related objects (optimized to avoid N+1 queries)
             try:
-                highlight = TraceHighlight.objects.select_related(
-                    "session",
-                    "player",
-                    "player__user",
-                ).get(id=highlight_id)
-            except TraceHighlight.DoesNotExist:
-                return Response(
-                    {"error": f"TraceHighlight with id {highlight_id} not found"},
-                    status=http_status.HTTP_404_NOT_FOUND,
+                clip_reel = (
+                    TraceClipReel.objects.select_related(
+                        "highlight",
+                        "highlight__session",
+                        "highlight__player",
+                        "highlight__player__user",
+                        "highlight__player__team",
+                        "primary_player",
+                        "primary_player__user",
+                        "primary_player__team",
+                    )
+                    .prefetch_related(
+                        "primary_player__user__teams_coached",  # Prefetch teams_coached to avoid N+1
+                    )
+                    .get(id=clip_reel_id)
                 )
-
-            session = highlight.session
-
-            # Check if user is the primary player of this highlight
-            if not highlight.player:
+            except TraceClipReel.DoesNotExist:
                 return Response(
                     {
-                        "error": "Highlight has no primary player",
-                        "details": "This highlight is not associated with any player",
+                        "error": "Invalid clip reel ID",
+                        "details": f"Clip reel with ID {clip_reel_id} was not found",
                     },
                     status=http_status.HTTP_404_NOT_FOUND,
                 )
 
-            if highlight.player.user != request.user:
+            # Validate clip reel has required fields
+            if not clip_reel.primary_player:
+                return Response(
+                    {
+                        "error": "Clip reel has no primary player",
+                        "details": "This clip reel is not associated with any primary player",
+                    },
+                    status=http_status.HTTP_404_NOT_FOUND,
+                )
+
+            if not clip_reel.highlight:
+                return Response(
+                    {
+                        "error": "Clip reel has no associated highlight",
+                        "details": "This clip reel is not associated with any highlight",
+                    },
+                    status=http_status.HTTP_404_NOT_FOUND,
+                )
+
+            # Pre-fetch user's teams_coached once (to avoid N+1 queries in authorization check)
+            user = request.user
+            user_role = user.role
+            user_teams_coached_ids = set()
+            if user_role == "Coach":
+                # Prefetch all teams the user coaches in a single query
+                user_teams_coached_ids = set(
+                    user.teams_coached.values_list("id", flat=True)
+                )
+
+            # Check authorization (optimized, no N+1 queries)
+            is_authorized, error_message = self._check_authorization_batch(
+                user, user_role, user_teams_coached_ids, clip_reel
+            )
+
+            if not is_authorized:
                 return Response(
                     {
                         "error": "Unauthorized",
-                        "details": "You must be the primary player of this highlight to generate clip reels",
+                        "details": error_message,
                     },
-                    status=http_status.HTTP_404_NOT_FOUND,
+                    status=http_status.HTTP_403_FORBIDDEN,
                 )
 
-            # Check if a TraceClipReel already exists with the same highlight, tags, and ratio
-            # Sort tags for consistent comparison
-            sorted_tags = sorted(tags)
-            existing_clip_reels = TraceClipReel.objects.filter(
-                highlight=highlight, ratio=ratio
-            )  # Get all existing clip reels for this highlight and ratio
-
-            # Check if any existing clip reel has the same tags (sorted)
-            for clip_reel in existing_clip_reels:
-                existing_tags = sorted(clip_reel.tags) if clip_reel.tags else []
-                if existing_tags == sorted_tags:
-                    return Response(
-                        {
-                            "success": False,
-                            "message": "Clip reel already exists",
-                            "details": "A clip reel with the same tags and ratio already exists for this highlight",
-                            "data": {
-                                "clip_reel_id": clip_reel.id,
-                                "highlight_id": highlight.highlight_id,
-                                "tags": clip_reel.tags,
-                                "ratio": clip_reel.ratio,
-                                "generation_status": clip_reel.generation_status,
-                                "video_url": clip_reel.video_url if clip_reel.video_url else None,
-                            },
+            # Process clip reel
+            clip_reels_to_generate = []
+            # Check if already generated (completed with video_url)
+            if clip_reel.generation_status == "completed" and clip_reel.video_url:
+                return Response(
+                    {
+                        "success": True,
+                        "message": "Clip reel already generated",
+                        "data": {
+                            "clip_reel_id": clip_reel.id,
+                            "highlight_id": clip_reel.highlight.highlight_id,
+                            "tags": clip_reel.tags,
+                            "ratio": clip_reel.ratio,
+                            "is_default": clip_reel.is_default,
+                            "generation_status": clip_reel.generation_status,
+                            "video_url": clip_reel.video_url,
+                            "status": "already_generated",
                         },
-                        status=http_status.HTTP_200_OK,
-                    )
+                    },
+                    status=http_status.HTTP_200_OK,
+                )
 
-            # Print the information (as requested for now)
-            print("=" * 80)
-            print("HIGHLIGHT CLIP REEL GENERATION REQUEST")
-            print("=" * 80)
-            print(f"Highlight ID: {highlight.id} (highlight_id: {highlight.highlight_id})")
-            print(f"Session ID: {session.id}")
-            print(f"Primary Player: {highlight.player.name} (User: {request.user})")
-            print(f"Tags: {tags}")
-            print(f"Ratio: {ratio}")
-            print(f"Is Default: {is_default}")
-            print(f"Event Type: {highlight.event_type}")
-            print(f"Start Offset: {highlight.start_offset}ms")
-            print(f"Duration: {highlight.duration}ms")
-            print("=" * 80)
+            # Mark as pending and add to generation queue
+            clip_reel.generation_status = "pending"
+            clip_reel.save(update_fields=["generation_status"])
+            clip_reels_to_generate.append(clip_reel.id)
 
-            # TODO: Here you would trigger the actual video generation
-            # For now, we just print the information as requested
-            # In the future, this would call a task like:
-            # generate_highlight_clip_reel_task.delay(highlight_id, tags, ratio, is_default)
+            # Get tags, is_default, and ratio from the clip reel
+            clip_reel_tags = clip_reel.tags or []
+            clip_reel_is_default = (
+                clip_reel.is_default if clip_reel.is_default is not None else False
+            )
+            clip_reel_ratio = clip_reel.ratio or "original"
 
+            # Trigger background generation task with clip reel's tags and is_default
+            try:
+                generate_overlay_highlights_task.delay(
+                    clip_reel_ids=clip_reels_to_generate,
+                    tags=clip_reel_tags,
+                    is_default=clip_reel_is_default,
+                    ratios=[clip_reel_ratio] if clip_reel_ratio else None,
+                )
+                logger.info(
+                    f"Triggered background generation for clip reel: {clip_reel_id} "
+                    f"with tags: {clip_reel_tags}, is_default: {clip_reel_is_default}, ratio: {clip_reel_ratio}"
+                )
+            except Exception as e:
+                logger.exception(
+                    f"Failed to trigger background generation task: {str(e)}"
+                )
+                # Update status back to failed
+                clip_reel.generation_status = "failed"
+                clip_reel.save(update_fields=["generation_status"])
+                return Response(
+                    {
+                        "error": "Failed to queue generation task",
+                        "details": str(e),
+                    },
+                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            # Return success response
             return Response(
                 {
                     "success": True,
-                    "message": "Highlight generation request received",
+                    "message": "Highlight generation request queued",
                     "data": {
-                        "highlight_id": highlight.id,
-                        "highlight_id_string": highlight.highlight_id,
-                        "session_id": session.id,
-                        "tags": tags,
-                        "ratio": ratio,
-                        "is_default": is_default,
+                        "clip_reel_id": clip_reel.id,
+                        "highlight_id": clip_reel.highlight.highlight_id,
+                        "tags": clip_reel.tags,
+                        "ratio": clip_reel.ratio,
+                        "is_default": clip_reel.is_default,
+                        "generation_status": "pending",
+                        "video_url": None,
+                        "status": "queued_for_generation",
                     },
                 },
                 status=http_status.HTTP_200_OK,

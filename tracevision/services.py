@@ -591,25 +591,25 @@ class TraceVisionAggregationService:
     def _get_video_variant_name(self, tags=None, ratio=None, primary_player=None):
         """
         Generate a descriptive name for the video variant based on tags and ratio.
-        
+
         Args:
             tags: List of tags (e.g., ["with_name_overlay", "with_circle_overlay"])
             ratio: Video ratio (e.g., "original", "9:16", "1:1")
             primary_player: Optional primary player object
-        
+
         Returns:
             str: Descriptive name for the video variant
         """
         if not tags:
             tags = []
-        
+
         # Build name parts based on tags
         name_parts = []
-        
+
         # Determine overlay type from tags
         has_name_overlay = "with_name_overlay" in tags
         has_circle_overlay = "with_circle_overlay" in tags
-        
+
         if not has_name_overlay and not has_circle_overlay:
             name_parts.append("Original")
         else:
@@ -619,7 +619,7 @@ class TraceVisionAggregationService:
             if has_circle_overlay:
                 overlay_parts.append("Circle")
             name_parts.append("With " + " & ".join(overlay_parts))
-        
+
         # Add ratio information
         if ratio:
             if ratio == "9:16":
@@ -627,7 +627,7 @@ class TraceVisionAggregationService:
             elif ratio == "1:1":
                 name_parts.append("Square")
             # "original" ratio doesn't need a suffix
-        
+
         return " ".join(name_parts) if name_parts else "Video"
 
     def _compute_clips(self, session):
@@ -706,16 +706,22 @@ class TraceVisionAggregationService:
 
             for config in clip_reel_configs:
                 sorted_tags = sorted(config["tags"])
-                
+
                 tag_filters = Q()
                 for tag in config["tags"]:
-                    tag_filters &= Q(tags__contains=tag)  # Check if array contains this string value
-                
-                clip_reel = TraceClipReel.objects.filter(
-                    highlight=h,
-                    ratio=config["ratio"],
-                ).filter(tag_filters).first()
-                
+                    tag_filters &= Q(
+                        tags__contains=tag
+                    )  # Check if array contains this string value
+
+                clip_reel = (
+                    TraceClipReel.objects.filter(
+                        highlight=h,
+                        ratio=config["ratio"],
+                    )
+                    .filter(tag_filters)
+                    .first()
+                )
+
                 # Verify exact tag match (order-independent) - ensures no extra tags
                 if clip_reel:
                     existing_tags = sorted(clip_reel.tags) if clip_reel.tags else []
@@ -725,7 +731,7 @@ class TraceVisionAggregationService:
                         if involved_players:
                             clip_reel.involved_players.set(involved_players)
                         continue
-                
+
                 # Clip reel doesn't exist or tags don't match exactly, create new one
                 defaults = {
                     "session": session,
@@ -745,11 +751,15 @@ class TraceVisionAggregationService:
                     "video_type": config["video_type"],
                     "video_stream": h.video_stream or "",
                     "generation_status": "pending",
-                    "video_variant_name": self._get_video_variant_name(
-                        tags=config["tags"],
-                        ratio=config["ratio"],
-                        primary_player=primary_player
-                    ) if hasattr(self, "_get_video_variant_name") else "",
+                    "video_variant_name": (
+                        self._get_video_variant_name(
+                            tags=config["tags"],
+                            ratio=config["ratio"],
+                            primary_player=primary_player,
+                        )
+                        if hasattr(self, "_get_video_variant_name")
+                        else ""
+                    ),
                     "generation_metadata": {
                         "highlight_id": h.highlight_id,
                         "video_id": h.video_id,
@@ -759,7 +769,7 @@ class TraceVisionAggregationService:
                         "ratio": config["ratio"],
                     },
                 }
-                
+
                 # Create new clip reel
                 clip_reel = TraceClipReel.objects.create(
                     highlight=h,

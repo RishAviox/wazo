@@ -3,22 +3,30 @@ Video generation module for TraceVision overlay highlights.
 Adapted from WAZO.py to work with Django models and Azure Blob Storage.
 """
 
-import json
-import logging
 import os
-import subprocess
-import tempfile
-import uuid
-from datetime import datetime, timedelta
-from typing import Optional, Tuple
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-
 import cv2
+import uuid
+import time
+import json
+import base64
+import logging
+import tempfile
+import subprocess
 import numpy as np
 import pandas as pd
+from typing import Optional
+from django.conf import settings
 from django.core.files.storage import default_storage
+from azure.storage.blob import (
+    BlobBlock,
+    BlobServiceClient,
+    BlobType,
+    ContentSettings,
+    BlobType,
+    ContentSettings,
+)
 
-from .models import TraceClipReel, TraceObject, TracePlayer
+from .models import TraceClipReel, TraceObject
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +58,6 @@ def extract_relative_path_from_azure_url(azure_url: str) -> str:
         container_name = url_parts[container_index]
         # Extract path after container name
         relative_path = "/".join(url_parts[container_index:])
-
-        # Handle different containers based on Django settings
-        from django.conf import settings
 
         django_container = getattr(settings, "AZURE_CONTAINER_NAME", "media")
 
@@ -118,10 +123,6 @@ def load_tracking_data_from_storage(
     """
     try:
         logger.info(f"Loading tracking data from storage: {tracking_blob_url}")
-
-        # Handle different storage types based on DEBUG setting
-        from django.conf import settings
-
         if tracking_blob_url.startswith("https://"):
             # Full Azure Blob URL - extract the relative path
             relative_path = extract_relative_path_from_azure_url(tracking_blob_url)
@@ -189,9 +190,6 @@ def download_video_from_storage(
 
     try:
         logger.info(f"Downloading video from storage: {video_blob_url}")
-
-        # Handle different storage types based on DEBUG setting
-        from django.conf import settings
 
         if video_blob_url.startswith("https://"):
             # Full Azure Blob URL - extract the relative path
@@ -585,7 +583,6 @@ def create_video_with_tracking_overlay(
     video_time_min_ms,
     video_time_max_ms,
     dict_tracking_df,
-    text_str,
     video_filepath,
     out_video_filepath,
     player_name,
@@ -605,7 +602,6 @@ def create_video_with_tracking_overlay(
         video_time_min_ms: Start time in milliseconds (typically 0 for segment videos)
         video_time_max_ms: End time in milliseconds (duration of segment)
         dict_tracking_df: Dictionary of tracking data DataFrames keyed by object_id (already normalized)
-        text_str: Optional text overlay string
         video_filepath: Input video file path (segment video starting at 0ms)
         out_video_filepath: Output video file path
         player_name: Player name for label overlay
@@ -776,16 +772,16 @@ def create_video_with_tracking_overlay(
                     show_player_name=show_player_name,
                 )
 
-            if text_str is not None:
-                cv2.putText(
-                    frm,
-                    text_str,
-                    (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
+            # if text_str is not None:
+            #     cv2.putText(
+            #         frm,
+            #         text_str,
+            #         (10, 30),
+            #         cv2.FONT_HERSHEY_SIMPLEX,
+            #         1,
+            #         (0, 255, 0),
+            #         2,
+            #     )
 
         # Crop to aspect ratio if specified
         if aspect_ratio:
@@ -923,9 +919,7 @@ def create_clip_reel_overlay_video(
         add_overlay = show_player_name or with_circle
 
     # Determine aspect ratio for cropping based on clip_reel.ratio
-    # If ratio is "original", no crop (aspect_ratio = None)
     # If ratio is "9:16", crop to 9:16 vertical format
-    # If ratio is "1:1", crop to 1:1 square format
     aspect_ratio = None
     if ratio == "9:16":
         aspect_ratio = "9:16"
@@ -933,12 +927,14 @@ def create_clip_reel_overlay_video(
             f"Vertical video generation enabled for clip reel {clip_reel.id}: "
             f"Will crop to 9:16 aspect ratio (vertical format)"
         )
+    # If ratio is "1:1", crop to 1:1 square format
     elif ratio == "1:1":
         aspect_ratio = "1:1"
         logger.info(
             f"Square video generation enabled for clip reel {clip_reel.id}: "
             f"Will crop to 1:1 aspect ratio (square format)"
         )
+    # If ratio is "original", no crop (aspect_ratio = None)
     else:
         # ratio == "original" or any other value
         aspect_ratio = None
@@ -973,7 +969,6 @@ def create_clip_reel_overlay_video(
         # Get tracking data only if overlay is needed
         tracking_data = {}
         player_name = "Unknown Player"
-        text_str = None
 
         if add_overlay:
             # Get involved players and their tracking data for overlay
@@ -1017,9 +1012,6 @@ def create_clip_reel_overlay_video(
                     f"No tracking data found for any involved players in clip reel {clip_reel.id}. "
                     f"Tracking data is required for overlay generation (tags: {tags})"
                 )
-
-            # Create text string from highlight tags
-            text_str = " | ".join(clip_reel.tags or [])
 
             # Handle case where primary_player exists but user might be None
             if clip_reel.primary_player and clip_reel.primary_player.user:
@@ -1065,7 +1057,6 @@ def create_clip_reel_overlay_video(
             video_time_min_ms=0,  # Segment starts at 00:00
             video_time_max_ms=clip_reel.duration_ms,  # Duration from segment start
             dict_tracking_df=tracking_data,
-            text_str=text_str,
             video_filepath=temp_video_path,
             out_video_filepath=output_path,
             player_name=player_name,
@@ -1150,9 +1141,6 @@ def upload_video_to_storage(video_file_path: str, clip_reel: TraceClipReel) -> s
         elif video_file_path.lower().endswith(".mov"):
             content_type = "video/quicktime"
 
-        # Handle different storage types based on DEBUG setting
-        from django.conf import settings
-
         # Check if we're using Azure Blob Storage (regardless of DEBUG setting)
         if (
             hasattr(settings, "AZURE_CONNECTION_STRING")
@@ -1183,11 +1171,6 @@ def upload_video_to_azure_blob_robust(
     """
     Robust upload to Azure Blob Storage with retry logic, using shared code from tasks.py.
     """
-    from azure.storage.blob import BlobServiceClient, BlobType, ContentSettings
-    from azure.core.exceptions import ResourceExistsError
-    from django.conf import settings
-    import time
-
     blob_service_client = None
     blob_client = None
 
@@ -1353,8 +1336,6 @@ def upload_video_direct(blob_client, file_path, content_type, file_size):
     Uses the same pattern as tasks.py upload_file_direct.
     """
     try:
-        from azure.storage.blob import BlobType, ContentSettings
-
         with open(file_path, "rb") as data:
             blob_client.upload_blob(
                 data=data,
@@ -1379,12 +1360,6 @@ def upload_video_chunked(
     Uses the same pattern as tasks.py upload_large_file_chunked.
     """
     try:
-        from azure.storage.blob import BlobBlock
-        from azure.core.exceptions import ResourceExistsError
-        import time
-        import base64
-
-        # Clear any existing blocks first
         try:
             blob_client.delete_blob(delete_snapshots="include")
             logger.info("Cleared existing blob before chunked upload")

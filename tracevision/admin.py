@@ -455,7 +455,13 @@ class TraceClipReelAdmin(admin.ModelAdmin):
         "event_type",
         "created_at",
     ]
-    search_fields = ["session__session_id", "event_id", "ratio", "primary_player__name", "label"]
+    search_fields = [
+        "session__session_id",
+        "event_id",
+        "ratio",
+        "primary_player__name",
+        "label",
+    ]
     readonly_fields = [
         "id",
         "created_at",

@@ -959,7 +959,10 @@ class TraceClipReel(models.Model):
         default=list, null=True, blank=True, help_text="Any errors during generation"
     )
     generation_metadata = models.JSONField(
-        default=dict, null=True, blank=True, help_text="Additional generation parameters and settings"
+        default=dict,
+        null=True,
+        blank=True,
+        help_text="Additional generation parameters and settings",
     )
 
     # Video quality and settings

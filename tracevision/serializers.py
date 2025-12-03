@@ -302,25 +302,27 @@ class TraceVisionProcessSerializer(serializers.Serializer):
 
     def validate(self, data):
         """Additional validation rules."""
-        
+
         # Check if user belongs to a team
-        request = self.context.get('request')
+        request = self.context.get("request")
         if request and request.user:
             user = request.user
             has_team = False
-            
+
             # For coaches, check teams_coached relationship
-            if user.role == 'Coach':
+            if user.role == "Coach":
                 has_team = user.teams_coached.exists()
             else:
                 # For players and other roles, check team ForeignKey
                 has_team = user.team is not None
-            
+
             if not has_team:
-                raise serializers.ValidationError({
-                    "error": "Team required",
-                    "message": "Please select your team in your profile to continue."
-                })
+                raise serializers.ValidationError(
+                    {
+                        "error": "Team required",
+                        "message": "Please select your team in your profile to continue.",
+                    }
+                )
 
         # Ensure team names are different
         if data["home_team_name"].lower() == data["away_team_name"].lower():
@@ -587,33 +589,33 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                     "message": "A game with these teams and date already exists. You can link to the existing game.",
                     "existing_data": {
                         "session": {
-                        "id": duplicate_session.id,
-                        "session_id": duplicate_session.session_id,
-                        "match_date": duplicate_session.match_date.isoformat(),
-                        "home_team": (
-                            duplicate_session.home_team.name
-                            if duplicate_session.home_team
-                            else None
-                        ),
-                        "away_team": (
-                            duplicate_session.away_team.name
-                            if duplicate_session.away_team
-                            else None
-                        ),
+                            "id": duplicate_session.id,
+                            "session_id": duplicate_session.session_id,
+                            "match_date": duplicate_session.match_date.isoformat(),
+                            "home_team": (
+                                duplicate_session.home_team.name
+                                if duplicate_session.home_team
+                                else None
+                            ),
+                            "away_team": (
+                                duplicate_session.away_team.name
+                                if duplicate_session.away_team
+                                else None
+                            ),
                             "status": duplicate_session.status,
                         },
                         "game": (
-                        {
-                            "id": existing_game.id if existing_game else None,
-                            "type": existing_game.type if existing_game else None,
-                            "name": existing_game.name if existing_game else None,
-                            "date": (
-                                existing_game.date.isoformat()
-                                if existing_game and existing_game.date
-                                else None
-                            ),
-                        }
-                        if existing_game
+                            {
+                                "id": existing_game.id if existing_game else None,
+                                "type": existing_game.type if existing_game else None,
+                                "name": existing_game.name if existing_game else None,
+                                "date": (
+                                    existing_game.date.isoformat()
+                                    if existing_game and existing_game.date
+                                    else None
+                                ),
+                            }
+                            if existing_game
                             else None
                         ),
                     },
@@ -636,41 +638,42 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                 }
             """,
             "variables": {
-                "token": {
-                    "customer_id": customer_id,
-                    "token": api_key
-                },
+                "token": {"customer_id": customer_id, "token": api_key},
                 "sessionData": {
                     "type": "soccer_game",
                     "game_info": {
                         "home_team": {
                             "name": home_team_name,
                             "score": home_score,
-                            "color": home_color
+                            "color": home_color,
                         },
                         "away_team": {
                             "name": away_team_name,
                             "score": away_score,
-                            "color": away_color
-                        }
+                            "color": away_color,
+                        },
                     },
-                    "capabilities": ["tracking", "highlights"]
-                }
-            }
+                    "capabilities": ["tracking", "highlights"],
+                },
+            },
         }
 
         session_response = requests.post(
             graphql_url,
             headers={"Content-Type": "application/json"},
-            json=session_payload
+            json=session_payload,
         )
         session_json = session_response.json()
 
-        if session_response.status_code != 200 or not session_json.get("data", {}).get("createSession", {}).get("success"):
-            raise ValidationError({
-                "error": "TraceVision session creation failed",
-                "details": session_json
-            })
+        if session_response.status_code != 200 or not session_json.get("data", {}).get(
+            "createSession", {}
+        ).get("success"):
+            raise ValidationError(
+                {
+                    "error": "TraceVision session creation failed",
+                    "details": session_json,
+                }
+            )
 
         session_id = session_json["data"]["createSession"]["session"]["session_id"]
         # session_id = "1234567890"
@@ -728,9 +731,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         # Handle video processing
         if video_link:
             video_url_for_db = TraceVisionService.import_game_video(
-                session_id=session_id,
-                video_link=video_link,
-                start_time=start_time
+                session_id=session_id, video_link=video_link, start_time=start_time
             )
             pass
         # TODO: Implement video upload functionality later
@@ -1037,20 +1038,22 @@ class MatchInfoSerializer(serializers.ModelSerializer):
 
 class ClipReelVideoSerializer(serializers.ModelSerializer):
     """Serializer for clip reel video information in highlight response"""
+
     url = serializers.URLField(source="video_url", read_only=True, allow_null=True)
     ratio = serializers.CharField(read_only=True)
     tags = serializers.JSONField(read_only=True)
     status = serializers.CharField(source="generation_status", read_only=True)
     default = serializers.BooleanField(source="is_default", read_only=True)
-    
+    label = serializers.CharField(read_only=True, allow_blank=True)
+
     class Meta:
         model = TraceClipReel
-        fields = ["id", "url", "ratio", "tags", "status", "default"]
+        fields = ["id", "url", "ratio", "tags", "status", "default", "label"]
 
 
 class HighlightClipReelSerializer(serializers.ModelSerializer):
     """Serializer for TraceHighlight with related clip reel videos"""
-    
+
     # Basic highlight fields
     id = serializers.IntegerField(read_only=True)
     highlight_id = serializers.CharField(read_only=True)
@@ -1061,34 +1064,34 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
     duration_ms = serializers.IntegerField(source="duration", read_only=True)
     match_time = serializers.CharField(read_only=True, allow_null=True)
     half = serializers.IntegerField(read_only=True, allow_null=True)
-    
+
     # Videos list from related clip reels
     videos = serializers.SerializerMethodField()
-    
+
     # Session info (minimal)
     age_group = serializers.CharField(source="session.age_group", read_only=True)
     match_date = serializers.DateField(
         source="session.match_date", format="%Y-%m-%d", read_only=True
     )
-    
+
     # Commented out fields not needed by frontend
     # start_clock = serializers.SerializerMethodField()
     # end_clock = serializers.SerializerMethodField()
-    # primary_player = PlayerDetailSerializer(read_only=True)
-    # involved_players = PlayerDetailSerializer(many=True, read_only=True)
+    primary_player = PlayerDetailSerializer(read_only=True)
+    involved_players = PlayerDetailSerializer(many=True, read_only=True)
     # session = serializers.CharField(source="session.id", read_only=True)
-    # match_start_time = serializers.CharField(
-    #     source="session.match_start_time", read_only=True
-    # )
-    # first_half_end_time = serializers.CharField(
-    #     source="session.first_half_end_time", read_only=True
-    # )
-    # second_half_start_time = serializers.CharField(
-    #     source="session.second_half_start_time", read_only=True
-    # )
-    # match_end_time = serializers.CharField(
-    #     source="session.match_end_time", read_only=True
-    # )
+    match_start_time = serializers.CharField(
+        source="session.match_start_time", read_only=True
+    )
+    first_half_end_time = serializers.CharField(
+        source="session.first_half_end_time", read_only=True
+    )
+    second_half_start_time = serializers.CharField(
+        source="session.second_half_start_time", read_only=True
+    )
+    match_end_time = serializers.CharField(
+        source="session.match_end_time", read_only=True
+    )
     # basic_game_stats = serializers.SerializerMethodField()
     # generation_started_at = serializers.DateTimeField(
     #     format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True, allow_null=True
@@ -1115,7 +1118,7 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
     # resolution = serializers.CharField(read_only=True)
     # frame_rate = serializers.IntegerField(read_only=True)
     # bitrate = serializers.IntegerField(read_only=True)
-    # label = serializers.CharField(read_only=True)
+    label = serializers.SerializerMethodField()
     # video_stream = serializers.URLField(read_only=True)
 
     class Meta:
@@ -1130,16 +1133,23 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
             "duration_ms",
             "match_time",
             "half",
-            "videos",
             "age_group",
             "match_date",
+            "label",
+            "primary_player",
+            "involved_players",
+            "match_start_time",
+            "first_half_end_time",
+            "second_half_start_time",
+            "match_end_time",
+            "videos",
         ]
 
     def get_event_name(self, obj):
         """Generate event name from event type and match time"""
         time_str = obj.match_time or "Unknown time"
         return f"{obj.get_event_type_display()} at {time_str}"
-    
+
     def get_side(self, obj):
         """Get side from highlight tags or player team"""
         # Try to get from tags first
@@ -1156,9 +1166,11 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
                                 viewer_team, obj.session
                             )
                             if viewer_perspective:
-                                side = transform_side_by_perspective(side, viewer_perspective)
+                                side = transform_side_by_perspective(
+                                    side, viewer_perspective
+                                )
                     return side
-        
+
         # Fallback to player's team
         if obj.player and obj.player.team:
             session = obj.session
@@ -1167,7 +1179,7 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
                 side = "home"
             elif session.away_team and session.away_team.id == obj.player.team.id:
                 side = "away"
-            
+
             # Apply perspective transformation
             if side:
                 request = self.context.get("request")
@@ -1178,16 +1190,28 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
                             viewer_team, session
                         )
                         if viewer_perspective:
-                            side = transform_side_by_perspective(side, viewer_perspective)
+                            side = transform_side_by_perspective(
+                                side, viewer_perspective
+                            )
                 return side
-        
+
         return None
-    
+
     def get_videos(self, obj):
         """Get all related clip reels as videos list"""
         # Order: default videos first (is_default=True), then by ratio, then by id
-        clip_reels = obj.clip_reels.all().order_by('-is_default', 'ratio', 'id')
+        clip_reels = obj.clip_reels.all().order_by("-is_default", "ratio", "id")
         return ClipReelVideoSerializer(clip_reels, many=True).data
+
+    def get_label(self, obj):
+        """Get label from default clip reel or generate from event_name"""
+        # Try to get label from default clip reel first
+        default_clip_reel = obj.clip_reels.filter(is_default=True).first()
+        if default_clip_reel and default_clip_reel.label:
+            return default_clip_reel.label
+
+        # Fallback to event_name if no label in clip reel
+        return self.get_event_name(obj)
 
     # Commented out methods not needed by frontend
     # def get_start_clock(self, obj):
@@ -1313,56 +1337,25 @@ class GenerateHighlightClipReelSerializer(serializers.Serializer):
     """
     Serializer for highlight clip reel generation request.
     Validates input and ensures only expected fields are accepted.
+
+    Accepts only clip_reel_id (single ID).
     """
 
-    highlight_id = serializers.IntegerField(
+    clip_reel_id = serializers.IntegerField(
         required=True,
-        help_text="ID of the TraceHighlight to generate clip reel for",
+        help_text="TraceClipReel ID to generate highlights for",
     )
-    tags = serializers.ListField(
-        child=serializers.ChoiceField(
-            choices=[
-                "with_player_title",
-                "without_player_title",
-                "with_circle",
-                "without_circle",
-            ]
-        ),
-        required=True,
-        min_length=1,
-        help_text="List of overlay tags (e.g., ['with_player_title', 'without_circle'])",
-    )
-    ratio = serializers.ChoiceField(
-        choices=[("original", "Original (Horizontal)"), ("9:16", "Vertical (9:16)")],
-        required=True,
-        help_text="Video aspect ratio - 'original' or '9:16'",
-    )
-    is_default = serializers.BooleanField(
-        required=False,
-        default=False,
-        help_text="Whether this should be the default video variation",
-    )
-
-    def validate_tags(self, value):
-        """Ensure tags list is not empty and contains valid values."""
-        if not value:
-            raise serializers.ValidationError("Tags list cannot be empty")
-        
-        # Check for duplicates
-        if len(value) != len(set(value)):
-            raise serializers.ValidationError("Tags list contains duplicate values")
-        
-        return value
 
     def validate(self, attrs):
         """Validate the entire data and reject any extra fields."""
         # Get the original data to check for extra fields
-        if hasattr(self, 'initial_data'):
-            allowed_fields = {'highlight_id', 'tags', 'ratio', 'is_default'}
+        if hasattr(self, "initial_data"):
+            allowed_fields = {"clip_reel_id"}
             extra_fields = set(self.initial_data.keys()) - allowed_fields
             if extra_fields:
                 raise serializers.ValidationError(
                     f"Unexpected fields: {', '.join(sorted(extra_fields))}. "
                     f"Allowed fields are: {', '.join(sorted(allowed_fields))}"
                 )
+
         return attrs
