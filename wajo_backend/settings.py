@@ -227,7 +227,7 @@ AZURE_CUSTOM_DOMAIN = f"{AZURE_ACCOUNT_NAME}.blob.core.windows.net"
 AZURE_CONTAINER_NAME = "media"
 
 # Use the custom storages
-# STATICFILES_STORAGE = 'core.azure_storages.AzureStaticStorage'
+STATICFILES_STORAGE = 'core.azure_storages.AzureStaticStorage'
 DEFAULT_FILE_STORAGE = 'core.azure_storages.AzureMediaStorage'
 
 # STATIC_URL = "static/"

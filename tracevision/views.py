@@ -1,11 +1,8 @@
 import logging
-import requests
 from django.db import models
 from django.db.models import Q
-from datetime import timedelta
 from django.conf import settings
 from datetime import datetime
-from django.db.models import Prefetch
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
@@ -13,6 +10,43 @@ from rest_framework import serializers
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
+
+from teams.models import Team
+from tracevision.models import (
+    TraceClipReel,
+    TraceSession,
+    TraceVisionPlayerStats,
+    TracePlayer,
+    TracePossessionSegment,
+    TracePossessionStats,
+    TraceHighlight,
+)
+from tracevision.tasks import (
+    generate_overlay_highlights_task,
+    process_trace_sessions_task,
+)
+from tracevision.serializers import (
+    TraceVisionProcessesSerializer,
+    TraceVisionProcessSerializer,
+    TraceSessionListSerializer,
+    CoachViewSpecificTeamPlayersSerializer,
+    HighlightDateSessionSerializer,
+    HighlightClipReelSerializer,
+    MatchInfoSerializer,
+    PossessionTeamMetricsSerializer,
+    PossessionPlayerMetricsSerializer,
+    GenerateHighlightClipReelSerializer,
+)
+from tracevision.services import TraceVisionService
+from games.models import GameUserRole, Game
+from tracevision.tasks import map_players_to_users_task
+
+
+logger = logging.getLogger()
+
+CUSTOMER_ID = int(settings.TRACEVISION_CUSTOMER_ID)
+API_KEY = settings.TRACEVISION_API_KEY
+GRAPHQL_URL = settings.TRACEVISION_GRAPHQL_URL
 
 
 class HighlightPagination(PageNumberPagination):
@@ -33,45 +67,6 @@ class HighlightPagination(PageNumberPagination):
             'total_pages': self.page.paginator.num_pages,
             'highlights': data  # Use 'highlights' instead of 'results'
         })
-
-from teams.models import Team
-from tracevision.models import (
-    TraceClipReel,
-    TraceSession,
-    TraceVisionPlayerStats,
-    TracePlayer,
-    TracePossessionSegment,
-    TracePossessionStats,
-    TraceHighlight,
-)
-from tracevision.tasks import (
-    download_video_and_save_to_azure_blob,
-    generate_overlay_highlights_task,
-    process_trace_sessions_task,
-)
-from tracevision.serializers import (
-    TraceVisionProcessesSerializer,
-    TraceVisionProcessSerializer,
-    TraceSessionListSerializer,
-    CoachViewSpecificTeamPlayersSerializer,
-    HighlightDateSessionSerializer,
-    HighlightClipReelSerializer,
-    MatchInfoSerializer,
-    PossessionTeamMetricsSerializer,
-    PossessionPlayerMetricsSerializer,
-    GenerateHighlightClipReelSerializer,
-)
-from tracevision.services import TraceVisionService
-from tracevision.utils import check_duplicate_game, get_or_create_canonical_game
-from games.models import GameUserRole, Game
-from tracevision.tasks import map_players_to_users_task
-
-
-logger = logging.getLogger()
-
-CUSTOMER_ID = int(settings.TRACEVISION_CUSTOMER_ID)
-API_KEY = settings.TRACEVISION_API_KEY
-GRAPHQL_URL = settings.TRACEVISION_GRAPHQL_URL
 
 
 class TraceVisionProcessesList(ListAPIView):
@@ -1151,19 +1146,66 @@ class GetAvailableHighlightDatesView(APIView):
 
     def get(self, request):
         try:
-            # Get the current user's player
-            player = request.user.trace_players.first()
-            if not player:
-                return Response(
-                    {
-                        "success": False,
-                        "message": "No player found for this user",
-                        "data": {},
-                    },
-                    status=http_status.HTTP_404_NOT_FOUND,
+            user = request.user
+            user_role = user.role
+            
+            # Check if user is a coach
+            is_coach = user_role == "Coach"
+            
+            if is_coach:
+                # For coaches: get sessions where coach's team is in the game OR coach is coaching players from either team
+                coach_team = user.team
+                coach_teams = list(user.teams_coached.values_list('id', flat=True))  # Get team IDs efficiently
+                
+                # Build query for coach access - must have highlights (clip_reels exist)
+                coach_queries = models.Q()
+                
+                # 1. Coach's team is one of the teams in the session
+                if coach_team:
+                    coach_queries |= models.Q(home_team=coach_team) | models.Q(away_team=coach_team)
+                
+                # 2. Coach is in the team's coach field for either home_team or away_team
+                if coach_teams:
+                    coach_queries |= models.Q(home_team_id__in=coach_teams) | models.Q(away_team_id__in=coach_teams)
+                
+                # 3. Coach is coaching players (through WajoUser.coach) who have highlights in the session
+                # Get TracePlayers for coached users in a single optimized query
+                coached_trace_player_ids = list(
+                    TracePlayer.objects.filter(user__coach=user)
+                    .values_list('id', flat=True)
                 )
-
-            try:
+                if coached_trace_player_ids:
+                    coach_queries |= (
+                        models.Q(clip_reels__primary_player_id__in=coached_trace_player_ids)
+                        | models.Q(clip_reels__involved_players__id__in=coached_trace_player_ids)
+                    )
+                
+                # Get all sessions where coach has access AND has highlights
+                # Using filter with clip_reels ensures we only get sessions with highlights
+                if coach_queries:
+                    sessions_with_highlights = (
+                        TraceSession.objects.filter(coach_queries)
+                        .filter(clip_reels__isnull=False)  # Ensure sessions have highlights
+                        .select_related("home_team", "away_team")
+                        .distinct()
+                        .order_by("-match_date", "-id")
+                    )
+                else:
+                    # No access criteria met, return empty queryset
+                    sessions_with_highlights = TraceSession.objects.none()
+            else:
+                # For players: get sessions where the player has highlights
+                player = user.trace_players.first()
+                if not player:
+                    return Response(
+                        {
+                            "success": False,
+                            "message": "No player found for this user",
+                            "data": {},
+                        },
+                        status=http_status.HTTP_404_NOT_FOUND,
+                    )
+                
                 # Get sessions with teams where the player has highlights
                 sessions_with_highlights = (
                     TraceSession.objects.filter(
@@ -1174,6 +1216,8 @@ class GetAvailableHighlightDatesView(APIView):
                     .distinct()
                     .order_by("-match_date", "-id")
                 )
+
+            try:
 
                 # Prefetch all players for teams in these sessions
                 # Get unique team IDs from sessions

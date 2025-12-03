@@ -727,11 +727,11 @@ class TraceVisionProcessSerializer(serializers.Serializer):
 
         # Handle video processing
         if video_link:
-            # video_url_for_db = TraceVisionService.import_game_video(
-            #     session_id=session_id,
-            #     video_link=video_link,
-            #     start_time=start_time
-            # )
+            video_url_for_db = TraceVisionService.import_game_video(
+                session_id=session_id,
+                video_link=video_link,
+                start_time=start_time
+            )
             pass
         # TODO: Implement video upload functionality later
         # else:
@@ -800,7 +800,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         GameUserRole.objects.get_or_create(game=canonical_game, user=user)
 
         # Trigger video download task
-        # download_video_and_save_to_azure_blob.delay(session.id)
+        download_video_and_save_to_azure_blob.delay(session.id)
 
         return session
 
