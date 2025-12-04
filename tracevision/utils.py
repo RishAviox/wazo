@@ -1032,11 +1032,11 @@ def get_or_create_azure_sas_token(blob_url: str, validity_days: int = 1) -> str:
 
         # Get Azure storage credentials from Django settings
         connection_string = getattr(settings, "AZURE_CONNECTION_STRING", None)
-        account_name = getattr(settings, "AZURE_ACCOUNT_NAME", None)
-        account_key = getattr(settings, "AZURE_ACCOUNT_KEY", None)
 
         # Extract from connection string if available
-        if connection_string and (not account_name or not account_key):
+        account_name = None
+        account_key = None
+        if connection_string:
             match = re.search(r"AccountName=([^;]+)", connection_string)
             if match:
                 account_name = match.group(1)
@@ -1081,7 +1081,7 @@ def get_or_create_azure_sas_token(blob_url: str, validity_days: int = 1) -> str:
         # Construct URL with SAS token
         blob_url_with_sas = f"{blob_client.url}?{sas_token}"
 
-        logger.info(f"Generated SAS token valid until {expiry_time}")
+        logger.info(f"Generated SAS token valid until {expiry_time}:{sas_token}")
         return blob_url_with_sas
 
     except Exception as e:
