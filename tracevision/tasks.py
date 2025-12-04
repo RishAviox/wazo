@@ -1353,7 +1353,7 @@ def compute_aggregates_task(session_id):
 
         # Trigger overlay highlights generation for clip reels
         try:
-            # generate_overlay_highlights_task.delay(session_id)
+            generate_overlay_highlights_task.delay(session_id)
             logger.info(
                 f"Queued overlay highlights generation for session {session_id}"
             )
