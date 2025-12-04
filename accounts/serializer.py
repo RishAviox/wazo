@@ -1,6 +1,7 @@
 from .models import *
 from rest_framework import serializers
 import re
+from .utils import find_user_by_normalized_phone
 
 def custom_phone_number_validator(value):
     if not re.match(r'^\+?1?\d{9,15}$', value):
@@ -34,7 +35,7 @@ class WajoUserSerializer(serializers.ModelSerializer):
         }
 
     def validate_phone_no(self, value):
-        if WajoUser.objects.filter(phone_no=value).exists():
+        if find_user_by_normalized_phone(value):
             raise serializers.ValidationError("A user with this phone number already exists.")
         return value
     

@@ -9,12 +9,63 @@ from django.conf import settings
 
 import pandas as pd
 
-from .models import OTPStore
+from .models import OTPStore, WajoUser
 from teams.models import Team
 from games.models import Game
 from cards.utils import calculate_gps_athletic_skills, calculate_gps_football_abilities
 from cards.utils import calculate_attacking_skills, calculate_videocard_defensive, calculate_videocard_distributions
 from cards.models import GPSAthleticSkills, GPSFootballAbilities, AttackingSkills, VideoCardDefensive, VideoCardDistributions
+
+
+def normalize_phone_number(phone_no):
+    """
+    Normalize phone number by extracting only digits and taking the last 10 digits.
+    This ensures that phone numbers with or without country codes are treated as the same.
+    
+    Examples:
+    - "1234567890" -> "1234567890"
+    - "+11234567890" -> "1234567890"
+    - "+911234567890" -> "1234567890"
+    - "12345678901" -> "1234567890" (if 11 digits, takes last 10)
+    """
+    if not phone_no:
+        return None
+    # Remove all non-digit characters
+    digits_only = ''.join(filter(str.isdigit, str(phone_no)))
+    # Take the last 10 digits (standard phone number length)
+    if len(digits_only) >= 10:
+        return digits_only[-10:]
+    return digits_only
+
+
+def find_user_by_normalized_phone(phone_no):
+    """
+    Find a user by normalizing the phone number and comparing with existing users.
+    This handles cases where:
+    - User exists with normalized phone (e.g., "1234567890")
+    - User exists with country code (e.g., "+11234567890")
+    - User exists with different country code (e.g., "+911234567890")
+    
+    Returns the user if found, None otherwise.
+    """
+    normalized = normalize_phone_number(phone_no)
+    if not normalized:
+        return None
+    
+    # First, try exact match with normalized phone (fastest - handles already normalized numbers)
+    try:
+        return WajoUser.objects.get(phone_no=normalized)
+    except WajoUser.DoesNotExist:
+        pass
+    
+    # If not found, check all users by normalizing their phone numbers
+    # This handles cases where existing users have different formats
+    for user in WajoUser.objects.all():
+        user_normalized = normalize_phone_number(user.phone_no)
+        if user_normalized == normalized:
+            return user
+    
+    return None
 
 
 def generate_access_token(user):
@@ -41,8 +92,12 @@ def generate_and_send_otp(phone_no):
     # For guest account
     if phone_no == "+14085551234":
         return "123456"
+    # Normalize phone number for consistent storage and lookup
+    normalized_phone = normalize_phone_number(phone_no)
+    if not normalized_phone:
+        raise ValueError("Invalid phone number format")
     otp_number = secrets.randbelow(900000) + 100000 # 6 digit 
-    otp = OTPStore(data=str(otp_number), phone_no=phone_no)
+    otp = OTPStore(data=str(otp_number), phone_no=normalized_phone)
     otp.save()
 
     # send OTP via API call
@@ -68,9 +123,13 @@ def validate_otp(phone_no, input_otp):
     # For guest account
     if phone_no == "+14085551234" and input_otp == "123456":
         return True
+    # Normalize phone number for consistent lookup
+    normalized_phone = normalize_phone_number(phone_no)
+    if not normalized_phone:
+        return False
     with transaction.atomic(): 
         try:
-            otp = OTPStore.objects.select_for_update().filter(phone_no=phone_no).latest('created_on')
+            otp = OTPStore.objects.select_for_update().filter(phone_no=normalized_phone).latest('created_on')
             if otp.is_valid() and otp.data == input_otp:
                 otp.is_used = True
                 otp.save()

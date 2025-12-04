@@ -7,11 +7,12 @@ from django.contrib import auth
 from django.utils.deprecation import MiddlewareMixin
 
 from accounts.models import WajoUser
+from accounts.utils import find_user_by_normalized_phone
 from .models import APILog
 
 
 class JWTAuthentication(authentication.BaseAuthentication):
-    def authenticate(self, request):
+    def authenticate(self, request):             
         auth_data = authentication.get_authorization_header(request)
         if not auth_data:
             return None
@@ -38,7 +39,9 @@ class JWTAuthentication(authentication.BaseAuthentication):
             if payload['token_type'] != 'access':
                 raise exceptions.AuthenticationFailed('Invalid token type, expected access token')
 
-            user = WajoUser.objects.get(phone_no=payload['id'])
+            user = find_user_by_normalized_phone(payload['id'])
+            if not user:
+                raise exceptions.AuthenticationFailed('No such user')
             return (user, None)
 
         except jwt.ExpiredSignatureError:

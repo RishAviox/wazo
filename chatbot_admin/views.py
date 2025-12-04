@@ -12,6 +12,7 @@ import jwt
 from .permissions import IsAdminUser
 
 from accounts.models import WajoUser
+from accounts.utils import find_user_by_normalized_phone
 from questionnaire.models import DailyWellnessUserResponse, RPEUserResponse
 
 
@@ -75,9 +76,8 @@ class DailyWellnessUserResponseCreateView(APIView):
         if not phone_no:
             return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            user = WajoUser.objects.get(phone_no=phone_no)
-        except WajoUser.DoesNotExist:
+        user = find_user_by_normalized_phone(phone_no)
+        if not user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
         today = timezone.make_aware(datetime.combine(now().date(), datetime.min.time()))
@@ -124,9 +124,8 @@ class RPEUserResponseCreateView(APIView):
         if not phone_no:
             return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            user = WajoUser.objects.get(phone_no=phone_no)
-        except WajoUser.DoesNotExist:
+        user = find_user_by_normalized_phone(phone_no)
+        if not user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
         today = timezone.make_aware(datetime.combine(now().date(), datetime.min.time()))
@@ -173,9 +172,8 @@ class RecurringEventsCreateView(APIView):
         if not phone_no:
             return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            user = WajoUser.objects.get(phone_no=phone_no)
-        except WajoUser.DoesNotExist:
+        user = find_user_by_normalized_phone(phone_no)
+        if not user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
         data['user'] = phone_no
@@ -202,9 +200,8 @@ class OneTimeEventsCreateView(APIView):
         if not phone_no:
             return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            user = WajoUser.objects.get(phone_no=phone_no)
-        except WajoUser.DoesNotExist:
+        user = find_user_by_normalized_phone(phone_no)
+        if not user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
         data['user'] = phone_no
