@@ -1045,10 +1045,16 @@ class ClipReelVideoSerializer(serializers.ModelSerializer):
     status = serializers.CharField(source="generation_status", read_only=True)
     default = serializers.BooleanField(source="is_default", read_only=True)
     label = serializers.CharField(read_only=True, allow_blank=True)
+    primary_player = PlayerDetailSerializer(read_only=True, allow_null=True)
+    can_generate = serializers.SerializerMethodField()
 
     class Meta:
         model = TraceClipReel
-        fields = ["id", "url", "ratio", "tags", "status", "default", "label"]
+        fields = ["id", "url", "ratio", "tags", "status", "default", "label", "primary_player", "can_generate"]
+
+    def get_can_generate(self, obj):
+        """Return True if primary_player is set, False otherwise"""
+        return obj.primary_player is not None
 
 
 class HighlightClipReelSerializer(serializers.ModelSerializer):
@@ -1077,6 +1083,7 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
     # Commented out fields not needed by frontend
     # start_clock = serializers.SerializerMethodField()
     # end_clock = serializers.SerializerMethodField()
+    trace_player = PlayerDetailSerializer(source="player", read_only=True, allow_null=True)
     primary_player = PlayerDetailSerializer(read_only=True)
     involved_players = PlayerDetailSerializer(many=True, read_only=True)
     # session = serializers.CharField(source="session.id", read_only=True)
@@ -1136,6 +1143,7 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
             "age_group",
             "match_date",
             "label",
+            "trace_player",
             "primary_player",
             "involved_players",
             "match_start_time",

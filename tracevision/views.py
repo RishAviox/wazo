@@ -1,6 +1,6 @@
 import logging
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.conf import settings
 from datetime import datetime
 from rest_framework.views import APIView
@@ -955,7 +955,14 @@ class GetTracePlayerReelsView(ListAPIView):
         queryset = (
             TraceHighlight.objects.filter(session=session)
             .select_related("player__team", "session__home_team", "session__away_team")
-            .prefetch_related("clip_reels")  # Prefetch clip reels for videos
+            .prefetch_related(
+                Prefetch(
+                    "clip_reels",
+                    queryset=TraceClipReel.objects.select_related(
+                        "primary_player", "primary_player__team"
+                    ),
+                )
+            )  # Prefetch clip reels with primary_player for videos
         )
 
         # Apply filters from query parameters
