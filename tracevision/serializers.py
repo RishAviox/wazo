@@ -1,4 +1,5 @@
 import requests
+import uuid
 from datetime import datetime
 from django.conf import settings
 from django.db.models import Q
@@ -20,6 +21,31 @@ from tracevision.models import TraceSession
 from tracevision.services import TraceVisionService
 from games.models import GameUserRole
 from tracevision.tasks import download_video_and_save_to_azure_blob
+
+
+def generate_unique_team_id(max_retries=10):
+    """
+    Generate a unique team ID using UUID (first 10 characters).
+    Checks for duplicates and retries if a team with that ID already exists.
+    
+    Args:
+        max_retries: Maximum number of attempts to generate a unique ID
+        
+    Returns:
+        str: A unique 10-character team ID
+        
+    Raises:
+        ValueError: If unable to generate a unique ID after max_retries attempts
+    """
+    for _ in range(max_retries):
+        # Generate UUID without hyphens and take first 10 characters
+        team_id = uuid.uuid4().hex[:10]
+        
+        # Check if a team with this ID already exists
+        if not Team.objects.filter(id=team_id).exists():
+            return team_id
+    
+    raise ValueError(f"Unable to generate unique team ID after {max_retries} attempts")
 
 
 class TraceClipReelSerializer(serializers.ModelSerializer):
@@ -562,9 +588,9 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         # Parse the final score
         home_score, away_score = map(int, final_score_str.split("-"))
 
-        # Generate team IDs and get or create teams
-        home_team_id = "".join(c for c in home_team_name.upper() if c.isalnum())[:10]
-        away_team_id = "".join(c for c in away_team_name.upper() if c.isalnum())[:10]
+        # Generate unique team IDs using UUID and get or create teams
+        home_team_id = generate_unique_team_id()
+        away_team_id = generate_unique_team_id()
 
         home_team_obj, _ = Team.objects.get_or_create(
             id=home_team_id,
