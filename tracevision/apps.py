@@ -7,6 +7,7 @@ class TracevisionConfig(AppConfig):
     name = "tracevision"
 
     def ready(self):
+        import tracevision.signals  # noqa: F401 - Import signals to register them
         from .scheduler import start_scheduler
 
         threading.Thread(target=start_scheduler, daemon=True).start()

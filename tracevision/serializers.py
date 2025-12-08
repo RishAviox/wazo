@@ -1,4 +1,7 @@
+import logging
 import requests
+import uuid
+import hashlib
 from datetime import datetime
 from django.conf import settings
 from django.db.models import Q
@@ -20,6 +23,8 @@ from tracevision.models import TraceSession
 from tracevision.services import TraceVisionService
 from games.models import GameUserRole
 from tracevision.tasks import download_video_and_save_to_azure_blob
+
+logger = logging.getLogger(__name__)
 
 
 class TraceClipReelSerializer(serializers.ModelSerializer):
@@ -303,13 +308,23 @@ class TraceVisionProcessSerializer(serializers.Serializer):
     def validate(self, data):
         """Additional validation rules."""
 
-        # Check if user belongs to a team
         request = self.context.get("request")
         if request and request.user:
             user = request.user
-            has_team = False
 
-            # For coaches, check teams_coached relationship
+            # Task 2: A WajoUser (player) should not be able to upload the game if jersey number is not selected
+            # Check if user is a player (not a coach)
+            if user.role != "Coach":
+                if not user.jersey_number:
+                    raise serializers.ValidationError(
+                        {
+                            "error": "Jersey number required",
+                            "message": "Please select your jersey number in your profile to upload a game.",
+                        }
+                    )
+
+            # Check if user belongs to a team (for coaches, check teams_coached)
+            has_team = False
             if user.role == "Coach":
                 has_team = user.teams_coached.exists()
             else:
@@ -515,14 +530,33 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             if not available_tabs:
                 errors.append("The Excel file appears to be empty or corrupted")
 
-            # If there are any errors, raise validation error
+            # Task 1: If there are any errors, raise validation error and prevent upload/session creation
             if errors:
-                raise serializers.ValidationError(errors)
+                raise serializers.ValidationError(
+                    {
+                        "error": "Excel file validation failed",
+                        "details": errors,
+                        "message": "Please fix the Excel file errors before uploading. Session will not be created until Excel data is valid.",
+                    }
+                )
 
             return value
 
+        except pd.errors.EmptyDataError:
+            raise serializers.ValidationError(
+                {
+                    "error": "Excel file is empty",
+                    "message": "The Excel file appears to be empty. Please provide a valid Excel file. Session will not be created.",
+                }
+            )
         except Exception as e:
-            raise serializers.ValidationError([f"Error reading CSV file: {str(e)}"])
+            raise serializers.ValidationError(
+                {
+                    "error": "Excel file validation error",
+                    "details": str(e),
+                    "message": f"Error reading Excel file: {str(e)}. Session will not be created until Excel data is valid.",
+                }
+            )
 
     def create(self, validated_data):
         """
@@ -562,19 +596,144 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         # Parse the final score
         home_score, away_score = map(int, final_score_str.split("-"))
 
-        # Generate team IDs and get or create teams
-        home_team_id = "".join(c for c in home_team_name.upper() if c.isalnum())[:10]
-        away_team_id = "".join(c for c in away_team_name.upper() if c.isalnum())[:10]
+        # Helper functions to reduce code duplication
+        def generate_short_team_id():
+            """Generate a short unique team ID (max 10 chars) using UUID."""
+            return uuid.uuid4().hex[:10]
 
-        home_team_obj, _ = Team.objects.get_or_create(
-            id=home_team_id,
-            defaults={"name": home_team_name, "jersey_color": home_color},
+        def teams_match_by_name(team_name1, team_name2):
+            """
+            Check if two team names match (case-insensitive).
+            Works with any language team names.
+
+            Args:
+                team_name1: First team name (string)
+                team_name2: Second team name (string)
+
+            Returns:
+                bool: True if team names match, False otherwise
+            """
+            if not team_name1 or not team_name2:
+                return False
+            return team_name1.lower() == team_name2.lower()
+
+        def teams_match(team1, team2):
+            """
+            Check if two teams match by name (case-insensitive) or ID.
+            Works with any language team names.
+
+            Args:
+                team1: First Team instance
+                team2: Second Team instance
+
+            Returns:
+                bool: True if teams match, False otherwise
+            """
+            if not team1 or not team2:
+                return False
+
+            # Primary check: by name (case-insensitive, works with Hebrew/any language)
+            if team1.name and team2.name:
+                if team1.name.lower() == team2.name.lower():
+                    return True
+
+            # Fallback: by ID
+            return team1.id == team2.id
+
+        # Validation 1: Check if away_team matches user's team (user should be on home team)
+        # Only validate for players (not coaches)
+        if user.role != "Coach" and user.team:
+            # Check by name first (works with any language, before team creation)
+            if teams_match_by_name(away_team_name, user.team.name or ""):
+                raise ValidationError(
+                    {
+                        "error": "Team assignment error",
+                        "message": f"Your team '{user.team.name or user.team.id}' is set as the away team. You should be on the home team. Please fix the team name or team selection in the upload form.",
+                        "user_team": user.team.name or user.team.id,
+                        "away_team": away_team_name,
+                        "suggestion": "Swap home and away teams, or update your team selection in your profile.",
+                    }
+                )
+
+            # Validation 2: Check if home_team matches user's team (before creating teams)
+            user_team_obj = user.team
+            if not teams_match_by_name(home_team_name, user_team_obj.name or ""):
+                raise ValidationError(
+                    {
+                        "error": "Team mismatch",
+                        "message": f"Your team '{user_team_obj.name or user_team_obj.id}' does not match the home team '{home_team_name}'. Please ensure you are uploading a game for your team.",
+                        "user_team": user_team_obj.name or user_team_obj.id,
+                        "home_team": home_team_name,
+                    }
+                )
+
+        def get_or_create_team_with_validation(
+            team_name, jersey_color, team_type="team"
+        ):
+            """
+            Get or create a team by name, validating jersey color.
+
+            Args:
+                team_name: Name of the team
+                jersey_color: Jersey color to validate/set
+                team_type: "home" or "away" for error messages
+
+            Returns:
+                Team instance
+
+            Raises:
+                ValidationError if jersey color doesn't match existing team
+            """
+            # Find existing team by name (case-insensitive, works with any language)
+            team_obj = Team.objects.filter(name__iexact=team_name).first()
+
+            if team_obj:
+                # Team exists - validate jersey color matches (do not allow update)
+                if team_obj.jersey_color and team_obj.jersey_color != jersey_color:
+                    raise ValidationError(
+                        {
+                            "error": "Jersey color mismatch",
+                            "message": f"The {team_type} team '{team_name}' already exists with jersey color '{team_obj.jersey_color}', but you provided '{jersey_color}'. Please use the correct jersey color or contact support.",
+                            "team_name": team_name,
+                            "team_type": team_type,
+                            "existing_color": team_obj.jersey_color,
+                            "provided_color": jersey_color,
+                        }
+                    )
+            else:
+                # Team doesn't exist - create new one with UUID-based ID
+                team_id = generate_short_team_id()
+
+                # Ensure ID is unique (handle collisions)
+                while Team.objects.filter(id=team_id).exists():
+                    team_id = generate_short_team_id()
+
+                team_obj = Team.objects.create(
+                    id=team_id,
+                    name=team_name,
+                    jersey_color=jersey_color,
+                )
+
+            return team_obj
+
+        # Create teams only after all validations pass
+        home_team_obj = get_or_create_team_with_validation(
+            home_team_name, home_color, team_type="home"
+        )
+        away_team_obj = get_or_create_team_with_validation(
+            away_team_name, away_color, team_type="away"
         )
 
-        away_team_obj, _ = Team.objects.get_or_create(
-            id=away_team_id,
-            defaults={"name": away_team_name, "jersey_color": away_color},
-        )
+        # Task 3: Handle user team assignment (after teams are created)
+        # If user has no team, set home_team as their team
+        if user.role != "Coach":  # Only for players, not coaches
+            if not user.team:
+                # Set home_team as user's team
+                user.team = home_team_obj
+                user.save(update_fields=["team"])
+                logger.info(
+                    f"Set home_team '{home_team_obj.name}' as team for user {user.phone_no}"
+                )
 
         match_date = game_date
         duplicate_session = check_duplicate_game(
@@ -1050,7 +1209,17 @@ class ClipReelVideoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TraceClipReel
-        fields = ["id", "url", "ratio", "tags", "status", "default", "label", "primary_player", "can_generate"]
+        fields = [
+            "id",
+            "url",
+            "ratio",
+            "tags",
+            "status",
+            "default",
+            "label",
+            "primary_player",
+            "can_generate",
+        ]
 
     def get_can_generate(self, obj):
         """Return True if primary_player is set, False otherwise"""
@@ -1083,7 +1252,9 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
     # Commented out fields not needed by frontend
     # start_clock = serializers.SerializerMethodField()
     # end_clock = serializers.SerializerMethodField()
-    trace_player = PlayerDetailSerializer(source="player", read_only=True, allow_null=True)
+    trace_player = PlayerDetailSerializer(
+        source="player", read_only=True, allow_null=True
+    )
     primary_player = PlayerDetailSerializer(read_only=True)
     involved_players = PlayerDetailSerializer(many=True, read_only=True)
     # session = serializers.CharField(source="session.id", read_only=True)
@@ -1366,4 +1537,32 @@ class GenerateHighlightClipReelSerializer(serializers.Serializer):
                     f"Allowed fields are: {', '.join(sorted(allowed_fields))}"
                 )
 
+        return attrs
+
+
+class MapUserToPlayerSerializer(serializers.Serializer):
+    """
+    Serializer for mapping a WajoUser to a TracePlayer.
+    Validates input and ensures only expected fields are accepted.
+    """
+
+    user_id = serializers.CharField(
+        required=True,
+        help_text="Phone number (primary key) of the WajoUser to map",
+    )
+    player_id = serializers.IntegerField(
+        required=True,
+        help_text="ID of the TracePlayer to map to",
+    )
+
+    def validate(self, attrs):
+        """Validate the entire data and reject any extra fields."""
+        if hasattr(self, "initial_data"):
+            allowed_fields = {"user_id", "player_id"}
+            extra_fields = set(self.initial_data.keys()) - allowed_fields
+            if extra_fields:
+                raise serializers.ValidationError(
+                    f"Unexpected fields: {', '.join(sorted(extra_fields))}. "
+                    f"Allowed fields are: {', '.join(sorted(allowed_fields))}"
+                )
         return attrs

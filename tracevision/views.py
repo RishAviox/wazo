@@ -20,6 +20,7 @@ from tracevision.models import (
     TracePossessionSegment,
     TracePossessionStats,
     TraceHighlight,
+    PlayerUserMapping,
 )
 from tracevision.tasks import (
     generate_overlay_highlights_task,
@@ -36,6 +37,7 @@ from tracevision.serializers import (
     PossessionTeamMetricsSerializer,
     PossessionPlayerMetricsSerializer,
     GenerateHighlightClipReelSerializer,
+    MapUserToPlayerSerializer,
 )
 from tracevision.services import TraceVisionService
 from games.models import GameUserRole, Game
@@ -1759,6 +1761,205 @@ class GenerateHighlightClipReelView(APIView):
 
         except Exception as e:
             logger.exception(f"Error in GenerateHighlightClipReelView: {str(e)}")
+            return Response(
+                {"error": "Internal server error", "details": str(e)},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class MapUserToPlayerView(APIView):
+    """
+    API endpoint to map a WajoUser to a TracePlayer.
+    Only coaches can perform this mapping, and they must be coaches of the team
+    that the player belongs to (or both teams in the session).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Map a WajoUser to a TracePlayer.
+
+        Request body:
+        {
+            "user_id": "1234567890",  # Phone number of WajoUser
+            "player_id": 123           # ID of TracePlayer
+        }
+
+        Validations:
+        1. user_id must be a valid WajoUser
+        2. player_id must be a valid TracePlayer
+        3. Only coaches can map (must be coach of player's team or both teams)
+        4. The user's team must match the TracePlayer's team (home_team or away_team)
+        """
+        try:
+            from accounts.models import WajoUser
+
+            # Validate input
+            serializer = MapUserToPlayerSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {"error": "Validation failed", "details": serializer.errors},
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+
+            user_id = serializer.validated_data["user_id"]
+            player_id = serializer.validated_data["player_id"]
+
+            # Validation 1: Check if user_id is a valid WajoUser
+            try:
+                wajo_user = WajoUser.objects.select_related("team").get(
+                    phone_no=user_id
+                )
+            except WajoUser.DoesNotExist:
+                return Response(
+                    {
+                        "error": "User not found",
+                        "details": f"WajoUser with phone_no '{user_id}' does not exist",
+                    },
+                    status=http_status.HTTP_404_NOT_FOUND,
+                )
+
+            # Validation 2: Check if player_id is a valid TracePlayer
+            try:
+                trace_player = TracePlayer.objects.select_related(
+                    "team", "session", "user"
+                ).get(id=player_id)
+            except TracePlayer.DoesNotExist:
+                return Response(
+                    {
+                        "error": "Player not found",
+                        "details": f"TracePlayer with ID '{player_id}' does not exist",
+                    },
+                    status=http_status.HTTP_404_NOT_FOUND,
+                )
+
+            # Validation 3: Check if requesting user is a coach
+            requesting_user = request.user
+            if requesting_user.role != "Coach":
+                return Response(
+                    {
+                        "error": "Unauthorized",
+                        "details": "You are not authorized to map the user to the player. Only coaches can perform this action.",
+                    },
+                    status=http_status.HTTP_403_FORBIDDEN,
+                )
+
+            # Check if requesting user is a coach of the player's team or both teams
+            player_team = trace_player.team
+            session = trace_player.session
+            home_team = session.home_team
+            away_team = session.away_team
+
+            # Get teams the requesting user coaches
+            user_teams_coached_ids = set(
+                requesting_user.teams_coached.values_list("id", flat=True)
+            )
+
+            # Check if user is coach of player's team
+            is_coach_of_player_team = (
+                player_team and player_team.id in user_teams_coached_ids
+            )
+
+            # Check if user is coach of both teams (home and away)
+            is_coach_of_both_teams = False
+            if home_team and away_team:
+                is_coach_of_both_teams = (
+                    home_team.id in user_teams_coached_ids
+                    and away_team.id in user_teams_coached_ids
+                )
+
+            if not (is_coach_of_player_team or is_coach_of_both_teams):
+                return Response(
+                    {
+                        "error": "Unauthorized",
+                        "details": "You are not authorized to map the user to the player. You must be a coach of the team that the player belongs to, or both teams.",
+                    },
+                    status=http_status.HTTP_403_FORBIDDEN,
+                )
+
+            # Validation 4: Check if user's team matches TracePlayer's team (home_team or away_team)
+            if not wajo_user.team:
+                return Response(
+                    {
+                        "error": "User team not set",
+                        "details": "The WajoUser must have a team assigned before mapping to a TracePlayer",
+                    },
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+
+            user_team = wajo_user.team
+            player_team = trace_player.team
+
+            # Check if user's team matches player's team
+            if user_team.id != player_team.id:
+                return Response(
+                    {
+                        "error": "Team mismatch",
+                        "details": f"The user's team ({user_team.name or user_team.id}) does not match the player's team ({player_team.name or player_team.id})",
+                    },
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Validation 5: Check if player is already mapped to another user
+            # One TracePlayer can only be mapped to one WajoUser
+            if trace_player.user:
+                if trace_player.user == wajo_user:
+                    # Already mapped to the same user - return success without remapping
+                    logger.info(
+                        f"TracePlayer {player_id} is already mapped to user {user_id}. "
+                        f"No action needed."
+                    )
+                    return Response(
+                        {
+                            "success": True,
+                            "message": "User is already mapped to this player",
+                        },
+                        status=http_status.HTTP_200_OK,
+                    )
+                else:
+                    # Already mapped to a different user - prevent remapping
+                    existing_user = trace_player.user
+                    logger.warning(
+                        f"TracePlayer {player_id} is already mapped to user {existing_user.phone_no}. "
+                        f"Cannot remap to {user_id}. One TracePlayer can only be mapped to one WajoUser."
+                    )
+                    return Response(
+                        {
+                            "error": "Player already mapped",
+                            "details": f"This TracePlayer is already mapped to user {existing_user.phone_no}. "
+                            f"One TracePlayer can only be mapped to one WajoUser. "
+                            f"To remap, first unmap the existing user.",
+                        },
+                        status=http_status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Perform the mapping (player is not mapped yet)
+            trace_player.user = wajo_user
+            trace_player.save(update_fields=["user"])
+
+            # Create mapping history record
+            PlayerUserMapping.objects.create(
+                trace_player=trace_player,
+                wajo_user=wajo_user,
+                mapped_by=requesting_user,
+                mapping_source="api",
+            )
+
+            logger.info(
+                f"Successfully mapped TracePlayer {player_id} to WajoUser {user_id} by coach {requesting_user.phone_no}"
+            )
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "User mapped to player successfully",
+                },
+                status=http_status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.exception(f"Error in MapUserToPlayerView: {str(e)}")
             return Response(
                 {"error": "Internal server error", "details": str(e)},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,

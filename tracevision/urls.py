@@ -11,6 +11,7 @@ from .views import (
     CoachViewSpecificTeamPlayers,
     LinkUserToGameView,
     GenerateHighlightClipReelView,
+    MapUserToPlayerView,
 )
 
 urlpatterns = [
@@ -63,5 +64,10 @@ urlpatterns = [
         "highlights/generate/",
         GenerateHighlightClipReelView.as_view(),
         name="generate-highlight-clip-reel",
+    ),
+    path(
+        "players/map-user/",
+        MapUserToPlayerView.as_view(),
+        name="map-user-to-player",
     ),
 ]

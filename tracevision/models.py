@@ -1335,3 +1335,68 @@ class TracePossessionStats(models.Model):
     def get_possessions_involved(self):
         """Get possessions involved for player stats"""
         return self.metrics.get("possessions_involved", 0)
+
+
+class PlayerUserMapping(models.Model):
+    """
+    Track the mapping history between TracePlayer and WajoUser.
+    Records who mapped which user to which player, when, and how (API or task).
+    """
+
+    MAPPING_SOURCE_CHOICES = [
+        ("api", "API"),
+        ("task", "Task/Automatic"),
+    ]
+
+    trace_player = models.ForeignKey(
+        TracePlayer,
+        on_delete=models.CASCADE,
+        related_name="mapping_history",
+        help_text="The TracePlayer being mapped",
+    )
+    wajo_user = models.ForeignKey(
+        WajoUser,
+        on_delete=models.CASCADE,
+        related_name="player_mapping_history",
+        help_text="The WajoUser being mapped to the player",
+    )
+    mapped_by = models.ForeignKey(
+        WajoUser,
+        on_delete=models.SET_NULL,
+        related_name="mappings_performed",
+        null=True,
+        blank=True,
+        help_text="The user who performed the mapping (null for automatic/task mappings)",
+    )
+    mapped_at = models.DateTimeField(
+        auto_now_add=True, help_text="When the mapping was created"
+    )
+    mapping_source = models.CharField(
+        max_length=10,
+        choices=MAPPING_SOURCE_CHOICES,
+        default="api",
+        help_text="Whether mapping was done via API or automatic task",
+    )
+    notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Additional notes about the mapping (e.g., if player was already mapped)",
+    )
+
+    class Meta:
+        verbose_name = "Player User Mapping"
+        verbose_name_plural = "Player User Mappings"
+        indexes = [
+            models.Index(fields=["trace_player"]),
+            models.Index(fields=["wajo_user"]),
+            models.Index(fields=["mapped_at"]),
+            models.Index(fields=["mapping_source"]),
+        ]
+        ordering = ["-mapped_at"]
+
+    def __str__(self):
+        source_str = "API" if self.mapping_source == "api" else "Task"
+        mapped_by_str = (
+            f" by {self.mapped_by.phone_no}" if self.mapped_by else " (automatic)"
+        )
+        return f"{self.trace_player.name} -> {self.wajo_user.phone_no} ({source_str}{mapped_by_str})"

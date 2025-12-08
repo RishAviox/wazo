@@ -23,6 +23,7 @@ from tracevision.models import (
     TraceHighlight,
     TraceHighlightObject,
     TracePlayer,
+    PlayerUserMapping,
 )
 from tracevision.utils import (
     TraceVisionStoragePaths,
@@ -1481,9 +1482,32 @@ def map_players_to_users_task(session_id=None, user_id=None, game_id=None):
                     ).first()
 
                     if matching_user:
+                        # Safety check: Ensure player is not already mapped to another user
+                        # One TracePlayer can only be mapped to one WajoUser
+                        if player.user and player.user != matching_user:
+                            logger.warning(
+                                f"TracePlayer {player.object_id} is already mapped to user {player.user.phone_no}. "
+                                f"Cannot map to {matching_user.phone_no}. Skipping."
+                            )
+                            continue
+
+                        # Skip if already mapped to the same user
+                        if player.user == matching_user:
+                            logger.info(
+                                f"TracePlayer {player.object_id} is already mapped to user {matching_user.phone_no}. Skipping."
+                            )
+                            continue
+
                         player.user = matching_user
                         player.save()
                         mapped_count += 1
+                        # Create mapping history record
+                        PlayerUserMapping.objects.create(
+                            trace_player=player,
+                            wajo_user=matching_user,
+                            mapped_by=None,  # Automatic task mapping
+                            mapping_source="task",
+                        )
                         mapping_details.append(
                             {
                                 "player_id": player.object_id,
@@ -1507,9 +1531,32 @@ def map_players_to_users_task(session_id=None, user_id=None, game_id=None):
                     ).first()
 
                     if matching_user:
+                        # Safety check: Ensure player is not already mapped to another user
+                        # One TracePlayer can only be mapped to one WajoUser
+                        if player.user and player.user != matching_user:
+                            logger.warning(
+                                f"TracePlayer {player.object_id} is already mapped to user {player.user.phone_no}. "
+                                f"Cannot map to {matching_user.phone_no}. Skipping."
+                            )
+                            continue
+
+                        # Skip if already mapped to the same user
+                        if player.user == matching_user:
+                            logger.info(
+                                f"TracePlayer {player.object_id} is already mapped to user {matching_user.phone_no}. Skipping."
+                            )
+                            continue
+
                         player.user = matching_user
                         player.save()
                         mapped_count += 1
+                        # Create mapping history record
+                        PlayerUserMapping.objects.create(
+                            trace_player=player,
+                            wajo_user=matching_user,
+                            mapped_by=None,  # Automatic task mapping
+                            mapping_source="task",
+                        )
                         mapping_details.append(
                             {
                                 "player_id": player.object_id,
@@ -1526,13 +1573,23 @@ def map_players_to_users_task(session_id=None, user_id=None, game_id=None):
 
                 # Strategy 3: If session has only one user, map all unmapped players to that user
                 # Only applies when we have a single session (session_id or game_id mode)
+                # Note: Outer condition already ensures player.user is None, so no need for additional checks
                 if session and session.user and not player.user:
                     # Check if this is a single-player session
                     total_players = session.trace_players.count()
                     if total_players == 1:
+                        # One TracePlayer can only be mapped to one WajoUser
+                        # Since we already checked not player.user, we can safely map
                         player.user = session.user
                         player.save()
                         mapped_count += 1
+                        # Create mapping history record
+                        PlayerUserMapping.objects.create(
+                            trace_player=player,
+                            wajo_user=session.user,
+                            mapped_by=None,  # Automatic task mapping
+                            mapping_source="task",
+                        )
                         mapping_details.append(
                             {
                                 "player_id": player.object_id,
@@ -1586,6 +1643,219 @@ def map_players_to_users_task(session_id=None, user_id=None, game_id=None):
             )
         else:
             error_msg = f"Error in map_players_to_users_task: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "error": error_msg}
+
+
+@shared_task
+def auto_map_user_to_player_task(user_phone_no):
+    """
+    Automatically map a WajoUser to TracePlayer(s) when user is created/updated
+    with jersey_number and team.
+
+    This task:
+    1. Finds TracePlayers with matching jersey_number and team
+    2. If multiple TracePlayers exist in both teams, uses team.name to match
+    3. Maps the user to the appropriate TracePlayer(s)
+    4. Logs if a TracePlayer is already mapped to another user
+
+    Args:
+        user_phone_no (str): Phone number (primary key) of the WajoUser
+
+    Returns:
+        dict: Task results with success status and mapping details
+    """
+    try:
+        from accounts.models import WajoUser
+
+        logger.info(f"Starting auto-mapping for user: {user_phone_no}")
+
+        # Get the user
+        try:
+            user = WajoUser.objects.select_related("team").get(phone_no=user_phone_no)
+        except WajoUser.DoesNotExist:
+            error_msg = f"User with phone_no '{user_phone_no}' not found"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+
+        # Check if user has jersey_number and team (required for auto-mapping)
+        if not user.jersey_number or not user.team:
+            logger.info(
+                f"User {user_phone_no} does not have jersey_number or team. Skipping auto-mapping."
+            )
+            return {
+                "success": True,
+                "message": "User does not have jersey_number or team. Skipping auto-mapping.",
+                "mapped_count": 0,
+            }
+
+        # Find TracePlayers with matching jersey_number and team
+        matching_players = TracePlayer.objects.filter(
+            jersey_number=user.jersey_number,
+            team=user.team,
+            user__isnull=True,
+        ).select_related("team", "session")
+
+        if not matching_players.exists():
+            logger.info(
+                f"No unmapped TracePlayers found for user {user_phone_no} "
+                f"(jersey: {user.jersey_number}, team: {user.team.id})"
+            )
+            return {
+                "success": True,
+                "message": "No matching unmapped players found",
+                "mapped_count": 0,
+            }
+
+        # If multiple players exist in both teams (home and away), use name and team to match
+        # Group players by session to check for both teams scenario
+        mapped_count = 0
+        mapping_details = []
+
+        for player in matching_players:
+            try:
+                session = player.session
+                home_team = session.home_team
+                away_team = session.away_team
+
+                # Check if there are players with same jersey in both teams
+                players_in_both_teams = False
+                if home_team and away_team:
+                    home_players = TracePlayer.objects.filter(
+                        session=session,
+                        jersey_number=user.jersey_number,
+                        team=home_team,
+                        user__isnull=True,
+                    )
+                    away_players = TracePlayer.objects.filter(
+                        session=session,
+                        jersey_number=user.jersey_number,
+                        team=away_team,
+                        user__isnull=True,
+                    )
+
+                    if home_players.exists() and away_players.exists():
+                        players_in_both_teams = True
+
+                # If players exist in both teams, use player name and team to match
+                if players_in_both_teams:
+                    # First check: Match player name with WajoUser name
+                    name_matches = False
+                    if player.name and user.name:
+                        # Try to match first name (case-insensitive)
+                        player_first_name = (
+                            player.name.split()[0].lower()
+                            if player.name.split()
+                            else ""
+                        )
+                        user_first_name = (
+                            user.name.split()[0].lower() if user.name.split() else ""
+                        )
+
+                        # Check if first names match
+                        if (
+                            player_first_name
+                            and user_first_name
+                            and player_first_name == user_first_name
+                        ):
+                            name_matches = True
+                        # Also check if player name contains user name or vice versa (for partial matches)
+                        elif (
+                            player.name.lower() in user.name.lower()
+                            or user.name.lower() in player.name.lower()
+                        ):
+                            name_matches = True
+
+                    # If name doesn't match, skip this player
+                    if not name_matches:
+                        logger.info(
+                            f"Skipping player {player.id} - name mismatch: "
+                            f"player name '{player.name}' != user name '{user.name}'"
+                        )
+                        continue
+
+                    # Second check: Match player team with WajoUser team
+                    if player.team.id != user.team.id:
+                        logger.info(
+                            f"Skipping player {player.id} - team mismatch: "
+                            f"player team '{player.team.id}' != user team '{user.team.id}'"
+                        )
+                        continue
+
+                    # Both name and team match - this is the correct player
+                    logger.info(
+                        f"Found matching player {player.id} by name and team: "
+                        f"name '{player.name}' matches '{user.name}', team '{player.team.id}' matches '{user.team.id}'"
+                    )
+
+                # Note: We already filtered for user__isnull=True, so player should be unmapped
+                # But double-check as a safety measure
+                if player.user:
+                    logger.warning(
+                        f"TracePlayer {player.id} is already mapped to user {player.user.phone_no}. "
+                        f"Cannot auto-map to {user_phone_no}. Skipping."
+                    )
+                    # Log this action (but don't create mapping record since we didn't map)
+                    PlayerUserMapping.objects.create(
+                        trace_player=player,
+                        wajo_user=user,
+                        mapped_by=None,  # Automatic mapping, no user performed it
+                        mapping_source="task",
+                        notes=f"Auto-mapping attempted but player already mapped to {player.user.phone_no}",
+                    )
+                    continue
+
+                # Perform the mapping
+                player.user = user
+                player.save(update_fields=["user"])
+
+                # Create mapping history record (without mapped_by since it's automatic)
+                PlayerUserMapping.objects.create(
+                    trace_player=player,
+                    wajo_user=user,
+                    mapped_by=None,  # Automatic mapping
+                    mapping_source="task",
+                )
+
+                mapped_count += 1
+                mapping_details.append(
+                    {
+                        "player_id": player.id,
+                        "player_name": player.name,
+                        "jersey_number": player.jersey_number,
+                        "team": (
+                            player.team.name if player.team.name else player.team.id
+                        ),
+                        "session_id": session.session_id,
+                    }
+                )
+
+                logger.info(
+                    f"Auto-mapped TracePlayer {player.id} ({player.name}) to user {user_phone_no} "
+                    f"(jersey: {user.jersey_number}, team: {user.team.id})"
+                )
+
+            except Exception as e:
+                logger.exception(f"Error mapping player {player.id}: {e}")
+
+        logger.info(
+            f"Successfully auto-mapped {mapped_count}/{matching_players.count()} players to user {user_phone_no}"
+        )
+
+        return {
+            "success": True,
+            "total_players": matching_players.count(),
+            "mapped_count": mapped_count,
+            "unmapped_count": matching_players.count() - mapped_count,
+            "mapping_details": mapping_details,
+            "message": f"Auto-mapped {mapped_count} players to user",
+            "user_phone_no": user_phone_no,
+        }
+
+    except Exception as e:
+        error_msg = (
+            f"Error in auto_map_user_to_player_task for user {user_phone_no}: {str(e)}"
+        )
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}
 
