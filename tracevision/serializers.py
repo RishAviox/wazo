@@ -26,7 +26,6 @@ from tracevision.tasks import download_video_and_save_to_azure_blob
 
 logger = logging.getLogger(__name__)
 
-
 class TraceClipReelSerializer(serializers.ModelSerializer):
     age_group = serializers.CharField(source="session.age_group", read_only=True)
     match_date = serializers.DateField(source="session.match_date", read_only=True)
