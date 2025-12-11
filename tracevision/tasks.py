@@ -1330,8 +1330,14 @@ def process_trace_sessions_task(trace_session_id=None):
 
 
 @shared_task
-def compute_aggregates_task(session_id):
-    """Compute CSV-equivalent aggregates in background and store them in DB."""
+def compute_aggregates_task(session_id, only_possession_segments=False):
+    """
+    Compute CSV-equivalent aggregates in background and store them in DB.
+    
+    Args:
+        session_id (str): Session ID to process
+        only_possession_segments (bool): If True, only compute possession segments (skip clips)
+    """
     try:
         from tracevision.services import TraceVisionAggregationService
 
@@ -1349,19 +1355,24 @@ def compute_aggregates_task(session_id):
             return {"success": False, "error": msg}
 
         agg = TraceVisionAggregationService()
-        result = agg.compute_all(session)
-        logger.info(f"Computed aggregates for session {session_id}")
+        
+        if only_possession_segments:
+            result = agg.compute_possession_segments_only(session)
+            logger.info(f"Computed possession segments only for session {session_id}")
+        else:
+            result = agg.compute_all(session)
+            logger.info(f"Computed aggregates for session {session_id}")
 
-        # Trigger overlay highlights generation for clip reels
-        try:
-            generate_overlay_highlights_task.delay(session_id)
-            logger.info(
-                f"Queued overlay highlights generation for session {session_id}"
-            )
-        except Exception as e:
-            logger.exception(
-                f"Failed to enqueue overlay highlights generation for session {session_id}: {e}"
-            )
+            # Trigger overlay highlights generation for clip reels
+            try:
+                generate_overlay_highlights_task.delay(session_id)
+                logger.info(
+                    f"Queued overlay highlights generation for session {session_id}"
+                )
+            except Exception as e:
+                logger.exception(
+                    f"Failed to enqueue overlay highlights generation for session {session_id}: {e}"
+                )
 
         return {"success": True, "details": {k: True for k in result.keys()}}
     except Exception as e:
@@ -3103,6 +3114,20 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
         session.result["excel_highlights_count"] = highlights_created
         session.result["excel_events_processed"] = events_processed
         session.save()
+
+        # Compute only possession segments after highlights are generated (skip clips)
+        if highlights_created > 0:
+            try:
+                compute_aggregates_task.delay(
+                    session.session_id, only_possession_segments=True
+                )
+                logger.info(
+                    f"Queued possession segments computation for session {session.session_id} after highlight generation"
+                )
+            except Exception as e:
+                logger.exception(
+                    f"Failed to enqueue possession segments computation for session {session.session_id}: {e}"
+                )
 
         # Clean up all temporary files before returning
         cleanup_temp_files(temp_files_to_cleanup)

@@ -1,7 +1,9 @@
 import logging
+import json
 import requests
 from datetime import datetime, timedelta
 from django.core.cache import cache
+from django.core.files.storage import default_storage
 from django.conf import settings
 from django.db.models import Q
 
@@ -569,6 +571,66 @@ class TraceVisionAggregationService:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
+    def _fetch_result_data_from_blob(self, session):
+        """
+        Fetch session result data from Azure blob storage using result_blob_url.
+        
+        Args:
+            session: TraceSession instance with result_blob_url
+            
+        Returns:
+            dict: Result data containing highlights and other session data, or None if failed
+        """
+        try:
+            if not session.result_blob_url:
+                self.logger.warning(
+                    f"No result_blob_url found for session {session.session_id}"
+                )
+                return None
+
+            blob_url = session.result_blob_url
+            self.logger.info(
+                f"Fetching result data from Azure blob for session {session.session_id}: {blob_url}"
+            )
+
+            # Extract relative path from full blob URL for default_storage operations
+            if blob_url.startswith("https://"):
+                # Extract relative path from full Azure blob URL
+                # URL format: https://videostoragewajo.blob.core.windows.net/media/sessions/...
+                # We need: sessions/...
+                if "/media/" in blob_url:
+                    relative_path = blob_url.split("/media/", 1)[1]
+                else:
+                    self.logger.error(f"Unexpected blob URL format: {blob_url}")
+                    return None
+            else:
+                # Already a relative path
+                relative_path = blob_url
+
+            self.logger.info(f"Using relative path for storage operations: {relative_path}")
+
+            # Use Django's default storage to download the file
+            if default_storage.exists(relative_path):
+                # Read the file content
+                with default_storage.open(relative_path, "r") as f:
+                    result_data = json.load(f)
+
+                self.logger.info(
+                    f"Successfully fetched result data from Azure blob for session {session.session_id}"
+                )
+                return result_data
+            else:
+                self.logger.error(
+                    f"Blob file not found: {relative_path} (original URL: {blob_url})"
+                )
+                return None
+
+        except Exception as e:
+            self.logger.exception(
+                f"Error fetching result data from blob for session {session.session_id}: {e}"
+            )
+            return None
+
     def compute_all(self, session):
         """Compute all aggregates for a session in one shot."""
         results = {}
@@ -578,6 +640,12 @@ class TraceVisionAggregationService:
         results["clips"] = self._compute_clips(session)
         # results['passes'] = self._compute_passes(session)
         # results['passing_network'] = self._compute_passing_network(session)
+        return results
+
+    def compute_possession_segments_only(self, session):
+        """Compute only possession segments for a session (skip clips and other aggregates)."""
+        results = {}
+        results["possession_segments"] = self._compute_possessions(session)
         return results
 
     def _ms_to_clock(self, ms):
@@ -782,7 +850,7 @@ class TraceVisionAggregationService:
         return True
 
     def _compute_possessions(self, session):
-        """Compute possession metrics using highlights from session.result.highlights"""
+        """Compute possession metrics using highlights from session result data stored in Azure blob storage"""
         # from .utils import parse_time_to_seconds, filter_highlights_by_game_time
 
         try:
@@ -790,14 +858,22 @@ class TraceVisionAggregationService:
                 f"Starting possession calculation for session {session.session_id}"
             )
 
-            # Get highlights from session result
-            if not session.result or "highlights" not in session.result:
+            # Fetch result data from Azure blob storage
+            result_data = self._fetch_result_data_from_blob(session)
+            if not result_data:
                 self.logger.warning(
-                    f"No highlights found in session {session.session_id} result"
+                    f"Failed to fetch result data from blob for session {session.session_id}"
                 )
                 return False
 
-            highlights = session.result["highlights"]
+            # Get highlights from result data
+            if "highlights" not in result_data:
+                self.logger.warning(
+                    f"No highlights found in result data for session {session.session_id}"
+                )
+                return False
+
+            highlights = result_data["highlights"]
             if not highlights:
                 self.logger.warning(
                     f"Empty highlights list for session {session.session_id}"

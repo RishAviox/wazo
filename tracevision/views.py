@@ -25,6 +25,7 @@ from tracevision.models import (
 from tracevision.tasks import (
     generate_overlay_highlights_task,
     process_trace_sessions_task,
+    compute_aggregates_task,
 )
 from tracevision.serializers import (
     TraceVisionProcessesSerializer,
@@ -424,10 +425,10 @@ class TraceVisionPlayerStatsView(APIView):
 
     def post(self, request, pk):
         """
-        Trigger player stats calculation for a session or generate overlay highlights
+        Trigger player stats calculation for a session, generate overlay highlights, or recalculate possession segments
 
         Query Parameters:
-        - task_type: 'process_sessions' (default) or 'generate_overlays'
+        - task_type: 'process_sessions' (default), 'generate_overlays', or 'recalculate_possession'
         """
         try:
             # Get games where user has GameUserRole
@@ -450,17 +451,17 @@ class TraceVisionPlayerStatsView(APIView):
             task_type = request.query_params.get("task_type", "process_sessions")
 
             # Validate task type
-            if task_type not in ["process_sessions", "generate_overlays"]:
+            if task_type not in ["process_sessions", "generate_overlays", "recalculate_possession"]:
                 return Response(
                     {
                         "error": "Invalid task type",
-                        "details": "task_type must be 'process_sessions' or 'generate_overlays'",
+                        "details": "task_type must be 'process_sessions', 'generate_overlays', or 'recalculate_possession'",
                     },
                     status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Check if session is processed (only for process_sessions task)
-            if task_type == "process_sessions" and session.status != "processed":
+            # Check if session is processed (required for process_sessions and recalculate_possession tasks)
+            if task_type in ["process_sessions", "recalculate_possession"] and session.status != "processed":
                 return Response(
                     {
                         "error": "Session is not processed yet",
@@ -476,13 +477,21 @@ class TraceVisionPlayerStatsView(APIView):
                 logger.info(
                     f"Queued player stats calculation for session {session.session_id}"
                 )
-            else:  # generate_overlays
+            elif task_type == "generate_overlays":
                 task = generate_overlay_highlights_task.delay(
                     session_id=session.session_id
                 )
                 message = "Overlay highlights generation started"
                 logger.info(
                     f"Queued overlay highlights generation for session {session.session_id}"
+                )
+            else:  # recalculate_possession
+                task = compute_aggregates_task.delay(
+                    session.session_id, only_possession_segments=True
+                )
+                message = "Possession segments recalculation started"
+                logger.info(
+                    f"Queued possession segments recalculation for session {session.session_id}"
                 )
 
             return Response(
