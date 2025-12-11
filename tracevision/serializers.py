@@ -352,6 +352,15 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         if video_link == "":
             video_link = None
 
+        # Check if video_file is provided - currently not supported
+        if video_file:
+            raise serializers.ValidationError(
+                {
+                    "error": "Video file upload not supported",
+                    "message": "Video file upload is currently not supported. Please use video_link instead to provide a URL to your video.",
+                }
+            )
+
         if not video_link and not video_file:
             raise serializers.ValidationError(
                 "Either video_link or video_file must be provided"
@@ -891,7 +900,15 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             video_url_for_db = TraceVisionService.import_game_video(
                 session_id=session_id, video_link=video_link, start_time=start_time
             )
-            pass
+        else:
+            # Video file upload is not supported - this should be caught by validation
+            # but adding safety check here as well
+            raise ValidationError(
+                {
+                    "error": "Video file upload not supported",
+                    "message": "Video file upload is currently not supported. Please use video_link instead to provide a URL to your video.",
+                }
+            )
         # TODO: Implement video upload functionality later
         # else:
         #     # Get upload URL first, then check duplicate
