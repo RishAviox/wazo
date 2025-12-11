@@ -862,12 +862,20 @@ def get_or_create_canonical_game(home_team, away_team, match_date, game_type="ma
     """
     from games.models import Game
 
-    # Generate game ID from teams and date
-    # Format: HOME_TEAM_ID_AWAY_TEAM_ID_YYYYMMDD
+    # Generate game ID from teams and date using hash to ensure uniqueness
+    # Format: Hash of HOME_TEAM_ID_AWAY_TEAM_ID_YYYYMMDD (truncated to 10 chars)
+    import hashlib
+    
     home_id = "".join(c for c in str(home_team.id).upper() if c.isalnum())[:5]
     away_id = "".join(c for c in str(away_team.id).upper() if c.isalnum())[:5]
     date_str = match_date.strftime("%Y%m%d")
-    game_id = f"{home_id}_{away_id}_{date_str}"[:10]  # Max 10 chars
+    # Create a unique string combining all identifiers
+    unique_string = f"{home_id}_{away_id}_{date_str}"
+    # Generate hash and take first 10 characters (alphanumeric only)
+    hash_obj = hashlib.md5(unique_string.encode())
+    hash_hex = hash_obj.hexdigest()
+    # Take first 10 alphanumeric characters from hash
+    game_id = "".join(c for c in hash_hex if c.isalnum())[:10].upper()
 
     # Try to get existing game
     game, created = Game.objects.get_or_create(

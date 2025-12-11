@@ -949,6 +949,44 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             game_type="match",
         )
 
+        # Check if game already has a TraceSession (OneToOne constraint)
+        if hasattr(canonical_game, "trace_session") and canonical_game.trace_session:
+            existing_session = canonical_game.trace_session
+            raise ValidationError(
+                {
+                    "error": "Game already has a session",
+                    "message": "A TraceSession already exists for this game. You can link to the existing game.",
+                    "existing_data": {
+                        "session": {
+                            "id": existing_session.id,
+                            "session_id": existing_session.session_id,
+                            "match_date": existing_session.match_date.isoformat(),
+                            "home_team": (
+                                existing_session.home_team.name
+                                if existing_session.home_team
+                                else None
+                            ),
+                            "away_team": (
+                                existing_session.away_team.name
+                                if existing_session.away_team
+                                else None
+                            ),
+                            "status": existing_session.status,
+                        },
+                        "game": {
+                            "id": canonical_game.id,
+                            "type": canonical_game.type,
+                            "name": canonical_game.name,
+                            "date": (
+                                canonical_game.date.isoformat()
+                                if canonical_game.date
+                                else None
+                            ),
+                        },
+                    },
+                }
+            )
+
         # Create TraceSession
         session = TraceSession.objects.create(
             user=user,
