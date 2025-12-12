@@ -1,6 +1,6 @@
 import logging
 from django.db import models
-from django.db.models import Q, Prefetch, Exists, OuterRef
+from django.db.models import Q, Prefetch
 from django.conf import settings
 from datetime import datetime
 from rest_framework.views import APIView
@@ -1164,9 +1164,8 @@ class GetTracePlayerReelsView(ListAPIView):
 
 class GetAvailableHighlightDatesView(APIView):
     """
-    API endpoint to get list of dates on which TraceSessions are available.
-    Returns all sessions grouped by date with match info, players (if processed), 
-    status, and highlight availability.
+    API endpoint to get list of dates on which highlights are available.
+    Returns sessions grouped by date with match info and players.
     """
 
     permission_classes = [IsAuthenticated]
@@ -1179,152 +1178,118 @@ class GetAvailableHighlightDatesView(APIView):
             # Check if user is a coach
             is_coach = user_role == "Coach"
 
-            # Get games where user has GameUserRole - if user is part of a game, they see ALL sessions for that game
-            user_games = Game.objects.filter(
-                game_roles__user=user
-            ).values_list("id", flat=True)
-
-            # Get games where user's team is part of the game (through Game.teams)
-            user_team_games = []
-            if user.team:
-                user_team_games = list(
-                    Game.objects.filter(teams=user.team).values_list("id", flat=True)
-                )
-
-            # Get games where user's coached teams are part of the game
-            coached_team_games = []
             if is_coach:
+                # For coaches: get sessions where coach's team is in the game OR coach is coaching players from either team
+                coach_team = user.team
                 coach_teams = list(
                     user.teams_coached.values_list("id", flat=True)
-                )
-                if coach_teams:
-                    coached_team_games = list(
-                        Game.objects.filter(teams__in=coach_teams).values_list(
-                            "id", flat=True
-                        ).distinct()
+                )  # Get team IDs efficiently
+
+                # Build query for coach access - must have highlights (clip_reels exist)
+                coach_queries = models.Q()
+
+                # 1. Coach's team is one of the teams in the session
+                if coach_team:
+                    coach_queries |= models.Q(home_team=coach_team) | models.Q(
+                        away_team=coach_team
                     )
 
-            # Get games where user has TracePlayers (any session with user's players)
-            user_trace_player_games = []
-            user_trace_players = TracePlayer.objects.filter(user=user)
-            if user_trace_players.exists():
-                # Get all sessions where user has TracePlayers
-                user_sessions = TraceSession.objects.filter(
-                    trace_players__user=user
-                ).values_list("game_id", flat=True).distinct()
-                user_trace_player_games = [gid for gid in user_sessions if gid]
-
-            # Combine all game IDs - if user is part of ANY game, they see ALL sessions for that game
-            all_user_games = set(user_games) | set(user_team_games) | set(coached_team_games) | set(user_trace_player_games)
-
-            # Build comprehensive query for ALL sessions user has access to
-            access_queries = models.Q()
-
-            # 1. User is the original uploader
-            access_queries |= models.Q(user=user)
-
-            # 2. User is part of a game (coach/player from any team) - see ALL sessions for that game
-            if all_user_games:
-                access_queries |= models.Q(game__id__in=all_user_games)
-
-            # 3. User's team matches one of the session teams (backward compatibility)
-            if user.team:
-                access_queries |= models.Q(home_team=user.team) | models.Q(
-                    away_team=user.team
-                )
-
-            # 4. User has mapped TracePlayers in the session
-            access_queries |= models.Q(trace_players__user=user)
-
-            # 5. For coaches: additional access through teams_coached (sessions where coached teams play)
-            if is_coach:
-                coach_teams = list(
-                    user.teams_coached.values_list("id", flat=True)
-                )
+                # 2. Coach is in the team's coach field for either home_team or away_team
                 if coach_teams:
-                    access_queries |= models.Q(home_team_id__in=coach_teams) | models.Q(
+                    coach_queries |= models.Q(home_team_id__in=coach_teams) | models.Q(
                         away_team_id__in=coach_teams
                     )
 
-                # Coach is coaching players (through WajoUser.coach) who are in sessions
+                # 3. Coach is coaching players (through WajoUser.coach) who have highlights in the session
+                # Get TracePlayers for coached users in a single optimized query
                 coached_trace_player_ids = list(
                     TracePlayer.objects.filter(user__coach=user).values_list(
                         "id", flat=True
                     )
                 )
                 if coached_trace_player_ids:
-                    # Get sessions where coached players are involved (through their team membership)
-                    coached_player_teams = list(
-                        TracePlayer.objects.filter(id__in=coached_trace_player_ids)
-                        .values_list("team_id", flat=True)
-                        .distinct()
+                    coach_queries |= models.Q(
+                        clip_reels__primary_player_id__in=coached_trace_player_ids
+                    ) | models.Q(
+                        clip_reels__involved_players__id__in=coached_trace_player_ids
                     )
-                    if coached_player_teams:
-                        access_queries |= models.Q(
-                            home_team_id__in=coached_player_teams
-                        ) | models.Q(away_team_id__in=coached_player_teams)
 
-            # Get all sessions where user has access (not filtered by highlights or status)
-            sessions_with_highlights = (
-                TraceSession.objects.filter(access_queries)
-                .annotate(
-                    _has_highlights=Exists(
-                        TraceClipReel.objects.filter(session=OuterRef("pk"))
+                # Get all sessions where coach has access AND has highlights
+                # Using filter with clip_reels ensures we only get sessions with highlights
+                if coach_queries:
+                    sessions_with_highlights = (
+                        TraceSession.objects.filter(coach_queries)
+                        .filter(
+                            clip_reels__isnull=False
+                        )  # Ensure sessions have highlights
+                        .select_related("home_team", "away_team")
+                        .distinct()
+                        .order_by("-match_date", "-id")
                     )
+                else:
+                    # No access criteria met, return empty queryset
+                    sessions_with_highlights = TraceSession.objects.none()
+            else:
+                # For players: get sessions where the player has highlights
+                player = user.trace_players.first()
+                if not player:
+                    return Response(
+                        {
+                            "success": False,
+                            "message": "No player found for this user",
+                            "data": {},
+                        },
+                        status=http_status.HTTP_404_NOT_FOUND,
+                    )
+
+                # Get sessions with teams where the player has highlights
+                sessions_with_highlights = (
+                    TraceSession.objects.filter(
+                        models.Q(clip_reels__primary_player=player)
+                        | models.Q(clip_reels__involved_players=player)
+                    )
+                    .select_related("home_team", "away_team")
+                    .distinct()
+                    .order_by("-match_date", "-id")
                 )
-                .select_related("home_team", "away_team")
-                .distinct()
-                .order_by("-match_date", "-id")
-            )
 
             try:
+
                 # Prefetch all players for teams in these sessions
-                # Only fetch players if session status is "processed"
                 # Get unique team IDs from sessions
                 team_ids = set()
-                processed_sessions = []
                 for session in sessions_with_highlights:
                     if session.home_team:
                         team_ids.add(session.home_team.id)
                     if session.away_team:
                         team_ids.add(session.away_team.id)
-                    # Track which sessions are processed (need players)
-                    if session.status == "processed":
-                        processed_sessions.append(session)
 
-                # Only fetch players if there are processed sessions
-                if processed_sessions and team_ids:
-                    # Get all TracePlayers for these teams (NOT filtered by session)
-                    # This ensures we get players even if they weren't created for this specific session
-                    all_players = TracePlayer.objects.filter(
-                        team_id__in=team_ids
-                    ).select_related("team", "session")
+                # Get all TracePlayers for these teams (NOT filtered by session)
+                # This ensures we get players even if they weren't created for this specific session
+                all_players = TracePlayer.objects.filter(
+                    team_id__in=team_ids
+                ).select_related("team", "session")
 
-                    # Create a mapping of team_id -> players for quick lookup
-                    players_by_team = {}
-                    for player_obj in all_players:
-                        team_id = player_obj.team_id
-                        if team_id not in players_by_team:
-                            players_by_team[team_id] = []
-                        players_by_team[team_id].append(player_obj)
+                # Create a mapping of team_id -> players for quick lookup
+                players_by_team = {}
+                for player_obj in all_players:
+                    team_id = player_obj.team_id
+                    if team_id not in players_by_team:
+                        players_by_team[team_id] = []
+                    players_by_team[team_id].append(player_obj)
 
-                    # Attach prefetched players to sessions based on teams
-                    # Only attach players to processed sessions
-                    for session in processed_sessions:
-                        session._prefetched_players = []
-                        if session.home_team and session.home_team.id in players_by_team:
-                            session._prefetched_players.extend(
-                                players_by_team[session.home_team.id]
-                            )
-                        if session.away_team and session.away_team.id in players_by_team:
-                            session._prefetched_players.extend(
-                                players_by_team[session.away_team.id]
-                            )
-
-                # For non-processed sessions, set empty players list
+                # Attach prefetched players to sessions based on teams
+                # Get players from home_team and away_team for each session
                 for session in sessions_with_highlights:
-                    if session.status != "processed":
-                        session._prefetched_players = []
+                    session._prefetched_players = []
+                    if session.home_team and session.home_team.id in players_by_team:
+                        session._prefetched_players.extend(
+                            players_by_team[session.home_team.id]
+                        )
+                    if session.away_team and session.away_team.id in players_by_team:
+                        session._prefetched_players.extend(
+                            players_by_team[session.away_team.id]
+                        )
 
             except Exception as db_error:
                 logger.exception(
@@ -1386,7 +1351,7 @@ class GetAvailableHighlightDatesView(APIView):
             return Response(
                 {
                     "success": True,
-                    "message": "Available session dates retrieved successfully",
+                    "message": "Available highlight dates retrieved successfully",
                     "data": sessions_by_date,
                 },
                 status=http_status.HTTP_200_OK,
@@ -1394,14 +1359,14 @@ class GetAvailableHighlightDatesView(APIView):
 
         except Exception as e:
             logger.error(
-                f"Unexpected error fetching available session dates: {str(e)}"
+                f"Unexpected error fetching available highlight dates: {str(e)}"
             )
             return Response(
                 {
                     "success": False,
                     "message": "An unexpected error occurred",
                     "data": {},
-                    "error": "Unable to retrieve session dates. Please try again later.",
+                    "error": "Unable to retrieve highlight dates. Please try again later.",
                 },
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

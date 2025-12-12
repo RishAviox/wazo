@@ -1102,8 +1102,6 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
     home_team = HighlightDateTeamSerializer(read_only=True)
     away_team = HighlightDateTeamSerializer(read_only=True)
     players = serializers.SerializerMethodField()
-    status = serializers.CharField(read_only=True)
-    is_highlights_available = serializers.SerializerMethodField()
 
     class Meta:
         model = TraceSession
@@ -1121,19 +1119,12 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             "first_half_end_time",
             "second_half_start_time",
             "match_end_time",
-            "video_url",
-            "blob_video_url",
-            "status",
-            "is_highlights_available",
             "players",
+            "video_url",
         ]
 
     def get_players(self, obj):
-        """Get players from teams (home_team and away_team) - only if status is processed"""
-        # Return empty list if status is not "processed"
-        if obj.status != "processed":
-            return []
-
+        """Get players from teams (home_team and away_team) - not filtered by session"""
         players_list = []
 
         # Use prefetched players if available (from view optimization)
@@ -1159,20 +1150,10 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
 
         # Serialize all players (filtered by team, not by session)
         for player in players:
-            serializer = HighlightDatePlayerSerializer(
-                player, context=self.context
-            )
+            serializer = HighlightDatePlayerSerializer(player)
             players_list.append(serializer.data)
 
         return players_list
-
-    def get_is_highlights_available(self, obj):
-        """Check if highlights (clip_reels) are available for this session"""
-        # Use prefetched annotation if available, otherwise check directly
-        if hasattr(obj, "_has_highlights"):
-            return obj._has_highlights
-        # Check if any clip_reels exist for this session
-        return obj.clip_reels.exists()
 
 
 class PlayerDetailSerializer(serializers.ModelSerializer):
