@@ -761,7 +761,9 @@ def check_duplicate_game(
 
     # Check by video_url (exact match)
     if video_url:
-        existing_session = TraceSession.objects.filter(video_url=video_url).first()
+        existing_session = TraceSession.objects.filter(
+            video_url=video_url
+        ).exclude(status="process_error").first()
         if existing_session:
             logger.info(f"Duplicate found by video_url: {video_url}")
             return existing_session
@@ -770,7 +772,7 @@ def check_duplicate_game(
     if home_team and away_team and match_date:
         existing_session = TraceSession.objects.filter(
             home_team=home_team, away_team=away_team, match_date=match_date
-        ).first()
+        ).exclude(status="process_error").first()
         if existing_session:
             logger.info(
                 f"Duplicate found by teams and date: {home_team} vs {away_team} on {match_date}"
@@ -877,8 +879,8 @@ def get_or_create_canonical_game(home_team, away_team, match_date, game_type="ma
     # Take first 10 alphanumeric characters from hash
     game_id = "".join(c for c in hash_hex if c.isalnum())[:10].upper()
 
-    # Try to get existing game
-    game, created = Game.objects.get_or_create(
+    # Try to get existing game (including soft-deleted ones)
+    game, created = Game.all_objects.get_or_create(
         id=game_id,
         defaults={
             "type": game_type,
@@ -886,6 +888,10 @@ def get_or_create_canonical_game(home_team, away_team, match_date, game_type="ma
             "date": match_date,
         },
     )
+
+    # If the game was soft-deleted previously, restore it
+    if hasattr(game, "restore") and game.is_deleted:
+        game.restore()
 
     # Ensure teams are linked
     if home_team not in game.teams.all():

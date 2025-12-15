@@ -1973,3 +1973,84 @@ class MapUserToPlayerView(APIView):
                 {"error": "Internal server error", "details": str(e)},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class DeleteErroredTraceSessionView(APIView):
+    """
+    API endpoint to delete/soft-delete a Game and its TraceSession
+    when the TraceSession status is 'process_error'.
+    - Game is soft-deleted (WajoModel.delete)
+    - TraceSession is hard-deleted (cascade removes related Trace* data)
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        try:
+            # Only allow the original uploader (creator) to delete their errored session
+            session = (
+                TraceSession.objects.select_related("game", "home_team", "away_team")
+                .filter(id=pk, user=request.user)
+                .first()
+            )
+
+            if not session:
+                return Response(
+                    {
+                        "error": "Session not found",
+                        "details": "No TraceVision session found with the given ID for this user",
+                    },
+                    status=http_status.HTTP_404_NOT_FOUND,
+                )
+
+            # Only allow cleanup for sessions that failed processing
+            if session.status != "process_error":
+                return Response(
+                    {
+                        "error": "Invalid session status",
+                        "details": f"Only sessions with status 'process_error' can be deleted. Current status: {session.status}",
+                    },
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+
+            game = session.game
+
+            # Soft-delete the canonical Game if it exists
+            game_info = None
+            if game:
+                game_info = {
+                    "id": game.id,
+                    "type": game.type,
+                    "name": game.name,
+                    "date": game.date.isoformat() if game.date else None,
+                }
+                game.delete()
+
+            # Hard-delete the TraceSession (and cascades)
+            session_id = session.id
+            session_session_id = session.session_id
+            video_url = session.video_url
+            session.delete()
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "Errored TraceSession and its Game (if any) were deleted successfully",
+                    "deleted_session": {
+                        "id": session_id,
+                        "session_id": session_session_id,
+                        "video_url": video_url,
+                    },
+                    "deleted_game": game_info,
+                },
+                status=http_status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.exception(
+                f"Error deleting errored TraceSession {pk}: {str(e)}"
+            )
+            return Response(
+                {"error": "Internal server error", "details": str(e)},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

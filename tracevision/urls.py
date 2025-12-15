@@ -12,6 +12,7 @@ from .views import (
     LinkUserToGameView,
     GenerateHighlightClipReelView,
     MapUserToPlayerView,
+    DeleteErroredTraceSessionView,
 )
 
 urlpatterns = [
@@ -29,6 +30,11 @@ urlpatterns = [
         "process/<int:pk>/",
         TraceVisionProcessDetail.as_view(),
         name="tracevision-processes-detail",
+    ),
+    path(
+        "process/<int:pk>/",
+        DeleteErroredTraceSessionView.as_view(),
+        name="tracevision-process-delete-error",
     ),
     path(
         "process/poll-status/<int:pk>/",

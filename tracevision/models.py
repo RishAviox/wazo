@@ -148,11 +148,13 @@ class TraceSession(models.Model):
             models.UniqueConstraint(
                 fields=["video_url"],
                 name="unique_video_url",
-                condition=models.Q(video_url__isnull=False),
+                condition=models.Q(video_url__isnull=False)
+                & ~models.Q(status="process_error"),
             ),
             models.UniqueConstraint(
                 fields=["home_team", "away_team", "match_date"],
                 name="unique_game_match",
+                condition=~models.Q(status="process_error"),
             ),
         ]
         indexes = [
