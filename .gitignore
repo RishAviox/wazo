@@ -36,7 +36,7 @@ examples/
 
 
 *.mp4
-*.json
+# *.json
 *.zip
 *.csv
 *.txt

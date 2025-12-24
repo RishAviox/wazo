@@ -1,0 +1,2102 @@
+{
+  "match_summary": {
+    "Match Id": 27,
+    "Competition": "U15 Level 2 – North",
+    "Date": "27/04/2025",
+    "Kickoff Time": "19:00:00",
+    "Venue": "Kezhef 2",
+    "Venue Address": "—",
+    "Home Team": "Maccabi Haifa",
+    "Away Team": "Maccabi Ahi Nazareth",
+    "Half-Time Score": "3–2",
+    "Full-Time Score": "5–4",
+    "Home Goals": 5,
+    "Away Goals": 4,
+    "Age Group": "U15",
+    "Game Format": "11v11",
+    "Field Length (m)": "~100",
+    "Field Width (m)": "~64",
+    "Goal Size (m)": "7.32×2.44",
+    "Ball Size": 5,
+    "Half Length (Minutes)": 40,
+    "Official Break Time": 15
+  },
+  "starting_lineups": [
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 1.0,
+      "Name": "Dan BAN YOAV",
+      "Role": "GK",
+      "Goals": [],
+      "SubOffMinute": "—",
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 4.0,
+      "Name": "Yagel Avraham BADASH",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 54,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 5.0,
+      "Name": "Yanay DUDEK",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 63,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 6.0,
+      "Name": "Evyatar SAGLL",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": "—",
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 7.0,
+      "Name": "Noam TZAIRI",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 40,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 8.0,
+      "Name": "Lior ASING",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 63,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 11.0,
+      "Name": "Ilay GAT",
+      "Role": "—",
+      "Goals": [
+        19,
+        23,
+        61,
+        80
+      ],
+      "SubOffMinute": "—",
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 14.0,
+      "Name": "Noam EICHINBOAM",
+      "Role": "—",
+      "Goals": [
+        14
+      ],
+      "SubOffMinute": 50,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 17.0,
+      "Name": "Ori TZOREF (C)",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 63,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 18.0,
+      "Name": "Niriya SADE",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 50,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Haifa",
+      "Number": 27.0,
+      "Name": "Emanuel HOVAV",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": "—",
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 1.0,
+      "Name": "Muhammad NIJIM",
+      "Role": "GK",
+      "Goals": [],
+      "SubOffMinute": "—",
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 2.0,
+      "Name": "Ibrahim MOSA",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": "—",
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 3.0,
+      "Name": "Mahmoud ABU ALHIJA",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 69,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 4.0,
+      "Name": "Foze YASSIN",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": "—",
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 5.0,
+      "Name": "Waleed BASHARAT (C)",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 40,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 6.0,
+      "Name": "Amir GADIR",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 24,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 7.0,
+      "Name": "Wael SAKHNINI",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 40,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 8.0,
+      "Name": "Rawad ISMAEEL",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": "—",
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 10.0,
+      "Name": "Kinan HABASHI",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": 63,
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 12.0,
+      "Name": "Yazen ABO RJAB",
+      "Role": "—",
+      "Goals": [],
+      "SubOffMinute": "—",
+      "Cards": "—"
+    },
+    {
+      "Team": "Maccabi Ahi Nazareth",
+      "Number": 28.0,
+      "Name": "Mahmoud ABU ALHIJA",
+      "Role": "—",
+      "Goals": [
+        17,
+        21,
+        45,
+        68
+      ],
+      "SubOffMinute": "—",
+      "Cards": "—"
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    },
+    {
+      "Team": null,
+      "Number": null,
+      "Name": null,
+      "Role": null,
+      "Goals": [],
+      "SubOffMinute": null,
+      "Cards": null
+    }
+  ],
+  "replacements": [
+    {
+      "Team": "Guest",
+      "Number": 11,
+      "Name": "Rian GRAYEB",
+      "Role": null,
+      "Goals": [],
+      "ReplacerMinute": 69
+    },
+    {
+      "Team": "Guest",
+      "Number": 80,
+      "Name": "Majed ABO SINI",
+      "Role": null,
+      "Goals": [],
+      "ReplacerMinute": 69
+    },
+    {
+      "Team": "Guest",
+      "Number": 88,
+      "Name": "Muhammad AWAD",
+      "Role": null,
+      "Goals": [],
+      "ReplacerMinute": 40
+    },
+    {
+      "Team": "Guest",
+      "Number": 15,
+      "Name": "Hasan ABU AHMAD",
+      "Role": null,
+      "Goals": [],
+      "ReplacerMinute": 63
+    },
+    {
+      "Team": "Guest",
+      "Number": 17,
+      "Name": "Asad BAETRAH",
+      "Role": null,
+      "Goals": [],
+      "ReplacerMinute": 69
+    },
+    {
+      "Team": "Guest",
+      "Number": 77,
+      "Name": "Hadi SALIMAN",
+      "Role": null,
+      "Goals": [],
+      "ReplacerMinute": 69
+    },
+    {
+      "Team": "Guest",
+      "Number": 71,
+      "Name": "Omer RAHAL",
+      "Role": null,
+      "Goals": [],
+      "ReplacerMinute": 69
+    }
+  ],
+  "bench": [
+    {
+      "Team": "Home",
+      "Number": 2,
+      "Name": "Shahar SOFER"
+    },
+    {
+      "Team": "Home",
+      "Number": 25,
+      "Name": "Ohad AZULAY"
+    },
+    {
+      "Team": "Guest",
+      "Number": 44,
+      "Name": "Christian DAMONE"
+    }
+  ],
+  "coaches": [
+    {
+      "Team": "Home",
+      "Coach Name": "Binyamin MOGILOVSKI",
+      "Role": "Coach"
+    },
+    {
+      "Team": "Guest",
+      "Coach Name": "Fares MASSARWA",
+      "Role": "Coach"
+    }
+  ],
+  "referees": [
+    {
+      "Position": "Referee",
+      "Name": "BEN AMI Or"
+    }
+  ],
+  "events": [
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Yagel Avraham BADASH",
+      "jersey_number": 4,
+      "minute": 54,
+      "match_time": "54:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Yagel Avraham BADASH",
+        "minute": 54,
+        "match_time": "54:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Yanay DUDEK",
+      "jersey_number": 5,
+      "minute": 63,
+      "match_time": "63:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Yanay DUDEK",
+        "minute": 63,
+        "match_time": "63:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Noam TZAIRI",
+      "jersey_number": 7,
+      "minute": 40,
+      "match_time": "40:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Noam TZAIRI",
+        "minute": 40,
+        "match_time": "40:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Lior ASING",
+      "jersey_number": 8,
+      "minute": 63,
+      "match_time": "63:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Lior ASING",
+        "minute": 63,
+        "match_time": "63:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "goal",
+      "category": "goals",
+      "player_name": "Ilay GAT",
+      "jersey_number": 11,
+      "minute": 19,
+      "match_time": "19:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Ilay GAT",
+        "minute": 19,
+        "match_time": "19:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "goals"
+      }
+    },
+    {
+      "type": "goal",
+      "category": "goals",
+      "player_name": "Ilay GAT",
+      "jersey_number": 11,
+      "minute": 23,
+      "match_time": "23:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Ilay GAT",
+        "minute": 23,
+        "match_time": "23:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "goals"
+      }
+    },
+    {
+      "type": "goal",
+      "category": "goals",
+      "player_name": "Ilay GAT",
+      "jersey_number": 11,
+      "minute": 61,
+      "match_time": "61:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Ilay GAT",
+        "minute": 61,
+        "match_time": "61:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "goals"
+      }
+    },
+    {
+      "type": "goal",
+      "category": "goals",
+      "player_name": "Ilay GAT",
+      "jersey_number": 11,
+      "minute": 80,
+      "match_time": "80:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Ilay GAT",
+        "minute": 80,
+        "match_time": "80:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "goals"
+      }
+    },
+    {
+      "type": "goal",
+      "category": "goals",
+      "player_name": "Noam EICHINBOAM",
+      "jersey_number": 14,
+      "minute": 14,
+      "match_time": "14:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Noam EICHINBOAM",
+        "minute": 14,
+        "match_time": "14:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "goals"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Noam EICHINBOAM",
+      "jersey_number": 14,
+      "minute": 50,
+      "match_time": "50:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Noam EICHINBOAM",
+        "minute": 50,
+        "match_time": "50:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Ori TZOREF (C)",
+      "jersey_number": 17,
+      "minute": 63,
+      "match_time": "63:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Ori TZOREF (C)",
+        "minute": 63,
+        "match_time": "63:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Niriya SADE",
+      "jersey_number": 18,
+      "minute": 50,
+      "match_time": "50:00",
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Niriya SADE",
+        "minute": 50,
+        "match_time": "50:00",
+        "team_side": "away",
+        "team_name": "Maccabi Haifa",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Mahmoud ABU ALHIJA",
+      "jersey_number": 3,
+      "minute": 69,
+      "match_time": "69:00",
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Mahmoud ABU ALHIJA",
+        "minute": 69,
+        "match_time": "69:00",
+        "team_side": "away",
+        "team_name": "Maccabi Ahi Nazareth",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Waleed BASHARAT (C)",
+      "jersey_number": 5,
+      "minute": 40,
+      "match_time": "40:00",
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Waleed BASHARAT (C)",
+        "minute": 40,
+        "match_time": "40:00",
+        "team_side": "away",
+        "team_name": "Maccabi Ahi Nazareth",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Amir GADIR",
+      "jersey_number": 6,
+      "minute": 24,
+      "match_time": "24:00",
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Amir GADIR",
+        "minute": 24,
+        "match_time": "24:00",
+        "team_side": "away",
+        "team_name": "Maccabi Ahi Nazareth",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Wael SAKHNINI",
+      "jersey_number": 7,
+      "minute": 40,
+      "match_time": "40:00",
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Wael SAKHNINI",
+        "minute": 40,
+        "match_time": "40:00",
+        "team_side": "away",
+        "team_name": "Maccabi Ahi Nazareth",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_off",
+      "category": "substitution",
+      "player_name": "Kinan HABASHI",
+      "jersey_number": 10,
+      "minute": 63,
+      "match_time": "63:00",
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Kinan HABASHI",
+        "minute": 63,
+        "match_time": "63:00",
+        "team_side": "away",
+        "team_name": "Maccabi Ahi Nazareth",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "goal",
+      "category": "goals",
+      "player_name": "Mahmoud ABU ALHIJA",
+      "jersey_number": 28,
+      "minute": 17,
+      "match_time": "17:00",
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Mahmoud ABU ALHIJA",
+        "minute": 17,
+        "match_time": "17:00",
+        "team_side": "away",
+        "team_name": "Maccabi Ahi Nazareth",
+        "category": "goals"
+      }
+    },
+    {
+      "type": "goal",
+      "category": "goals",
+      "player_name": "Mahmoud ABU ALHIJA",
+      "jersey_number": 28,
+      "minute": 21,
+      "match_time": "21:00",
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Mahmoud ABU ALHIJA",
+        "minute": 21,
+        "match_time": "21:00",
+        "team_side": "away",
+        "team_name": "Maccabi Ahi Nazareth",
+        "category": "goals"
+      }
+    },
+    {
+      "type": "goal",
+      "category": "goals",
+      "player_name": "Mahmoud ABU ALHIJA",
+      "jersey_number": 28,
+      "minute": 45,
+      "match_time": "45:00",
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Mahmoud ABU ALHIJA",
+        "minute": 45,
+        "match_time": "45:00",
+        "team_side": "away",
+        "team_name": "Maccabi Ahi Nazareth",
+        "category": "goals"
+      }
+    },
+    {
+      "type": "goal",
+      "category": "goals",
+      "player_name": "Mahmoud ABU ALHIJA",
+      "jersey_number": 28,
+      "minute": 68,
+      "match_time": "68:00",
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "source": "starting_lineup",
+      "event_metadata": {
+        "player_name": "Mahmoud ABU ALHIJA",
+        "minute": 68,
+        "match_time": "68:00",
+        "team_side": "away",
+        "team_name": "Maccabi Ahi Nazareth",
+        "category": "goals"
+      }
+    },
+    {
+      "type": "substitution_on",
+      "category": "substitution",
+      "player_name": "Rian GRAYEB",
+      "jersey_number": 11,
+      "minute": 69,
+      "match_time": "69:00",
+      "team_side": "away",
+      "team_name": "Guest",
+      "source": "replacement",
+      "event_metadata": {
+        "player_name": "Rian GRAYEB",
+        "minute": 69,
+        "match_time": "69:00",
+        "team_side": "away",
+        "team_name": "Guest",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_on",
+      "category": "substitution",
+      "player_name": "Majed ABO SINI",
+      "jersey_number": 80,
+      "minute": 69,
+      "match_time": "69:00",
+      "team_side": "away",
+      "team_name": "Guest",
+      "source": "replacement",
+      "event_metadata": {
+        "player_name": "Majed ABO SINI",
+        "minute": 69,
+        "match_time": "69:00",
+        "team_side": "away",
+        "team_name": "Guest",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_on",
+      "category": "substitution",
+      "player_name": "Muhammad AWAD",
+      "jersey_number": 88,
+      "minute": 40,
+      "match_time": "40:00",
+      "team_side": "away",
+      "team_name": "Guest",
+      "source": "replacement",
+      "event_metadata": {
+        "player_name": "Muhammad AWAD",
+        "minute": 40,
+        "match_time": "40:00",
+        "team_side": "away",
+        "team_name": "Guest",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_on",
+      "category": "substitution",
+      "player_name": "Hasan ABU AHMAD",
+      "jersey_number": 15,
+      "minute": 63,
+      "match_time": "63:00",
+      "team_side": "away",
+      "team_name": "Guest",
+      "source": "replacement",
+      "event_metadata": {
+        "player_name": "Hasan ABU AHMAD",
+        "minute": 63,
+        "match_time": "63:00",
+        "team_side": "away",
+        "team_name": "Guest",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_on",
+      "category": "substitution",
+      "player_name": "Asad BAETRAH",
+      "jersey_number": 17,
+      "minute": 69,
+      "match_time": "69:00",
+      "team_side": "away",
+      "team_name": "Guest",
+      "source": "replacement",
+      "event_metadata": {
+        "player_name": "Asad BAETRAH",
+        "minute": 69,
+        "match_time": "69:00",
+        "team_side": "away",
+        "team_name": "Guest",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_on",
+      "category": "substitution",
+      "player_name": "Hadi SALIMAN",
+      "jersey_number": 77,
+      "minute": 69,
+      "match_time": "69:00",
+      "team_side": "away",
+      "team_name": "Guest",
+      "source": "replacement",
+      "event_metadata": {
+        "player_name": "Hadi SALIMAN",
+        "minute": 69,
+        "match_time": "69:00",
+        "team_side": "away",
+        "team_name": "Guest",
+        "category": "substitution"
+      }
+    },
+    {
+      "type": "substitution_on",
+      "category": "substitution",
+      "player_name": "Omer RAHAL",
+      "jersey_number": 71,
+      "minute": 69,
+      "match_time": "69:00",
+      "team_side": "away",
+      "team_name": "Guest",
+      "source": "replacement",
+      "event_metadata": {
+        "player_name": "Omer RAHAL",
+        "minute": 69,
+        "match_time": "69:00",
+        "team_side": "away",
+        "team_name": "Guest",
+        "category": "substitution"
+      }
+    }
+  ],
+  "player_mappings": {
+    "away_1": {
+      "name": "Muhammad NIJIM",
+      "jersey_number": 1,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "GK",
+      "source": "starting_lineup"
+    },
+    "away_4": {
+      "name": "Foze YASSIN",
+      "jersey_number": 4,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_5": {
+      "name": "Waleed BASHARAT (C)",
+      "jersey_number": 5,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_6": {
+      "name": "Amir GADIR",
+      "jersey_number": 6,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_7": {
+      "name": "Wael SAKHNINI",
+      "jersey_number": 7,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_8": {
+      "name": "Rawad ISMAEEL",
+      "jersey_number": 8,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_11": {
+      "name": "Ilay GAT",
+      "jersey_number": 11,
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_14": {
+      "name": "Noam EICHINBOAM",
+      "jersey_number": 14,
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_17": {
+      "name": "Ori TZOREF (C)",
+      "jersey_number": 17,
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_18": {
+      "name": "Niriya SADE",
+      "jersey_number": 18,
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_27": {
+      "name": "Emanuel HOVAV",
+      "jersey_number": 27,
+      "team_side": "away",
+      "team_name": "Maccabi Haifa",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_2": {
+      "name": "Ibrahim MOSA",
+      "jersey_number": 2,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_3": {
+      "name": "Mahmoud ABU ALHIJA",
+      "jersey_number": 3,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_10": {
+      "name": "Kinan HABASHI",
+      "jersey_number": 10,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_12": {
+      "name": "Yazen ABO RJAB",
+      "jersey_number": 12,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_28": {
+      "name": "Mahmoud ABU ALHIJA",
+      "jersey_number": 28,
+      "team_side": "away",
+      "team_name": "Maccabi Ahi Nazareth",
+      "role": "—",
+      "source": "starting_lineup"
+    },
+    "away_80": {
+      "name": "Majed ABO SINI",
+      "jersey_number": 80,
+      "team_side": "away",
+      "team_name": "Guest",
+      "role": "",
+      "source": "replacement"
+    },
+    "away_88": {
+      "name": "Muhammad AWAD",
+      "jersey_number": 88,
+      "team_side": "away",
+      "team_name": "Guest",
+      "role": "",
+      "source": "replacement"
+    },
+    "away_15": {
+      "name": "Hasan ABU AHMAD",
+      "jersey_number": 15,
+      "team_side": "away",
+      "team_name": "Guest",
+      "role": "",
+      "source": "replacement"
+    },
+    "away_77": {
+      "name": "Hadi SALIMAN",
+      "jersey_number": 77,
+      "team_side": "away",
+      "team_name": "Guest",
+      "role": "",
+      "source": "replacement"
+    },
+    "away_71": {
+      "name": "Omer RAHAL",
+      "jersey_number": 71,
+      "team_side": "away",
+      "team_name": "Guest",
+      "role": "",
+      "source": "replacement"
+    },
+    "away_25": {
+      "name": "Ohad AZULAY",
+      "jersey_number": 25,
+      "team_side": "away",
+      "team_name": "Home",
+      "role": "",
+      "source": "bench"
+    },
+    "away_44": {
+      "name": "Christian DAMONE",
+      "jersey_number": 44,
+      "team_side": "away",
+      "team_name": "Guest",
+      "role": "",
+      "source": "bench"
+    }
+  }
+}

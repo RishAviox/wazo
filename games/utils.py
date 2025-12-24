@@ -1,4 +1,7 @@
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 def add_padding(start_time: int, end_time: int, half: str, padding_time):
     if half == "FIRST_HALF":
@@ -388,3 +391,275 @@ def generate_video_urls() -> dict:
         "first_half_url": "https://hiwajovideov2.azureedge.net/videos/Jul 7, 2024 Haifa Goldshinfeld vs Bnei Sakhnin 1st Half.mp4",
         "second_half_url": "https://hiwajovideov2.azureedge.net/videos/Jul 7, 2024 Haifa Goldshinfeld vs Bnei Sakhnin 2nd Half.mp4",
     }
+
+
+def save_multilingual_data_to_game(excel_file_path, game_id, sync_to_trace_session=True):
+    """
+    Extract multilingual data from Excel and save to Game.language_metadata.
+    Optionally syncs to TraceSession and updates Team/Player multilingual data.
+    
+    Args:
+        excel_file_path: Path to the Excel file containing multilingual match data
+        game_id: Game ID to update (string)
+        sync_to_trace_session: If True, also syncs data to TraceSession (default: True)
+    
+    Returns:
+        Game instance with updated language_metadata
+    
+    Raises:
+        Game.DoesNotExist: If game with given ID doesn't exist
+        Exception: If extraction or saving fails
+    """
+    try:
+        # Import here to avoid circular imports
+        from tracevision.test_language import extract_multilingual_match_data
+        from .models import Game
+        
+        # Extract multilingual data from Excel
+        multilingual_data = extract_multilingual_match_data(excel_file_path)
+        
+        # Get game
+        game = Game.objects.get(id=game_id)
+        
+        # Update language_metadata
+        game.language_metadata = multilingual_data
+        game.save()
+        
+        logger.info(f"Successfully saved multilingual data to Game {game_id}")
+        
+        # Sync to TraceSession if exists and requested
+        if sync_to_trace_session and hasattr(game, 'trace_session') and game.trace_session:
+            game.trace_session.language_metadata = multilingual_data
+            game.trace_session.save()
+            logger.info(f"Synced multilingual data to TraceSession {game.trace_session.id}")
+        
+        # Update Team and Player multilingual data
+        update_team_and_player_multilingual_data(game, multilingual_data)
+        
+        return game
+        
+    except Game.DoesNotExist:
+        logger.error(f"Game with ID {game_id} does not exist")
+        raise
+    except Exception as e:
+        logger.error(f"Error saving multilingual data to Game {game_id}: {str(e)}")
+        raise
+
+
+def update_team_and_player_multilingual_data(game, multilingual_data):
+    """
+    Extract and update multilingual data for Teams and TracePlayers from the full match data.
+    
+    Args:
+        game: Game instance
+        multilingual_data: Full multilingual match data dictionary
+    """
+    try:
+        from teams.models import Team
+        from tracevision.models import TracePlayer, TraceSession
+        
+        en_data = multilingual_data.get('en', {})
+        he_data = multilingual_data.get('he', {})
+        
+        # Get team names from match summary
+        en_summary = en_data.get('Match_summary', {})
+        he_summary = he_data.get('Match_summary', {})
+        
+        home_team_name_en = en_summary.get('match_home_team', '')
+        away_team_name_en = en_summary.get('match_away_team', '')
+        home_team_name_he = he_summary.get('match_home_team', '')
+        away_team_name_he = he_summary.get('match_away_team', '')
+        
+        # Update Team multilingual names
+        if home_team_name_en:
+            try:
+                home_team = Team.objects.get(name=home_team_name_en)
+                home_team.language_metadata = {'en': home_team_name_en, 'he': home_team_name_he}
+                home_team.save()
+                logger.info(f"Updated multilingual names for Team {home_team.id}")
+            except Team.DoesNotExist:
+                logger.warning(f"Team '{home_team_name_en}' not found in database")
+        
+        if away_team_name_en:
+            try:
+                away_team = Team.objects.get(name=away_team_name_en)
+                away_team.language_metadata = {'en': away_team_name_en, 'he': away_team_name_he}
+                away_team.save()
+                logger.info(f"Updated multilingual names for Team {away_team.id}")
+            except Team.DoesNotExist:
+                logger.warning(f"Team '{away_team_name_en}' not found in database")
+        
+        # Update TracePlayer multilingual data
+        en_lineups = en_data.get('starting_lineups', {})
+        he_lineups = he_data.get('starting_lineups', {})
+        
+        # Get TraceSession if exists
+        trace_session = None
+        if hasattr(game, 'trace_session') and game.trace_session:
+            trace_session = game.trace_session
+        
+        if trace_session:
+            for team_name_en, players_en in en_lineups.items():
+                # Find corresponding Hebrew team name
+                team_name_he = None
+                for he_team_name in he_lineups.keys():
+                    # Try to match by position (first team = home, second = away)
+                    if list(en_lineups.keys()).index(team_name_en) == list(he_lineups.keys()).index(he_team_name):
+                        team_name_he = he_team_name
+                        break
+                
+                if not team_name_he:
+                    team_name_he = list(he_lineups.keys())[0] if he_lineups else team_name_en
+                
+                players_he = he_lineups.get(team_name_he, {})
+                
+                # Update each player
+                for jersey_num, player_data_en in players_en.items():
+                    try:
+                        jersey_int = int(jersey_num)
+                        player_data_he = players_he.get(jersey_num, {})
+                        
+                        # Find TracePlayer by session and jersey number
+                        trace_player = TracePlayer.objects.filter(
+                            session=trace_session,
+                            jersey_number=jersey_int
+                        ).first()
+                        
+                        if trace_player:
+                            trace_player.language_data = {
+                                'en': {
+                                    'name': player_data_en.get('name', ''),
+                                    'role': player_data_en.get('role', '')
+                                },
+                                'he': {
+                                    'name': player_data_he.get('name', ''),
+                                    'role': player_data_he.get('role', '')
+                                }
+                            }
+                            trace_player.save()
+                            logger.debug(f"Updated multilingual data for TracePlayer {trace_player.id} (jersey #{jersey_num})")
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Invalid jersey number '{jersey_num}': {str(e)}")
+                        continue
+        
+    except Exception as e:
+        logger.error(f"Error updating team and player multilingual data: {str(e)}")
+        # Don't raise - this is a non-critical operation
+
+
+def filter_language_metadata_for_model(multilingual_data, model_fields):
+    """
+    Filter language_metadata to only include fields that exist in the model.
+    
+    Args:
+        multilingual_data: Full multilingual data dictionary with 'en' and 'he' keys
+        model_fields: List of field names that exist in the model
+    
+    Returns:
+        dict: Filtered language_metadata containing only model fields
+    """
+    filtered_data = {
+        'en': {},
+        'he': {}
+    }
+    
+    en_data = multilingual_data.get('en', {})
+    he_data = multilingual_data.get('he', {})
+    
+    # Extract match summary data
+    en_summary = en_data.get('Match_summary', {})
+    he_summary = he_data.get('Match_summary', {})
+    
+    for field in model_fields:
+        if field == 'name':
+            # Game name: combine home and away team names
+            home_team_en = en_summary.get('match_home_team', '')
+            away_team_en = en_summary.get('match_away_team', '')
+            filtered_data['en'][field] = f"{home_team_en} vs {away_team_en}" if home_team_en and away_team_en else ''
+            
+            home_team_he = he_summary.get('match_home_team', '')
+            away_team_he = he_summary.get('match_away_team', '')
+            filtered_data['he'][field] = f"{home_team_he} vs {away_team_he}" if home_team_he and away_team_he else ''
+        
+        elif field == 'date':
+            filtered_data['en'][field] = en_summary.get('match_date', '')
+            filtered_data['he'][field] = he_summary.get('match_date', '')
+        
+        elif field == 'teams':
+            # Teams as list
+            home_team_en = en_summary.get('match_home_team', '')
+            away_team_en = en_summary.get('match_away_team', '')
+            filtered_data['en'][field] = [home_team_en, away_team_en] if home_team_en and away_team_en else []
+            
+            home_team_he = he_summary.get('match_home_team', '')
+            away_team_he = he_summary.get('match_away_team', '')
+            filtered_data['he'][field] = [home_team_he, away_team_he] if home_team_he and away_team_he else []
+        
+        elif field == 'match_date':
+            filtered_data['en'][field] = en_summary.get('match_date', '')
+            filtered_data['he'][field] = he_summary.get('match_date', '')
+        
+        elif field == 'home_score':
+            filtered_data['en'][field] = en_summary.get('match_home_goals', 0)
+            filtered_data['he'][field] = he_summary.get('match_home_goals', 0)
+        
+        elif field == 'away_score':
+            filtered_data['en'][field] = en_summary.get('match_away_goals', 0)
+            filtered_data['he'][field] = he_summary.get('match_away_goals', 0)
+        
+        elif field == 'home_team':
+            filtered_data['en'][field] = en_summary.get('match_home_team', '')
+            filtered_data['he'][field] = he_summary.get('match_home_team', '')
+        
+        elif field == 'away_team':
+            filtered_data['en'][field] = en_summary.get('match_away_team', '')
+            filtered_data['he'][field] = he_summary.get('match_away_team', '')
+        
+        elif field == 'age_group':
+            filtered_data['en'][field] = en_summary.get('match_age_group', '')
+            filtered_data['he'][field] = he_summary.get('match_age_group', '')
+        
+        elif field == 'pitch_size':
+            field_length = en_summary.get('match_field_length', '')
+            field_width = en_summary.get('match_field_width', '')
+            filtered_data['en'][field] = {
+                'length': field_length,
+                'width': field_width
+            }
+            field_length_he = he_summary.get('match_field_length', '')
+            field_width_he = he_summary.get('match_field_width', '')
+            filtered_data['he'][field] = {
+                'length': field_length_he,
+                'width': field_width_he
+            }
+        
+        elif field == 'final_score':
+            filtered_data['en'][field] = en_summary.get('match_full_time_score', '')
+            filtered_data['he'][field] = he_summary.get('match_full_time_score', '')
+        
+        elif field == 'match_start_time':
+            filtered_data['en'][field] = en_summary.get('match_time', '')
+            filtered_data['he'][field] = he_summary.get('match_time', '')
+        
+        elif field == 'first_half_end_time':
+            # Extract from half-time score or use match_time
+            filtered_data['en'][field] = en_summary.get('match_half_time_score', '')
+            filtered_data['he'][field] = he_summary.get('match_half_time_score', '')
+        
+        elif field == 'second_half_start_time':
+            # Same as first_half_end_time
+            filtered_data['en'][field] = en_summary.get('match_half_time_score', '')
+            filtered_data['he'][field] = he_summary.get('match_half_time_score', '')
+        
+        elif field == 'match_end_time':
+            filtered_data['en'][field] = en_summary.get('match_full_time_score', '')
+            filtered_data['he'][field] = he_summary.get('match_full_time_score', '')
+        
+        else:
+            # Try to get directly from summary if field name matches
+            if field in en_summary:
+                filtered_data['en'][field] = en_summary.get(field)
+            if field in he_summary:
+                filtered_data['he'][field] = he_summary.get(field)
+    
+    return filtered_data

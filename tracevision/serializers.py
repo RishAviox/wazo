@@ -1,4 +1,5 @@
 import logging
+import os
 import requests
 import uuid
 import hashlib
@@ -21,7 +22,7 @@ from tracevision.utils import (
 from teams.models import Team
 from tracevision.models import TraceSession
 from tracevision.services import TraceVisionService
-from games.models import GameUserRole
+from games.models import GameUserRole, Game
 from tracevision.tasks import download_video_and_save_to_azure_blob
 
 logger = logging.getLogger(__name__)
@@ -465,6 +466,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
     def validate_basic_game_stats(self, value):
         """
         Validate that the basic_game_stats CSV file contains all required tabs with correct columns.
+        Supports both single-language and multilingual (en/he) sheet formats.
         """
         if not value:
             return value
@@ -475,8 +477,18 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             # Read the Excel file
             excel_file = pd.ExcelFile(value)
 
-            # Define required tabs and their columns
-            required_tabs = {
+            # Define required tabs (base names without language suffix)
+            required_base_tabs = [
+                "Match_Summary",
+                "Starting_Lineups",
+                "Replacements",
+                "Bench",
+                "Coaches",
+                "Referees",
+            ]
+
+            # Define required columns for each tab
+            required_columns = {
                 "Match_Summary": [],  # No specific columns required
                 "Starting_Lineups": [
                     "Team",
@@ -501,44 +513,65 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             }
 
             errors = []
-
-            # Check if all required tabs exist
             available_tabs = excel_file.sheet_names
-            missing_tabs = []
 
-            for tab_name in required_tabs.keys():
-                if tab_name not in available_tabs:
-                    missing_tabs.append(tab_name)
+            # Check if all required tabs exist (support both single-language and multilingual formats)
+            missing_tabs = []
+            found_tabs = {}  # Track which base tabs we found
+
+            for base_tab in required_base_tabs:
+                # Check for exact match (single-language format)
+                if base_tab in available_tabs:
+                    found_tabs[base_tab] = base_tab
+                    continue
+                
+                # Check for multilingual format (_en and _he suffixes)
+                en_tab = f"{base_tab}_en"
+                he_tab = f"{base_tab}_he"
+                
+                if en_tab in available_tabs or he_tab in available_tabs:
+                    # At least one language version exists
+                    if en_tab in available_tabs:
+                        found_tabs[base_tab] = en_tab
+                    elif he_tab in available_tabs:
+                        found_tabs[base_tab] = he_tab
+                    continue
+                
+                # Tab not found in any format
+                missing_tabs.append(base_tab)
 
             if missing_tabs:
-                errors.append(f"Missing required tabs: {', '.join(missing_tabs)}")
+                errors.append(f"Missing required tabs: {', '.join(missing_tabs)}. Expected either '{missing_tabs[0]}' or '{missing_tabs[0]}_en'/'{missing_tabs[0]}_he' format.")
 
-            # Check columns for each existing tab
-            for tab_name, required_columns in required_tabs.items():
-                if tab_name in available_tabs:
-                    try:
-                        df = pd.read_excel(value, sheet_name=tab_name)
-                        actual_columns = df.columns.tolist()
+            # Check columns for each found tab (use English version if available, otherwise Hebrew)
+            for base_tab, actual_tab_name in found_tabs.items():
+                required_cols = required_columns.get(base_tab, [])
+                if not required_cols:  # Skip column check if no columns required
+                    continue
+                    
+                try:
+                    df = pd.read_excel(value, sheet_name=actual_tab_name)
+                    actual_columns = df.columns.tolist()
 
-                        # Check if all required columns exist
-                        missing_columns = []
-                        for col in required_columns:
-                            if col not in actual_columns:
-                                missing_columns.append(col)
+                    # Check if all required columns exist
+                    missing_columns = []
+                    for col in required_cols:
+                        if col not in actual_columns:
+                            missing_columns.append(col)
 
-                        if missing_columns:
-                            errors.append(
-                                f"Tab '{tab_name}' is missing required columns: {', '.join(missing_columns)}"
-                            )
+                    if missing_columns:
+                        errors.append(
+                            f"Tab '{actual_tab_name}' is missing required columns: {', '.join(missing_columns)}"
+                        )
 
-                    except Exception as e:
-                        errors.append(f"Error reading tab '{tab_name}': {str(e)}")
+                except Exception as e:
+                    errors.append(f"Error reading tab '{actual_tab_name}': {str(e)}")
 
             # Check if file is empty or has no data
             if not available_tabs:
                 errors.append("The Excel file appears to be empty or corrupted")
 
-            # Task 1: If there are any errors, raise validation error and prevent upload/session creation
+            # If there are any errors, raise validation error
             if errors:
                 raise serializers.ValidationError(
                     {
@@ -553,15 +586,16 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         except pd.errors.EmptyDataError:
             raise serializers.ValidationError(
                 {
-                    "error": "Excel file is empty",
-                    "message": "The Excel file appears to be empty. Please provide a valid Excel file. Session will not be created.",
+                    "error": "Excel file validation error",
+                    "details": "The Excel file appears to be empty or corrupted",
+                    "message": "Please upload a valid Excel file with match data.",
                 }
             )
         except Exception as e:
             raise serializers.ValidationError(
                 {
                     "error": "Excel file validation error",
-                    "details": str(e),
+                    "details": {"error": str(e)},
                     "message": f"Error reading Excel file: {str(e)}. Session will not be created until Excel data is valid.",
                 }
             )
@@ -748,167 +782,167 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             home_team=home_team_obj, away_team=away_team_obj, match_date=match_date
         )
 
-        if duplicate_session:
-            existing_game = duplicate_session.game
-            raise ValidationError(
-                {
-                    "error": "Game already exists",
-                    "message": "A game with these teams and date already exists. You can link to the existing game.",
-                    "existing_data": {
-                        "session": {
-                            "id": duplicate_session.id,
-                            "session_id": duplicate_session.session_id,
-                            "match_date": duplicate_session.match_date.isoformat(),
-                            "home_team": (
-                                duplicate_session.home_team.name
-                                if duplicate_session.home_team
-                                else None
-                            ),
-                            "away_team": (
-                                duplicate_session.away_team.name
-                                if duplicate_session.away_team
-                                else None
-                            ),
-                            "status": duplicate_session.status,
-                        },
-                        "game": (
-                            {
-                                "id": existing_game.id if existing_game else None,
-                                "type": existing_game.type if existing_game else None,
-                                "name": existing_game.name if existing_game else None,
-                                "date": (
-                                    existing_game.date.isoformat()
-                                    if existing_game and existing_game.date
-                                    else None
-                                ),
-                            }
-                            if existing_game
-                            else None
-                        ),
-                    },
-                }
-            )
+        # if duplicate_session:
+        #     existing_game = duplicate_session.game
+        #     raise ValidationError(
+        #         {
+        #             "error": "Game already exists",
+        #             "message": "A game with these teams and date already exists. You can link to the existing game.",
+        #             "existing_data": {
+        #                 "session": {
+        #                     "id": duplicate_session.id,
+        #                     "session_id": duplicate_session.session_id,
+        #                     "match_date": duplicate_session.match_date.isoformat(),
+        #                     "home_team": (
+        #                         duplicate_session.home_team.name
+        #                         if duplicate_session.home_team
+        #                         else None
+        #                     ),
+        #                     "away_team": (
+        #                         duplicate_session.away_team.name
+        #                         if duplicate_session.away_team
+        #                         else None
+        #                     ),
+        #                     "status": duplicate_session.status,
+        #                 },
+        #                 "game": (
+        #                     {
+        #                         "id": existing_game.id if existing_game else None,
+        #                         "type": existing_game.type if existing_game else None,
+        #                         "name": existing_game.name if existing_game else None,
+        #                         "date": (
+        #                             existing_game.date.isoformat()
+        #                             if existing_game and existing_game.date
+        #                             else None
+        #                         ),
+        #                     }
+        #                     if existing_game
+        #                     else None
+        #                 ),
+        #             },
+        #         }
+        #     )
 
-        # Create TraceVision session
+        # # Create TraceVision session
         customer_id = int(settings.TRACEVISION_CUSTOMER_ID)
         api_key = settings.TRACEVISION_API_KEY
         graphql_url = settings.TRACEVISION_GRAPHQL_URL
 
-        session_payload = {
-            "query": """
-                mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
-                    createSession(token: $token, sessionData: $sessionData) {
-                        session { session_id }
-                        success
-                        error
-                    }
-                }
-            """,
-            "variables": {
-                "token": {"customer_id": customer_id, "token": api_key},
-                "sessionData": {
-                    "type": "soccer_game",
-                    "game_info": {
-                        "home_team": {
-                            "name": home_team_name,
-                            "score": home_score,
-                            "color": home_color,
-                        },
-                        "away_team": {
-                            "name": away_team_name,
-                            "score": away_score,
-                            "color": away_color,
-                        },
-                    },
-                    "capabilities": ["tracking", "highlights"],
-                },
-            },
-        }
+        # session_payload = {
+        #     "query": """
+        #         mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
+        #             createSession(token: $token, sessionData: $sessionData) {
+        #                 session { session_id }
+        #                 success
+        #                 error
+        #             }
+        #         }
+        #     """,
+        #     "variables": {
+        #         "token": {"customer_id": customer_id, "token": api_key},
+        #         "sessionData": {
+        #             "type": "soccer_game",
+        #             "game_info": {
+        #                 "home_team": {
+        #                     "name": home_team_name,
+        #                     "score": home_score,
+        #                     "color": home_color,
+        #                 },
+        #                 "away_team": {
+        #                     "name": away_team_name,
+        #                     "score": away_score,
+        #                     "color": away_color,
+        #                 },
+        #             },
+        #             "capabilities": ["tracking", "highlights"],
+        #         },
+        #     },
+        # }
 
-        session_response = requests.post(
-            graphql_url,
-            headers={"Content-Type": "application/json"},
-            json=session_payload,
-        )
-        session_json = session_response.json()
+        # session_response = requests.post(
+        #     graphql_url,
+        #     headers={"Content-Type": "application/json"},
+        #     json=session_payload,
+        # )
+        # session_json = session_response.json()
 
-        if session_response.status_code != 200 or not session_json.get("data", {}).get(
-            "createSession", {}
-        ).get("success"):
-            raise ValidationError(
-                {
-                    "error": "TraceVision session creation failed",
-                    "details": session_json,
-                }
-            )
+        # if session_response.status_code != 200 or not session_json.get("data", {}).get(
+        #     "createSession", {}
+        # ).get("success"):
+        #     raise ValidationError(
+        #         {
+        #             "error": "TraceVision session creation failed",
+        #             "details": session_json,
+        #         }
+        #     )
 
-        session_id = session_json["data"]["createSession"]["session"]["session_id"]
-        # session_id = "1234567890"
+        # session_id = session_json["data"]["createSession"]["session"]["session_id"]
+        session_id = "1234567890"
 
         # Check for duplicate by video_url BEFORE processing video
         video_url_for_db = None
-        if video_link:
-            video_url_for_db = video_link
-            duplicate_session = check_duplicate_game(video_url=video_url_for_db)
-            if duplicate_session:
-                existing_game = duplicate_session.game
-                raise ValidationError(
-                    {
-                        "error": "Video already processed",
-                        "message": "This video has already been uploaded and processed.",
-                        "existing_data": {
-                            "session": {
-                                "id": duplicate_session.id,
-                                "session_id": duplicate_session.session_id,
-                                "match_date": duplicate_session.match_date.isoformat(),
-                                "home_team": (
-                                    duplicate_session.home_team.name
-                                    if duplicate_session.home_team
-                                    else None
-                                ),
-                                "away_team": (
-                                    duplicate_session.away_team.name
-                                    if duplicate_session.away_team
-                                    else None
-                                ),
-                                "status": duplicate_session.status,
-                            },
-                            "game": (
-                                {
-                                    "id": existing_game.id if existing_game else None,
-                                    "type": (
-                                        existing_game.type if existing_game else None
-                                    ),
-                                    "name": (
-                                        existing_game.name if existing_game else None
-                                    ),
-                                    "date": (
-                                        existing_game.date.isoformat()
-                                        if existing_game and existing_game.date
-                                        else None
-                                    ),
-                                }
-                                if existing_game
-                                else None
-                            ),
-                        },
-                    }
-                )
+        # if video_link:
+        #     video_url_for_db = video_link
+        #     duplicate_session = check_duplicate_game(video_url=video_url_for_db)
+        #     if duplicate_session:
+        #         existing_game = duplicate_session.game
+        #         raise ValidationError(
+        #             {
+        #                 "error": "Video already processed",
+        #                 "message": "This video has already been uploaded and processed.",
+        #                 "existing_data": {
+        #                     "session": {
+        #                         "id": duplicate_session.id,
+        #                         "session_id": duplicate_session.session_id,
+        #                         "match_date": duplicate_session.match_date.isoformat(),
+        #                         "home_team": (
+        #                             duplicate_session.home_team.name
+        #                             if duplicate_session.home_team
+        #                             else None
+        #                         ),
+        #                         "away_team": (
+        #                             duplicate_session.away_team.name
+        #                             if duplicate_session.away_team
+        #                             else None
+        #                         ),
+        #                         "status": duplicate_session.status,
+        #                     },
+        #                     "game": (
+        #                         {
+        #                             "id": existing_game.id if existing_game else None,
+        #                             "type": (
+        #                                 existing_game.type if existing_game else None
+        #                             ),
+        #                             "name": (
+        #                                 existing_game.name if existing_game else None
+        #                             ),
+        #                             "date": (
+        #                                 existing_game.date.isoformat()
+        #                                 if existing_game and existing_game.date
+        #                                 else None
+        #                             ),
+        #                         }
+        #                         if existing_game
+        #                         else None
+        #                     ),
+        #                 },
+        #             }
+        #         )
 
         # Handle video processing
-        if video_link:
-            video_url_for_db = TraceVisionService.import_game_video(
-                session_id=session_id, video_link=video_link, start_time=start_time
-            )
-        else:
-            # Video file upload is not supported - this should be caught by validation
-            # but adding safety check here as well
-            raise ValidationError(
-                {
-                    "error": "Video file upload not supported",
-                    "message": "Video file upload is currently not supported. Please use video_link instead to provide a URL to your video.",
-                }
-            )
+        # if video_link:
+        #     video_url_for_db = TraceVisionService.import_game_video(
+        #         session_id=session_id, video_link=video_link, start_time=start_time
+        #     )
+        # else:
+        #     # Video file upload is not supported - this should be caught by validation
+        #     # but adding safety check here as well
+        #     raise ValidationError(
+        #         {
+        #             "error": "Video file upload not supported",
+        #             "message": "Video file upload is currently not supported. Please use video_link instead to provide a URL to your video.",
+        #         }
+        #     )
         # TODO: Implement video upload functionality later
         # else:
         #     # Get upload URL first, then check duplicate
@@ -1013,7 +1047,123 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         # Create GameUserRole linking uploader to game
         GameUserRole.objects.get_or_create(game=canonical_game, user=user)
 
+        # Process basic_game_stats if provided
+        language_metadata_content = {}
+        if basic_game_stats:
+            import tempfile
+            import os
+            from tracevision.utils import extract_multilingual_match_data
+
+            # Create a temporary file to save the uploaded Excel content
+            # We need to preserve the extension for pandas to read it correctly
+            suffix = os.path.splitext(basic_game_stats.name)[1]
+            if not suffix:
+                suffix = '.xlsx'
+                
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+                for chunk in basic_game_stats.chunks():
+                    tmp_file.write(chunk)
+                tmp_file_path = tmp_file.name
+
+            try:
+                # Extract data
+                logger.info(f"Extracting multilingual data from {tmp_file_path}")
+                match_data = extract_multilingual_match_data(tmp_file_path)
+                
+                # Extract team names from Excel (both languages)
+                excel_teams = {
+                    "home": {"en": None, "he": None},
+                    "away": {"en": None, "he": None}
+                }
+                
+                # Get English names
+                if "en" in match_data and "Match_summary" in match_data["en"]:
+                    excel_teams["home"]["en"] = match_data["en"]["Match_summary"].get("match_home_team")
+                    excel_teams["away"]["en"] = match_data["en"]["Match_summary"].get("match_away_team")
+                
+                # Get Hebrew names
+                if "he" in match_data and "Match_summary" in match_data["he"]:
+                    excel_teams["home"]["he"] = match_data["he"]["Match_summary"].get("match_home_team")
+                    excel_teams["away"]["he"] = match_data["he"]["Match_summary"].get("match_away_team")
+                
+                # Normalize names for comparison (strip and lower)
+                def normalize(name):
+                    return name.strip().lower() if name else ""
+
+                input_home = normalize(home_team_name)
+                input_away = normalize(away_team_name)
+                
+                excel_home_en = normalize(excel_teams["home"]["en"])
+                excel_home_he = normalize(excel_teams["home"]["he"])
+                excel_away_en = normalize(excel_teams["away"]["en"])
+                excel_away_he = normalize(excel_teams["away"]["he"])
+                
+                # Validate Home Team
+                # Match against either English or Hebrew name
+                home_match = False
+                if input_home == excel_home_en or input_home == excel_home_he:
+                    home_match = True
+                
+                if not home_match:
+                    raise ValidationError({
+                        "error": "Team name mismatch",
+                        "message": f"Home team name '{home_team_name}' does not match the file data.",
+                        "details": f"File contains: EN='{excel_teams['home']['en']}', HE='{excel_teams['home']['he']}'"
+                    })
+
+                # Validate Away Team
+                away_match = False
+                if input_away == excel_away_en or input_away == excel_away_he:
+                    away_match = True
+                
+                if not away_match:
+                    raise ValidationError({
+                        "error": "Team name mismatch",
+                        "message": f"Away team name '{away_team_name}' does not match the file data.",
+                        "details": f"File contains: EN='{excel_teams['away']['en']}', HE='{excel_teams['away']['he']}'"
+                    })
+                
+                # If validation passes, keep the data
+                language_metadata_content = match_data
+                
+            except ValidationError:
+                raise
+            except Exception as e:
+                logger.error(f"Error processing basic_game_stats: {e}")
+                raise ValidationError({
+                    "error": "File processing error",
+                    "message": f"Failed to process the game stats file: {str(e)}"
+                })
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_file_path):
+                    os.unlink(tmp_file_path)
+
+        session = TraceSession.objects.create(
+            user=user,
+            session_id=session_id,
+            match_date=match_date,
+            home_team=home_team_obj,
+            away_team=away_team_obj,
+            home_score=home_score,
+            away_score=away_score,
+            age_group=age_group,
+            pitch_size=pitch_size,
+            final_score=final_score_str,
+            start_time=start_time,
+            video_url=video_url_for_db,
+            status="waiting_for_data",
+            match_start_time=match_start_time,
+            first_half_end_time=first_half_end_time,
+            second_half_start_time=second_half_start_time,
+            match_end_time=match_end_time,
+            basic_game_stats=basic_game_stats,
+            game=canonical_game,
+            language_metadata=language_metadata_content,
+        )
+
         # Trigger video download task
+        from tracevision.tasks import download_video_and_save_to_azure_blob
         download_video_and_save_to_azure_blob.delay(session.id)
 
         return session

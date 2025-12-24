@@ -1,0 +1,700 @@
+{
+    "en": {
+        "Match_summary": {
+            "match_id": "27",
+            "match_date": "27/04/2025",
+            "match_time": "19:00:00",
+            "match_location": "Kezhef 2",
+            "match_address": "—",
+            "match_status": "U15 Level 2 – North",
+            "match_home_team": "Maccabi Haifa Goldshenfeld",
+            "match_away_team": "Maccabi Ahi Nazareth",
+            "match_half_time_score": "3–2",
+            "match_full_time_score": "5–4",
+            "match_home_goals": 5,
+            "match_away_goals": 4,
+            "match_age_group": "U15",
+            "match_game_format": "11v11",
+            "match_field_length": "~100",
+            "match_field_width": "~64",
+            "match_goal_size": "7.32×2.44",
+            "match_ball_size": "5",
+            "match_half_length": "40",
+            "match_official_break_time": "15"
+        },
+        "starting_lineups": {
+            "Maccabi Haifa Goldshenfeld": {
+                "1": {
+                    "name": "Dan BAN YOAV",
+                    "role": "GK",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "4": {
+                    "name": "Yagel Avraham BADASH",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 54,
+                    "cards": 0
+                },
+                "5": {
+                    "name": "Yanay DUDEK",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 63,
+                    "cards": 0
+                },
+                "6": {
+                    "name": "Evyatar SAGLL",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "7": {
+                    "name": "Noam TZAIRI",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 40,
+                    "cards": 0
+                },
+                "8": {
+                    "name": "Lior ASING",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 63,
+                    "cards": 0
+                },
+                "11": {
+                    "name": "Ilay GAT",
+                    "role": "—",
+                    "goals": [
+                        "19",
+                        "23",
+                        "61",
+                        "80"
+                    ],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "14": {
+                    "name": "Noam EICHINBOAM",
+                    "role": "—",
+                    "goals": [
+                        "14"
+                    ],
+                    "video_goal": [],
+                    "sub_off_minute": 50,
+                    "cards": 0
+                },
+                "17": {
+                    "name": "Ori TZOREF (C)",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 63,
+                    "cards": 0
+                },
+                "18": {
+                    "name": "Niriya SADE",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 50,
+                    "cards": 0
+                },
+                "27": {
+                    "name": "Emanuel HOVAV",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                }
+            },
+            "Maccabi Ahi Nazareth": {
+                "1": {
+                    "name": "Muhammad NIJIM",
+                    "role": "GK",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "2": {
+                    "name": "Ibrahim MOSA",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "3": {
+                    "name": "Mahmoud ABU ALHIJA",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 69,
+                    "cards": 0
+                },
+                "4": {
+                    "name": "Foze YASSIN",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "5": {
+                    "name": "Waleed BASHARAT (C)",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 40,
+                    "cards": 0
+                },
+                "6": {
+                    "name": "Amir GADIR",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 24,
+                    "cards": 0
+                },
+                "7": {
+                    "name": "Wael SAKHNINI",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 40,
+                    "cards": 0
+                },
+                "8": {
+                    "name": "Rawad ISMAEEL",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "10": {
+                    "name": "Kinan HABASHI",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 63,
+                    "cards": 0
+                },
+                "12": {
+                    "name": "Yazen ABO RJAB",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "28": {
+                    "name": "Mahmoud ABU ALHIJA",
+                    "role": "—",
+                    "goals": [
+                        "17",
+                        "21",
+                        "45",
+                        "68"
+                    ],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                }
+            }
+        },
+        "replacements": {
+            "Maccabi Haifa Goldshenfeld": {
+                "10": {
+                    "name": "Joshua Sassi",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 40
+                },
+                "9": {
+                    "name": "Adam Husniya",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 50
+                },
+                "19": {
+                    "name": "Baraa Muassi",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 50
+                },
+                "20": {
+                    "name": "Amit Shimon",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 54
+                },
+                "15": {
+                    "name": "Daniel Ohana",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 63
+                },
+                "13": {
+                    "name": "Noam Levi",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 63
+                },
+                "23": {
+                    "name": "Ivri Peled",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 63
+                }
+            },
+            "Maccabi Ahi Nazareth": {
+                "11": {
+                    "name": "Rian GRAYEB",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 24
+                },
+                "80": {
+                    "name": "Majed ABO SINI",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 40
+                },
+                "88": {
+                    "name": "Muhammad AWAD",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 40
+                },
+                "15": {
+                    "name": "Hasan ABU AHMAD",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 63
+                },
+                "17": {
+                    "name": "Asad BAETRAH",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 69
+                },
+                "77": {
+                    "name": "Hadi SALIMAN",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 69
+                },
+                "71": {
+                    "name": "Omer RAHAL",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 69
+                }
+            }
+        },
+        "bench": {
+            "Maccabi Haifa Goldshenfeld": {
+                "2": {
+                    "name": "Shahar SOFER"
+                },
+                "25": {
+                    "name": "Ohad AZULAY"
+                }
+            },
+            "Maccabi Ahi Nazareth": {
+                "44": {
+                    "name": "Christian DAMONE"
+                }
+            }
+        },
+        "coaches": {
+            "Maccabi Haifa Goldshenfeld": [
+                {
+                    "name": "Binyamin MOGILOVSKI",
+                    "role": "Coach"
+                }
+            ],
+            "Maccabi Ahi Nazareth": [
+                {
+                    "name": "Fares MASSARWA",
+                    "role": "Coach"
+                }
+            ]
+        },
+        "referees": [
+            {
+                "position": "Referee",
+                "name": "BEN AMI Or"
+            }
+        ]
+    },
+    "he": {
+        "Match_summary": {
+            "match_id": "27",
+            "match_date": "27/04/2025",
+            "match_time": "19:00:00",
+            "match_location": "מגרשי קצף",
+            "match_address": "—",
+            "match_status": "ליגת נערים ג' ארצית צפון",
+            "match_home_team": "מכבי חיפה גולדשנפלד",
+            "match_away_team": "מכבי אחי נצרת",
+            "match_half_time_score": "3–2",
+            "match_full_time_score": "5–4",
+            "match_home_goals": 5,
+            "match_away_goals": 4,
+            "match_age_group": "נערים ג'",
+            "match_game_format": "11 נגד 11",
+            "match_field_length": "כ־100",
+            "match_field_width": "כ־64",
+            "match_goal_size": "7.32×2.44",
+            "match_ball_size": "5",
+            "match_half_length": "40",
+            "match_official_break_time": "15"
+        },
+        "starting_lineups": {
+            "מכבי חיפה גולדשנפלד": {
+                "1": {
+                    "name": "דן בן יואב",
+                    "role": "שוער",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "4": {
+                    "name": "יגל אברהם בדש",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 54,
+                    "cards": 0
+                },
+                "5": {
+                    "name": "ינאי דודק",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 63,
+                    "cards": 0
+                },
+                "6": {
+                    "name": "אביתר סגל",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "7": {
+                    "name": "נועם צעירי",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 40,
+                    "cards": 0
+                },
+                "8": {
+                    "name": "ליאור הסינג",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 63,
+                    "cards": 0
+                },
+                "11": {
+                    "name": "עילי גת",
+                    "role": "—",
+                    "goals": [
+                        "19",
+                        "23",
+                        "61",
+                        "80"
+                    ],
+                    "video_goal": [
+                        "18:16",
+                        "23:00",
+                        "61:00",
+                        "80:00"
+                    ],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "14": {
+                    "name": "נועם אייכנבאום",
+                    "role": "—",
+                    "goals": [
+                        "14"
+                    ],
+                    "video_goal": [
+                        "13:08"
+                    ],
+                    "sub_off_minute": 50,
+                    "cards": 0
+                },
+                "17": {
+                    "name": "אורי צורף (קפטן)",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 63,
+                    "cards": 0
+                },
+                "18": {
+                    "name": "ניריה שדה",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 50,
+                    "cards": 0
+                },
+                "27": {
+                    "name": "עמנואל חובב",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                }
+            },
+            "מכבי אחי נצרת": {
+                "1": {
+                    "name": "מוחמד ניג'ים",
+                    "role": "שוער",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "2": {
+                    "name": "אבראהים מוסא",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "3": {
+                    "name": "מחמוד אבו אל היג'א",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 69,
+                    "cards": 0
+                },
+                "4": {
+                    "name": "פאוזי יאסין",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "5": {
+                    "name": "וליד בשאראת (קפטן)",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 40,
+                    "cards": 0
+                },
+                "6": {
+                    "name": "אמיר גדיר",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 24,
+                    "cards": 0
+                },
+                "7": {
+                    "name": "ואיל סחניני",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 40,
+                    "cards": 0
+                },
+                "8": {
+                    "name": "רואד אסמאעיל",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "10": {
+                    "name": "קנאן חבשי",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 63,
+                    "cards": 0
+                },
+                "12": {
+                    "name": "יזן אבו רג'ב",
+                    "role": "—",
+                    "goals": [],
+                    "video_goal": [],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                },
+                "28": {
+                    "name": "מחמוד בלאל אבו אלהיגא",
+                    "role": "—",
+                    "goals": [
+                        "17",
+                        "21",
+                        "45",
+                        "68"
+                    ],
+                    "video_goal": [
+                        "21:00",
+                        "23:31",
+                        "60:48",
+                        "68:00"
+                    ],
+                    "sub_off_minute": 0,
+                    "cards": 0
+                }
+            }
+        },
+        "replacements": {
+            "מכבי חיפה גולדשנפלד": {
+                "10": {
+                    "name": "ג'ושוע ססי",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 40
+                },
+                "9": {
+                    "name": "אדאם חוסניה",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 50
+                },
+                "19": {
+                    "name": "בראא מואסי",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 50
+                },
+                "20": {
+                    "name": "עמית שמעון",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 54
+                },
+                "15": {
+                    "name": "דניאל אוחנה",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 63
+                },
+                "13": {
+                    "name": "נועם לוי",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 63
+                },
+                "23": {
+                    "name": "עברי פלד",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 63
+                }
+            },
+            "מכבי אחי נצרת": {
+                "11": {
+                    "name": "ריאן גרייב",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 24
+                },
+                "80": {
+                    "name": "מג'ד אבו סיני",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 40
+                },
+                "88": {
+                    "name": "מוחמד עואד",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 40
+                },
+                "15": {
+                    "name": "חסן אבו אחמד",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 63
+                },
+                "17": {
+                    "name": "אסעד ביאטרה",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 69
+                },
+                "77": {
+                    "name": "האדי סלימאן",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 69
+                },
+                "71": {
+                    "name": "עומר רחאל",
+                    "role": "—",
+                    "goals": [],
+                    "replacer_minute": 69
+                }
+            }
+        },
+        "bench": {
+            "מכבי חיפה גולדשנפלד": {
+                "2": {
+                    "name": "שחר סופר"
+                },
+                "25": {
+                    "name": "אוהד־אשר אזולאי"
+                }
+            },
+            "מכבי אחי נצרת": {
+                "44": {
+                    "name": "כריסטיאן דאמוני"
+                }
+            }
+        },
+        "coaches": {
+            "מכבי חיפה גולדשנפלד": [
+                {
+                    "name": "בנימין מוגיליובסקי",
+                    "role": "מאמן"
+                }
+            ],
+            "מכבי אחי נצרת": [
+                {
+                    "name": "פארס מסארוה",
+                    "role": "מאמן"
+                }
+            ]
+        },
+        "referees": [
+            {
+                "position": "שופט ראשי",
+                "name": "בן עמי אור"
+            }
+        ]
+    }
+}

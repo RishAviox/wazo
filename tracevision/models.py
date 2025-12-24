@@ -132,6 +132,14 @@ class TraceSession(models.Model):
         help_text="Basic game stats file",
     )
 
+    # Multilingual match data (English and Hebrew)
+    language_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        null=True,
+        help_text="Multilingual match data with 'en' and 'he' sections containing match summary, lineups, replacements, bench, coaches, and referees"
+    )
+
     # Timestamp fields
     created_at = models.DateTimeField(
         auto_now_add=True, help_text="When the session was created"
@@ -201,6 +209,14 @@ class TracePlayer(models.Model):
     jersey_number = models.PositiveIntegerField(help_text="Player's jersey number")
     position = models.CharField(
         max_length=100, help_text="Player's position on the field"
+    )
+
+    # Multilingual player data
+    language_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        null=True,
+        help_text="Multilingual player data: {'en': {'name': 'Player Name', 'role': 'GK'}, 'he': {'name': 'שם שחקן', 'role': 'שוער'}}"
     )
 
     # Relationships
@@ -328,6 +344,12 @@ class TraceHighlight(models.Model):
         null=True,
         blank=True,
         help_text="Match time when event occurred in MM:SS format (e.g., '16:30', '77:15')",
+    )
+    video_time = models.CharField(
+        max_length=8,
+        null=True,
+        blank=True,
+        help_text="Actual video time when event occurred in MM:SS format (e.g., '18:16', '23:00')",
     )
     half = models.PositiveIntegerField(
         null=True, blank=True, help_text="Match half (1 or 2) when event occurred"

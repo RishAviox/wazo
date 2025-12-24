@@ -14,6 +14,7 @@ from django.db import transaction
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from azure.storage.blob import BlobServiceClient, BlobType, ContentSettings
+from django.db.models import Q
 
 from tracevision.services import TraceVisionService
 from tracevision.notification_service import NotificationService
@@ -2917,6 +2918,119 @@ def parse_match_time(time_input):
     return "00:00"
 
 
+def sync_language_field(obj, lang, field, value):
+    """
+    Safely sync any multilingual field into language_metadata JSON.
+
+    Example:
+        sync_language_field(team, "en", "name", "Maccabi Haifa")
+        sync_language_field(team, "he", "name", "מכבי חיפה")
+        sync_language_field(team, "en", "short_name", "MHA")
+    """
+    if not value:
+        return
+
+    if not obj.language_metadata:
+        obj.language_metadata = {}
+
+    if lang not in obj.language_metadata:
+        obj.language_metadata[lang] = {}
+
+    if obj.language_metadata[lang].get(field) != value:
+        obj.language_metadata[lang][field] = value
+        obj.save(update_fields=["language_metadata"])
+
+
+def resolve_game(existing_game, en_name, he_name):
+    """
+    Resolve Game using TraceSession.game first.
+    """
+    if existing_game:
+        sync_language_field(existing_game, "en", "name", en_name)
+        sync_language_field(existing_game, "he", "name", he_name)
+        return existing_game
+
+    from games.models import Game
+    game = Game.objects.filter(
+        Q(name=en_name) |
+        Q(name=he_name) |
+        Q(language_metadata__en__name=en_name) |
+        Q(language_metadata__he__name=he_name)
+    ).first()
+
+    if not game:
+        game = Game.objects.create(name=en_name or he_name)
+
+    sync_language_field(game, "en", "name", en_name)
+    sync_language_field(game, "he", "name", he_name)
+
+    return game
+
+def resolve_team(existing_team, en_name, he_name):
+    """
+    Resolve team using TraceSession FK first.
+    Create or find only if FK is missing.
+    """
+    # 1️⃣ FK exists → update language names
+    if existing_team:
+        sync_language_field(existing_team, "en", "name", en_name)
+        sync_language_field(existing_team, "he", "name", he_name)
+        return existing_team
+
+    # 2️⃣ Search existing teams
+    from teams.models import Team
+    team = Team.objects.filter(
+        Q(name=en_name) |
+        Q(name=he_name) |
+        Q(language_metadata__en__name=en_name) |
+        Q(language_metadata__he__name=he_name)
+    ).first()
+
+    # 3️⃣ Create if not found
+    if not team:
+        team = Team.objects.create(name=en_name or he_name)
+
+    sync_language_field(team, "en", "name", en_name)
+    sync_language_field(team, "he", "name", he_name)
+
+    return team
+
+def update_trace_session_multilingual_data(match_data, session_id):
+    """
+    Update TraceSession, Team, and Game multilingual data using FK-first logic.
+    """
+    try:
+        session = TraceSession.objects.select_related(
+            "home_team", "away_team", "game"
+        ).get(id=session_id)
+
+        # --- Extract team names ---
+        en_home = match_data.get("en", {}).get("Match_summary", {}).get("match_home_team")
+        he_home = match_data.get("he", {}).get("Match_summary", {}).get("match_home_team")
+
+        en_away = match_data.get("en", {}).get("Match_summary", {}).get("match_away_team")
+        he_away = match_data.get("he", {}).get("Match_summary", {}).get("match_away_team")
+
+        # --- Extract game names ---
+        en_game = f"{en_home} vs {en_away}" if en_home and en_away else None
+        he_game = f"{he_home} vs {he_away}" if he_home and he_away else None
+
+        # --- Resolve Teams ---
+        session.home_team = resolve_team(session.home_team, en_home, he_home)
+        session.away_team = resolve_team(session.away_team, en_away, he_away)
+
+        # --- Resolve Game ---
+        session.game = resolve_game(session.game, en_game, he_game)
+
+        # --- Save FK updates ---
+        session.save(update_fields=["home_team", "away_team", "game"])
+
+    except TraceSession.DoesNotExist:
+        logger.error(f"TraceSession not found: {session_id}")
+
+    except Exception as e:
+        logger.exception(f"Failed to update multilingual data for TraceSession {session_id}")
+
 @shared_task
 def process_excel_match_highlights_task(session_id, excel_file_path=None):
     """
@@ -2940,11 +3054,11 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
 
         logger.info(f"Starting Excel highlights processing for session: {session_id}")
 
-        # Check if session is processed
-        if session.status != "processed":
-            error_msg = f"Session {session_id} is not processed yet. Current status: {session.status}"
-            logger.warning(error_msg)
-            return {"success": False, "error": error_msg}
+        # # Check if session is processed
+        # if session.status != "processed":
+        #     error_msg = f"Session {session_id} is not processed yet. Current status: {session.status}"
+        #     logger.warning(error_msg)
+        #     return {"success": False, "error": error_msg}
 
         # Determine Excel file path and download if needed
         temp_excel_path = None
@@ -2971,25 +3085,71 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
                 logger.info(f"Using provided Excel file path: {excel_file_path}")
 
             # Parse Excel data
+            # try:
+            #     match_data = parse_excel_match_data(excel_file_path, session)
+            # except Exception as e:
+            #     error_msg = f"Failed to parse Excel file: {str(e)}"
+            #     logger.error(error_msg, stack_info=True, exc_info=True)
+            #     return {"success": False, "error": error_msg}
+
+            # Process the new Excel file with the new language extraction function
             try:
-                match_data = parse_excel_match_data(excel_file_path, session)
+                from tracevision.utils import extract_multilingual_match_data
+                match_data = extract_multilingual_match_data(excel_file_path)
+                # Read the json file for now
+                # match_data = os.path.join( os.path.dirname(__file__), "./data", "Gmae_Match_Detail Template_multilingual.json")
+                # with open(match_data, "r", encoding="utf-8") as f:
+                    # match_data = json.load(f)
+                logger.info(f"Successfully parsed Excel file: {excel_file_path}")
             except Exception as e:
-                error_msg = f"Failed to parse Excel file: {str(e)}"
+                error_msg = f"Failed to process Excel file: {str(e)}"
                 logger.error(error_msg, stack_info=True, exc_info=True)
                 return {"success": False, "error": error_msg}
+
+            # Update TraceSession, Game, and Team multilingual data
+            logger.info(f"Updating multilingual data for session {session_id}...")
+            try:
+                update_trace_session_multilingual_data(match_data, session.id)
+                logger.info("Successfully updated session multilingual data")
+            except Exception as e:
+                logger.error(f"Error updating session multilingual data: {e}", exc_info=True)
+
         except Exception as e:
             # If there's an error during setup, clean up and re-raise
             cleanup_temp_files(temp_files_to_cleanup)
             raise
-        # Update TracePlayer names from Excel data
-        logger.info(f"Updating TracePlayer names from Excel data...")
-        player_update_result = update_trace_player_names(
-            session, match_data.get("player_mappings", {})
-        )
-
-        logger.info(
-            f"Player name updates: {player_update_result['updated_count']}/{player_update_result['total_mappings']} players updated"
-        )
+        
+        # Normalize multilingual data and update players
+        logger.info(f"Normalizing multilingual data...")
+        try:
+            from tracevision.utils import (
+                normalize_multilingual_data,
+                update_player_language_metadata,
+                create_highlights_from_normalized_data
+            )
+            
+            normalized_data = normalize_multilingual_data(match_data)
+            logger.info(f"Normalized data for {len(normalized_data['players'])} players")
+            
+            # Update TracePlayer language_metadata
+            logger.info(f"Updating TracePlayer language metadata...")
+            player_update_result = update_player_language_metadata(session, normalized_data)
+            logger.info(
+                f"Player metadata updates: {player_update_result['updated_count']}/{player_update_result['total_players']} players updated"
+            )
+            
+            # Create highlights and clip reels for goals and cards
+            logger.info(f"Creating highlights from normalized data...")
+            highlight_result = create_highlights_from_normalized_data(session, normalized_data)
+            logger.info(
+                f"Created {highlight_result['highlights_created']} highlights and "
+                f"{highlight_result['clip_reels_created']} clip reels"
+            )
+            
+        except Exception as e:
+            error_msg = f"Error in multilingual processing: {e}"
+            logger.error(error_msg, exc_info=True)
+            return {"success": False, "error": error_msg}
         # Write match_data to a JSON file with proper spacing
         # output_json_path = None
         # try:
@@ -3009,125 +3169,125 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
         highlights_created = 0
         errors = []
 
-        with transaction.atomic():
-            for event in match_data.get("events", []):
-                try:
-                    # Map player to TracePlayer
-                    trace_player = map_player_to_trace_player(
-                        event["player_name"],
-                        event.get("jersey_number", 0),
-                        event["team_side"],
-                        session,
-                    )
+        # with transaction.atomic():
+        #     for event in match_data.get("events", []):
+        #         try:
+        #             # Map player to TracePlayer
+        #             trace_player = map_player_to_trace_player(
+        #                 event["player_name"],
+        #                 event.get("jersey_number", 0),
+        #                 event["team_side"],
+        #                 session,
+        #             )
 
-                    if not trace_player:
-                        logger.warning(
-                            f"Skipping event for unmapped player: {event['player_name']}"
-                        )
-                        continue
+        #             if not trace_player:
+        #                 logger.warning(
+        #                     f"Skipping event for unmapped player: {event['player_name']}"
+        #                 )
+        #                 continue
 
-                    # Convert game time to video milliseconds using session timeline
-                    start_offset = convert_game_time_to_video_milliseconds(
-                        session, event["minute"], event.get("second", 0)
-                    )
+        #             # Convert game time to video milliseconds using session timeline
+        #             start_offset = convert_game_time_to_video_milliseconds(
+        #                 session, event["minute"], event.get("second", 0)
+        #             )
 
-                    # Determine highlight duration based on event type
-                    duration = 10000  # 10 seconds default
-                    if event["type"] == "goal":
-                        duration = 15000  # 15 seconds for goals
-                    elif event["type"] in ["red_card", "yellow_card"]:
-                        duration = 8000  # 8 seconds for cards
+        #             # Determine highlight duration based on event type
+        #             duration = 10000  # 10 seconds default
+        #             if event["type"] == "goal":
+        #                 duration = 15000  # 15 seconds for goals
+        #             elif event["type"] in ["red_card", "yellow_card"]:
+        #                 duration = 8000  # 8 seconds for cards
 
-                    # Create unique highlight ID
-                    highlight_id = f"excel-{event['type']}-{session_id}-{event['match_time'].replace(':', '')}-{trace_player.object_id}"
+        #             # Create unique highlight ID
+        #             highlight_id = f"excel-{event['type']}-{session_id}-{event['match_time'].replace(':', '')}-{trace_player.object_id}"
 
-                    # Check if highlight already exists
-                    if TraceHighlight.objects.filter(
-                        highlight_id=highlight_id
-                    ).exists():
-                        logger.info(
-                            f"Highlight {highlight_id} already exists, skipping"
-                        )
-                        continue
+        #             # Check if highlight already exists
+        #             if TraceHighlight.objects.filter(
+        #                 highlight_id=highlight_id
+        #             ).exists():
+        #                 logger.info(
+        #                     f"Highlight {highlight_id} already exists, skipping"
+        #                 )
+        #                 continue
 
-                    # Determine half dynamically based on session timeline
-                    half = determine_game_half_from_minute(session, event["minute"])
+        #             # Determine half dynamically based on session timeline
+        #             half = determine_game_half_from_minute(session, event["minute"])
 
-                    tags = [event["team_side"], event["type"], f"{event['match_time']}"]
+        #             tags = [event["team_side"], event["type"], f"{event['match_time']}"]
 
-                    if "card" in event.get("type", ""):
-                        tags.append("card")
+        #             if "card" in event.get("type", ""):
+        #                 tags.append("card")
 
-                    # Create TraceHighlight
-                    highlight = TraceHighlight.objects.create(
-                        highlight_id=highlight_id,
-                        video_id=0,  # Will be updated with actual video ID
-                        start_offset=start_offset,
-                        duration=duration,
-                        tags=tags,
-                        video_stream=session.video_url,
-                        event_type=event["type"],
-                        source="excel_import",
-                        match_time=event["match_time"],
-                        half=half,
-                        event_metadata=event["event_metadata"],
-                        session=session,
-                        player=trace_player,
-                    )
+        #             # Create TraceHighlight
+        #             highlight = TraceHighlight.objects.create(
+        #                 highlight_id=highlight_id,
+        #                 video_id=0,  # Will be updated with actual video ID
+        #                 start_offset=start_offset,
+        #                 duration=duration,
+        #                 tags=tags,
+        #                 video_stream=session.video_url,
+        #                 event_type=event["type"],
+        #                 source="excel_import",
+        #                 match_time=event["match_time"],
+        #                 half=half,
+        #                 event_metadata=event["event_metadata"],
+        #                 session=session,
+        #                 player=trace_player,
+        #             )
 
-                    logger.info(f"Highlight: {highlight}")
-                    # Calculate performance impact
-                    highlight.performance_impact = (
-                        highlight.calculate_performance_impact()
-                    )
-                    # Team impact is half of player impact
-                    highlight.team_impact = abs(highlight.performance_impact) * 0.5
-                    highlight.save()
+        #             logger.info(f"Highlight: {highlight}")
+        #             # Calculate performance impact
+        #             highlight.performance_impact = (
+        #                 highlight.calculate_performance_impact()
+        #             )
+        #             # Team impact is half of player impact
+        #             highlight.team_impact = abs(highlight.performance_impact) * 0.5
+        #             highlight.save()
 
-                    # Create highlight-object relationship if trace object exists
-                    trace_object = TraceObject.objects.filter(
-                        session=session, player=trace_player
-                    ).first()
+        #             # Create highlight-object relationship if trace object exists
+        #             trace_object = TraceObject.objects.filter(
+        #                 session=session, player=trace_player
+        #             ).first()
 
-                    if trace_object:
-                        TraceHighlightObject.objects.create(
-                            highlight=highlight,
-                            trace_object=trace_object,
-                            player=trace_player,
-                        )
-                    logger.info(f"TraceObject: {trace_object}")
-                    highlights_created += 1
-                    events_processed += 1
+        #             if trace_object:
+        #                 TraceHighlightObject.objects.create(
+        #                     highlight=highlight,
+        #                     trace_object=trace_object,
+        #                     player=trace_player,
+        #                 )
+        #             logger.info(f"TraceObject: {trace_object}")
+        #             highlights_created += 1
+        #             events_processed += 1
 
-                    logger.info(
-                        f"Created highlight {highlight_id} for {event['type']} by {event['player_name']} at {event['match_time']}"
-                    )
+        #             logger.info(
+        #                 f"Created highlight {highlight_id} for {event['type']} by {event['player_name']} at {event['match_time']}"
+        #             )
 
-                except Exception as e:
-                    error_msg = f"Error processing event {event}: {str(e)}"
-                    logger.error(error_msg)
-                    errors.append(error_msg)
-                    continue
+        #         except Exception as e:
+        #             error_msg = f"Error processing event {event}: {str(e)}"
+        #             logger.error(error_msg)
+        #             errors.append(error_msg)
+        #             continue
 
         # Update session with Excel processing status
-        session.result["excel_highlights_processed"] = True
-        session.result["excel_highlights_count"] = highlights_created
-        session.result["excel_events_processed"] = events_processed
-        session.save()
+        # session.result["excel_highlights_processed"] = True
+        # session.result["excel_highlights_count"] = highlights_created
+        # session.result["excel_events_processed"] = events_processed
+        # session.save()
 
-        # Compute only possession segments after highlights are generated (skip clips)
-        if highlights_created > 0:
-            try:
-                compute_aggregates_task.delay(
-                    session.session_id, only_possession_segments=True
-                )
-                logger.info(
-                    f"Queued possession segments computation for session {session.session_id} after highlight generation"
-                )
-            except Exception as e:
-                logger.exception(
-                    f"Failed to enqueue possession segments computation for session {session.session_id}: {e}"
-                )
+        # # Compute only possession segments after highlights are generated (skip clips)
+        # if highlights_created > 0:
+        #     try:
+        #         compute_aggregates_task.delay(
+        #             session.session_id, only_possession_segments=True
+        #         )
+        #         logger.info(
+        #             f"Queued possession segments computation for session {session.session_id} after highlight generation"
+        #         )
+        #     except Exception as e:
+        #         logger.exception(
+        #             f"Failed to enqueue possession segments computation for session {session.session_id}: {e}"
+        #         )
 
         # Clean up all temporary files before returning
         cleanup_temp_files(temp_files_to_cleanup)
@@ -3135,23 +3295,15 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
         result = {
             "success": True,
             "session_id": session_id,
-            "events_processed": events_processed,
-            "highlights_created": highlights_created,
             "player_updates": player_update_result,
-            "errors": errors,
+            "highlights_created": highlight_result.get("highlights_created", 0),
+            "clip_reels_created": highlight_result.get("clip_reels_created", 0),
+            "errors": highlight_result.get("errors", []),
             "match_data_summary": {
-                "total_events": len(match_data.get("events", [])),
-                "goals": len(
-                    [e for e in match_data.get("events", []) if e["type"] == "goal"]
-                ),
-                "cards": len(
-                    [
-                        e
-                        for e in match_data.get("events", [])
-                        if e["type"] in ["yellow_card", "red_card"]
-                    ]
-                ),
-                "total_player_mappings": len(match_data.get("player_mappings", {})),
+                "total_players": len(normalized_data.get("players", [])),
+                "total_teams": len(normalized_data.get("teams", [])),
+                "players_updated": player_update_result.get("updated_count", 0),
+                "players_not_found": player_update_result.get("not_found_count", 0),
             },
         }
         return result

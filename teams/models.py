@@ -8,6 +8,15 @@ class Team(WajoModel):
     name = models.CharField(max_length=255, blank=True, null=True)
     logo = models.ImageField(upload_to="team_logos/", blank=True, null=True)
     jersey_color = models.CharField(max_length=7, blank=True, null=True)
+    
+    # Multilingual team names
+    language_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        null=True,
+        help_text="Multilingual team names: {'en': 'Team Name', 'he': 'שם הקבוצה'}"
+    )
+    
     coach = models.ManyToManyField(
         WajoUser,
         related_name='teams_coached',

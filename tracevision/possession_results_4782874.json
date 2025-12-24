@@ -1,0 +1,292 @@
+{
+  "team_metrics": {
+    "home": {
+      "possession_time_ms": 2246600,
+      "possession_count": 77,
+      "avg_duration_ms": 29176.6,
+      "avg_passes": 0.91,
+      "longest_possession_ms": 139688,
+      "turnovers": 76,
+      "total_touches": 147,
+      "total_passes": 70,
+      "possession_percentage": 42.4
+    },
+    "away": {
+      "possession_time_ms": 3051930,
+      "possession_count": 77,
+      "avg_duration_ms": 39635.5,
+      "avg_passes": 1.77,
+      "longest_possession_ms": 121815,
+      "turnovers": 77,
+      "total_touches": 213,
+      "total_passes": 136,
+      "possession_percentage": 57.6
+    }
+  },
+  "player_metrics": {
+    "away_30": {
+      "involvement_count": 1,
+      "total_duration_ms": 105376,
+      "avg_duration_ms": 105376.0,
+      "total_touches": 6,
+      "avg_touches": 6.0,
+      "involvement_percentage": 1.3
+    },
+    "away_33": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_35": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_4": {
+      "involvement_count": 22,
+      "total_duration_ms": 987154,
+      "avg_duration_ms": 44870.6,
+      "total_touches": 80,
+      "avg_touches": 3.64,
+      "involvement_percentage": 28.6
+    },
+    "away_5": {
+      "involvement_count": 2,
+      "total_duration_ms": 146311,
+      "avg_duration_ms": 73155.5,
+      "total_touches": 8,
+      "avg_touches": 4.0,
+      "involvement_percentage": 2.6
+    },
+    "away_6": {
+      "involvement_count": 15,
+      "total_duration_ms": 809520,
+      "avg_duration_ms": 53968.0,
+      "total_touches": 47,
+      "avg_touches": 3.13,
+      "involvement_percentage": 19.5
+    },
+    "away_7": {
+      "involvement_count": 1,
+      "total_duration_ms": 72002,
+      "avg_duration_ms": 72002.0,
+      "total_touches": 6,
+      "avg_touches": 6.0,
+      "involvement_percentage": 1.3
+    },
+    "away_1": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_10": {
+      "involvement_count": 7,
+      "total_duration_ms": 163470,
+      "avg_duration_ms": 23352.9,
+      "total_touches": 12,
+      "avg_touches": 1.71,
+      "involvement_percentage": 9.1
+    },
+    "away_11": {
+      "involvement_count": 9,
+      "total_duration_ms": 448524,
+      "avg_duration_ms": 49836.0,
+      "total_touches": 34,
+      "avg_touches": 3.78,
+      "involvement_percentage": 11.7
+    },
+    "away_12": {
+      "involvement_count": 7,
+      "total_duration_ms": 314846,
+      "avg_duration_ms": 44978.0,
+      "total_touches": 25,
+      "avg_touches": 3.57,
+      "involvement_percentage": 9.1
+    },
+    "away_13": {
+      "involvement_count": 2,
+      "total_duration_ms": 183508,
+      "avg_duration_ms": 91754.0,
+      "total_touches": 10,
+      "avg_touches": 5.0,
+      "involvement_percentage": 2.6
+    },
+    "away_14": {
+      "involvement_count": 3,
+      "total_duration_ms": 145176,
+      "avg_duration_ms": 48392.0,
+      "total_touches": 15,
+      "avg_touches": 5.0,
+      "involvement_percentage": 3.9
+    },
+    "away_15": {
+      "involvement_count": 13,
+      "total_duration_ms": 602567,
+      "avg_duration_ms": 46351.3,
+      "total_touches": 36,
+      "avg_touches": 2.77,
+      "involvement_percentage": 16.9
+    },
+    "away_16": {
+      "involvement_count": 8,
+      "total_duration_ms": 528865,
+      "avg_duration_ms": 66108.1,
+      "total_touches": 37,
+      "avg_touches": 4.62,
+      "involvement_percentage": 10.4
+    },
+    "away_17": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_18": {
+      "involvement_count": 4,
+      "total_duration_ms": 74068,
+      "avg_duration_ms": 18517.0,
+      "total_touches": 10,
+      "avg_touches": 2.5,
+      "involvement_percentage": 5.2
+    },
+    "away_19": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_2": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_20": {
+      "involvement_count": 6,
+      "total_duration_ms": 281643,
+      "avg_duration_ms": 46940.5,
+      "total_touches": 21,
+      "avg_touches": 3.5,
+      "involvement_percentage": 7.8
+    },
+    "away_22": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_23": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_24": {
+      "involvement_count": 13,
+      "total_duration_ms": 525051,
+      "avg_duration_ms": 40388.5,
+      "total_touches": 38,
+      "avg_touches": 2.92,
+      "involvement_percentage": 16.9
+    },
+    "away_25": {
+      "involvement_count": 6,
+      "total_duration_ms": 127476,
+      "avg_duration_ms": 21246.0,
+      "total_touches": 16,
+      "avg_touches": 2.67,
+      "involvement_percentage": 7.8
+    },
+    "away_3": {
+      "involvement_count": 4,
+      "total_duration_ms": 76361,
+      "avg_duration_ms": 19090.2,
+      "total_touches": 11,
+      "avg_touches": 2.75,
+      "involvement_percentage": 5.2
+    },
+    "away_40": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_44": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_45": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_75": {
+      "involvement_count": 0,
+      "total_duration_ms": 0,
+      "avg_duration_ms": 0,
+      "total_touches": 0,
+      "avg_touches": 0,
+      "involvement_percentage": 0
+    },
+    "away_77": {
+      "involvement_count": 12,
+      "total_duration_ms": 442606,
+      "avg_duration_ms": 36883.8,
+      "total_touches": 37,
+      "avg_touches": 3.08,
+      "involvement_percentage": 15.6
+    },
+    "away_8": {
+      "involvement_count": 6,
+      "total_duration_ms": 264815,
+      "avg_duration_ms": 44135.8,
+      "total_touches": 23,
+      "avg_touches": 3.83,
+      "involvement_percentage": 7.8
+    },
+    "away_9": {
+      "involvement_count": 12,
+      "total_duration_ms": 390810,
+      "avg_duration_ms": 32567.5,
+      "total_touches": 31,
+      "avg_touches": 2.58,
+      "involvement_percentage": 15.6
+    },
+    "away_26": {
+      "involvement_count": 13,
+      "total_duration_ms": 318323,
+      "avg_duration_ms": 24486.4,
+      "total_touches": 32,
+      "avg_touches": 2.46,
+      "involvement_percentage": 16.9
+    }
+  }
+}

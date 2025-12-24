@@ -53,6 +53,7 @@ class TraceSessionAdmin(admin.ModelAdmin):
             "Match Details",
             {
                 "fields": (
+                    "game",
                     "home_team",
                     "away_team",
                     "home_score",
@@ -118,7 +119,7 @@ class TracePlayerAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Player Information",
-            {"fields": ("id", "object_id", "name", "jersey_number", "position")},
+            {"fields": ("id", "object_id", "name", "jersey_number", "position", "language_metadata")},
         ),
         ("Relationships", {"fields": ("session", "team", "user", "is_mapped")}),
         (
@@ -150,7 +151,7 @@ class TraceHighlightAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Highlight Information",
-            {"fields": ("id", "highlight_id", "video_id", "start_offset", "duration")},
+            {"fields": ("id", "highlight_id", "video_id", "start_offset", "duration", "video_time")},
         ),
         (
             "Event Details",

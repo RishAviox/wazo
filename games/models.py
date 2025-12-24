@@ -24,6 +24,14 @@ class Game(WajoModel):
         Team, related_name="games", blank=True
     )  # Teams that played in the game
 
+    # Multilingual match data (English and Hebrew)
+    language_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        null=True,
+        help_text="Multilingual match data with 'en' and 'he' sections containing match summary, lineups, replacements, bench, coaches, and referees"
+    )
+
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
 

@@ -1,0 +1,64 @@
+{
+  "Maccabi Haifa": {
+    "team_goals": [
+      {
+        "player_name": "Ilay GAT",
+        "player_id": "11",
+        "goals_scored": [
+          {
+            "goal_timing": "19:00",
+            "half": "1"
+          },
+          {
+            "goal_timing": "23:00",
+            "half": "1"
+          },
+          {
+            "goal_timing": "61:00",
+            "half": "2"
+          },
+          {
+            "goal_timing": "80:00",
+            "half": "2"
+          }
+        ]
+      },
+      {
+        "player_name": "Noam EICHINBOAM",
+        "player_id": "14",
+        "goals_scored": [
+          {
+            "goal_timing": "14:00",
+            "half": "1"
+          }
+        ]
+      }
+    ]
+  },
+  "Hapoel Ako": {
+    "team_goals": [
+      {
+        "player_name": "Mahmoud ABU ALHIJA",
+        "player_id": "28",
+        "goals_scored": [
+          {
+            "goal_timing": "17:00",
+            "half": "1"
+          },
+          {
+            "goal_timing": "21:00",
+            "half": "1"
+          },
+          {
+            "goal_timing": "45:00",
+            "half": "1"
+          },
+          {
+            "goal_timing": "68:00",
+            "half": "2"
+          }
+        ]
+      }
+    ]
+  }
+}
