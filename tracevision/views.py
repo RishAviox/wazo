@@ -43,6 +43,11 @@ from tracevision.serializers import (
 from tracevision.services import TraceVisionService
 from games.models import GameUserRole, Game
 from tracevision.tasks import map_players_to_users_task
+from tracevision.utils import (
+    get_localized_game_name,
+    get_localized_team_name,
+    get_localized_player_name,
+)
 
 
 logger = logging.getLogger()
@@ -300,6 +305,9 @@ class TraceVisionPollStatusView(APIView):
                             f"Updated result data for completed session {session.session_id}"
                         )
 
+            # Get user language preference
+            user_language = getattr(request.user, 'selected_language', 'en') or 'en'
+            
             # Prepare response data
             response_data = {
                 "success": True,
@@ -312,8 +320,8 @@ class TraceVisionPollStatusView(APIView):
                 ),
                 "result": session.result,
                 "match_date": session.match_date,
-                "home_team": session.home_team.name if session.home_team else None,
-                "away_team": session.away_team.name if session.away_team else None,
+                "home_team": get_localized_team_name(session.home_team, user_language) if session.home_team else None,
+                "away_team": get_localized_team_name(session.away_team, user_language) if session.away_team else None,
                 "home_score": session.home_score,
                 "away_score": session.away_score,
                 "home_team_jersey_color": (
@@ -359,7 +367,7 @@ class TraceVisionPollStatusView(APIView):
                     ):
                         highlight_data["primary_player"] = {
                             "id": highlight.primary_player.id,
-                            "name": highlight.primary_player.name,
+                            "name": get_localized_player_name(highlight.primary_player, user_language),
                             "jersey_number": highlight.primary_player.jersey_number,
                         }
 
@@ -373,10 +381,10 @@ class TraceVisionPollStatusView(APIView):
                         "highlights_count": len(highlights_data),
                         "metadata": {
                             "home_team": (
-                                session.home_team.name if session.home_team else None
+                                get_localized_team_name(session.home_team, user_language) if session.home_team else None
                             ),
                             "away_team": (
-                                session.away_team.name if session.away_team else None
+                                get_localized_team_name(session.away_team, user_language) if session.away_team else None
                             ),
                             "home_score": session.home_score,
                             "away_score": session.away_score,
@@ -812,12 +820,15 @@ class TraceVisionPlayerStatsDetailView(APIView):
             # Get heatmap data
             heatmap_data = player_stats.heatmap_data
 
+            # Get user language preference
+            user_language = getattr(request.user, 'selected_language', 'en') or 'en'
+            
             # Format detailed response
             detailed_stats = {
                 "player_id": player_stats.player.id,
-                "player_name": player_stats.player.name,
+                "player_name": get_localized_player_name(player_stats.player, user_language),
                 "team_id": player_stats.team.id,
-                "team_name": player_stats.team.name,
+                "team_name": get_localized_team_name(player_stats.team, user_language),
                 "jersey_number": player_stats.player_mapping.jersey_number,
                 "side": player_stats.player_mapping.side,
                 # Comprehensive movement analysis
@@ -1268,7 +1279,7 @@ class GetAvailableHighlightDatesView(APIView):
                 # This ensures we get players even if they weren't created for this specific session
                 all_players = TracePlayer.objects.filter(
                     team_id__in=team_ids
-                ).select_related("team", "session")
+                ).select_related("team", "user")
 
                 # Create a mapping of team_id -> players for quick lookup
                 players_by_team = {}
@@ -1518,6 +1529,9 @@ class LinkUserToGameView(APIView):
                     )
 
             user_role = request.user.role or "No Role"
+            # Get user language preference
+            user_language = getattr(request.user, 'selected_language', 'en') or 'en'
+            
             return Response(
                 {
                     "success": True,
@@ -1525,7 +1539,7 @@ class LinkUserToGameView(APIView):
                     "game": {
                         "id": game.id,
                         "type": game.type,
-                        "name": game.name,
+                        "name": get_localized_game_name(game, user_language),
                         "date": game.date.isoformat() if game.date else None,
                     },
                     "user_role": user_role,
@@ -1856,9 +1870,6 @@ class MapUserToPlayerView(APIView):
 
             # Check if requesting user is a coach of the player's team or both teams
             player_team = trace_player.team
-            session = trace_player.session
-            home_team = session.home_team
-            away_team = session.away_team
 
             # Get teams the requesting user coaches
             user_teams_coached_ids = set(
@@ -1870,13 +1881,15 @@ class MapUserToPlayerView(APIView):
                 player_team and player_team.id in user_teams_coached_ids
             )
 
-            # Check if user is coach of both teams (home and away)
+            # Check if user is coach of both teams in any of the player's sessions
             is_coach_of_both_teams = False
-            if home_team and away_team:
-                is_coach_of_both_teams = (
-                    home_team.id in user_teams_coached_ids
-                    and away_team.id in user_teams_coached_ids
-                )
+            player_sessions = trace_player.sessions.select_related("home_team", "away_team").all()
+            for session in player_sessions:
+                if session.home_team and session.away_team:
+                    if (session.home_team.id in user_teams_coached_ids
+                        and session.away_team.id in user_teams_coached_ids):
+                        is_coach_of_both_teams = True
+                        break
 
             if not (is_coach_of_player_team or is_coach_of_both_teams):
                 return Response(
@@ -1975,6 +1988,101 @@ class MapUserToPlayerView(APIView):
             )
 
 
+class GetPlayerByTokenView(APIView):
+    """
+    API endpoint to get TracePlayer details by account creation token.
+    Used by frontend to display player information before account creation.
+    """
+    
+    def get(self, request):
+        """
+        Get TracePlayer details by account_creation_token.
+        
+        Query Parameters:
+        - token: Account creation token (required)
+        """
+        token = request.query_params.get("token")
+        
+        if not token:
+            return Response(
+                {
+                    "error": "Token is required",
+                    "details": "Please provide account_creation_token as query parameter",
+                },
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        
+        try:
+            trace_player = TracePlayer.objects.select_related(
+                "team"
+            ).prefetch_related(
+                "sessions__home_team", "sessions__away_team"
+            ).get(
+                account_creation_token=token,
+                user__isnull=True  # Only return if not already linked to a user
+            )
+            
+            # Get first session info (or most recent)
+            session = trace_player.sessions.order_by('-match_date', '-created_at').first()
+            
+            # Get user language preference (default to 'en' if not authenticated)
+            user_language = 'en'
+            if request.user.is_authenticated:
+                user_language = getattr(request.user, 'selected_language', 'en') or 'en'
+            
+            # Build sessions list
+            sessions_data = []
+            for sess in trace_player.sessions.all():
+                sessions_data.append({
+                    "id": sess.id,
+                    "session_id": sess.session_id,
+                    "match_date": sess.match_date.isoformat() if sess.match_date else None,
+                    "home_team": get_localized_team_name(sess.home_team, user_language) if sess.home_team else None,
+                    "away_team": get_localized_team_name(sess.away_team, user_language) if sess.away_team else None,
+                })
+            
+            return Response(
+                {
+                    "success": True,
+                    "player": {
+                        "id": trace_player.id,
+                        "name": get_localized_player_name(trace_player, user_language),
+                        "jersey_number": trace_player.jersey_number,
+                        "position": trace_player.position,
+                        "team": {
+                            "id": trace_player.team.id if trace_player.team else None,
+                            "name": get_localized_team_name(trace_player.team, user_language) if trace_player.team else None,
+                        },
+                        "primary_session": {
+                            "id": session.id if session else None,
+                            "session_id": session.session_id if session else None,
+                            "match_date": session.match_date.isoformat() if session and session.match_date else None,
+                            "home_team": get_localized_team_name(session.home_team, user_language) if session and session.home_team else None,
+                            "away_team": get_localized_team_name(session.away_team, user_language) if session and session.away_team else None,
+                        } if session else None,
+                        "sessions": sessions_data,  # All sessions this player participates in
+                        "language_metadata": trace_player.language_metadata or {},
+                    },
+                },
+                status=http_status.HTTP_200_OK,
+            )
+        
+        except TracePlayer.DoesNotExist:
+            return Response(
+                {
+                    "error": "Invalid or expired token",
+                    "details": "The provided token is invalid or has already been used",
+                },
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            logger.exception(f"Error getting player by token: {str(e)}")
+            return Response(
+                {"error": "Internal server error", "details": str(e)},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
 class DeleteErroredTraceSessionView(APIView):
     """
     API endpoint to delete/soft-delete a Game and its TraceSession
@@ -2018,10 +2126,12 @@ class DeleteErroredTraceSessionView(APIView):
             # Soft-delete the canonical Game if it exists
             game_info = None
             if game:
+                # Get user language preference
+                user_language = getattr(request.user, 'selected_language', 'en') or 'en'
                 game_info = {
                     "id": game.id,
                     "type": game.type,
-                    "name": game.name,
+                    "name": get_localized_game_name(game, user_language),
                     "date": game.date.isoformat() if game.date else None,
                 }
                 game.delete()

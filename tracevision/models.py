@@ -220,12 +220,6 @@ class TracePlayer(models.Model):
     )
 
     # Relationships
-    session = models.ForeignKey(
-        to=TraceSession,
-        on_delete=models.CASCADE,
-        related_name="trace_players",
-        help_text="TraceVision session this player belongs to",
-    )
     user = models.ForeignKey(
         WajoUser,
         on_delete=models.DO_NOTHING,
@@ -240,6 +234,23 @@ class TracePlayer(models.Model):
         related_name="trace_players",
         help_text="Team this player belongs to",
     )
+    # ManyToMany relationship with TraceSession (player can participate in multiple sessions)
+    sessions = models.ManyToManyField(
+        TraceSession,
+        related_name="players",
+        blank=True,
+        help_text="TraceVision sessions this player has participated in",
+    )
+
+    # Account creation token for linking player to user account
+    account_creation_token = models.CharField(
+        max_length=64,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Unique token for account creation. User can use this token to create account and link to this TracePlayer.",
+        db_index=True,
+    )
 
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
@@ -248,23 +259,27 @@ class TracePlayer(models.Model):
     class Meta:
         verbose_name = "Trace Player"
         verbose_name_plural = "Trace Players"
-        # Unique constraint: object_id + user (when user is present)
+        # Unique constraint: team + jersey_number (when user is not present)
+        # This ensures one player per team+jersey combination when not mapped to a user
         constraints = [
             models.UniqueConstraint(
-                fields=["object_id", "user"],
-                condition=models.Q(user__isnull=False),
-                name="unique_object_id_per_user",
+                fields=["team", "jersey_number"],
+                condition=models.Q(user__isnull=True),
+                name="unique_team_jersey_no_user",
             ),
-            # Ensure object_id is unique per session
+            # Unique constraint: team + jersey_number + user (when user is present)
+            # This allows same jersey number for different users on same team
             models.UniqueConstraint(
-                fields=["object_id", "session"], name="unique_object_id_per_session"
+                fields=["team", "jersey_number", "user"],
+                condition=models.Q(user__isnull=False),
+                name="unique_team_jersey_user",
             ),
         ]
         indexes = [
             models.Index(fields=["object_id"]),
             models.Index(fields=["user"]),
-            models.Index(fields=["team"]),
-            models.Index(fields=["session"]),
+            models.Index(fields=["team", "jersey_number"]),  # Combined index for common lookups
+            models.Index(fields=["account_creation_token"]),
         ]
 
     def __str__(self):

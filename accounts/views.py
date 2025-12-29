@@ -83,10 +83,46 @@ class LoginAPI(APIView):
                         created = False
                         print(f"Found existing user: {user.phone_no} (normalized from input: {phone_no} -> {normalized_phone})")
                     else:
-                        # Step 3: Still not found, create new user with ORIGINAL phone number from request
+                        # Step 3: Still not found, check if account_creation_token is provided
+                        account_token = request.data.get("account_creation_token")
+                        trace_player = None
+                        
+                        if account_token:
+                            # Find TracePlayer by token
+                            try:
+                                from tracevision.models import TracePlayer
+                                trace_player = TracePlayer.objects.select_related("team").get(
+                                    account_creation_token=account_token,
+                                    user__isnull=True  # Only if not already linked
+                                )
+                            except TracePlayer.DoesNotExist:
+                                return Response({
+                                    "error": "Invalid or already used account creation token"
+                                }, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        # Create new user with ORIGINAL phone number from request
                         user = WajoUser.objects.create(phone_no=phone_no)
                         created = True
                         print(f"Created new user with original phone number: {phone_no}")
+                        
+                        # If token was provided, populate user data from TracePlayer
+                        if trace_player:
+                            # Copy data from TracePlayer to WajoUser
+                            if trace_player.name:
+                                user.name = trace_player.name
+                            if trace_player.team:
+                                user.team = trace_player.team
+                            if trace_player.jersey_number:
+                                user.jersey_number = trace_player.jersey_number
+                            user.role = "Player"  # Set role as Player
+                            user.save()
+                            
+                            # Link TracePlayer to WajoUser
+                            trace_player.user = user
+                            trace_player.account_creation_token = None  # Clear token after use
+                            trace_player.save(update_fields=["user", "account_creation_token"])
+                            
+                            print(f"Linked TracePlayer {trace_player.id} to WajoUser {user.phone_no} and populated user data")
                 
                 access_token = generate_access_token(user)
                 refresh_token = generate_refresh_token(user)

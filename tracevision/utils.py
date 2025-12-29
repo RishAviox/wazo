@@ -1,10 +1,13 @@
 import re
 import os
 import uuid
+import json
 import logging
+import math
 import tempfile
 import webcolors
 import subprocess
+import pandas as pd
 from azure.storage.blob import (
     BlobServiceClient,
     generate_blob_sas,
@@ -15,7 +18,7 @@ from django.db.models import Q
 from django.conf import settings
 from django.utils import timezone
 from urllib.parse import urlparse, parse_qs
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
 from typing import Dict, Tuple, Optional
 from django.core.files.storage import default_storage
 
@@ -24,6 +27,120 @@ from cards.models import GPSAthleticSkills, GPSFootballAbilities
 from tracevision.models import TracePlayer, TraceHighlight, TraceClipReel, TraceHighlightObject, TraceObject
 
 logger = logging.getLogger(__name__)
+
+
+def get_localized_name(obj, user_language=None, field_name="name"):
+    """
+    Get localized name from an object based on user's language preference.
+    
+    Args:
+        obj: Object with language_metadata field (Game, Team, or TracePlayer)
+        user_language: User's language preference ('en' or 'he'), defaults to 'en'
+        field_name: Field name to extract from language_metadata (default: 'name')
+    
+    Returns:
+        str: Localized name, or fallback to obj.name/obj.field_name if not available
+    """
+    if not obj:
+        return None
+    
+    # Default to 'en' if language not provided
+    if not user_language:
+        user_language = 'en'
+    
+    # Normalize language code
+    user_language = user_language.lower()
+    if user_language not in ['en', 'he']:
+        user_language = 'en'
+    
+    # Try to get from language_metadata
+    if hasattr(obj, 'language_metadata') and obj.language_metadata:
+        lang_data = obj.language_metadata.get(user_language)
+        
+        # Handle different structures:
+        # 1. Direct value: {'en': 'Team Name', 'he': 'שם קבוצה'}
+        if isinstance(lang_data, str) and lang_data.strip():
+            return lang_data
+        
+        # 2. Nested dict: {'en': {'name': 'Team Name'}, 'he': {'name': 'שם קבוצה'}}
+        if isinstance(lang_data, dict) and lang_data:
+            value = lang_data.get(field_name)
+            # Check if value exists and is not None/empty
+            if value is not None:
+                # If it's a string, check it's not empty after stripping
+                if isinstance(value, str):
+                    if value.strip():
+                        return value
+                else:
+                    # Non-string value (number, etc.) - return as is
+                    return value
+    
+    # Fallback to default field - always return the actual field value
+    if hasattr(obj, field_name):
+        field_value = getattr(obj, field_name, None)
+        if field_value is not None:
+            return field_value
+    if hasattr(obj, 'name'):
+        name_value = getattr(obj, 'name', None)
+        if name_value is not None:
+            return name_value
+    
+    return None
+
+
+def get_localized_game_name(game, user_language=None):
+    """Get localized Game name based on user's language preference."""
+    return get_localized_name(game, user_language, field_name="name")
+
+
+def get_localized_team_name(team, user_language=None):
+    """Get localized Team name based on user's language preference."""
+    if not team:
+        return None
+    
+    # Default to 'en' if language not provided
+    if not user_language:
+        user_language = 'en'
+    
+    # Normalize language code
+    user_language = user_language.lower()
+    if user_language not in ['en', 'he']:
+        user_language = 'en'
+    
+    # Try language_metadata first
+    if hasattr(team, 'language_metadata') and team.language_metadata:
+        lang_data = team.language_metadata.get(user_language)
+        
+        # Handle different structures
+        # 1. Direct value: {'en': 'Team Name', 'he': 'שם קבוצה'}
+        if isinstance(lang_data, str) and lang_data.strip():
+            return lang_data
+        
+        # 2. Nested dict: {'en': {'name': 'Team Name'}, 'he': {'name': 'שם קבוצה'}}
+        if isinstance(lang_data, dict) and lang_data:
+            value = lang_data.get('name')
+            # Check if value exists and is not None/empty
+            if value is not None:
+                # If it's a string, check it's not empty after stripping
+                if isinstance(value, str):
+                    if value.strip():
+                        return value
+                else:
+                    # Non-string value (number, etc.) - return as is
+                    return value
+    
+    # Fallback to team.name - always return the actual field value
+    if hasattr(team, 'name'):
+        name_value = getattr(team, 'name', None)
+        if name_value is not None:
+            return name_value
+    
+    return None
+
+
+def get_localized_player_name(player, user_language=None):
+    """Get localized TracePlayer name based on user's language preference."""
+    return get_localized_name(player, user_language, field_name="name")
 
 
 
@@ -161,12 +278,31 @@ def _create_goal_highlight(session, trace_player, player_data, goal, aggregation
     video_time = goal.get("video_time")
     
     # Create unique highlight ID
-    highlight_id = f"excel-goal-{session.session_id}-{minute}-{trace_player.object_id}"
+    highlight_id = f"excel-goal-{session.session_id}-{minute}-{trace_player.id}"
     
     # Check if highlight already exists
     if TraceHighlight.objects.filter(highlight_id=highlight_id).exists():
         logger.info(f"Highlight {highlight_id} already exists, skipping")
         return None, 0
+    
+    # Calculate start_offset from video_time if available
+    start_offset = 0
+    if video_time:
+        try:
+            # Parse video_time (format: MM:SS or HH:MM:SS)
+            video_seconds = parse_time_to_seconds(video_time)
+            if video_seconds is not None:
+                start_offset = video_seconds * 1000  # Convert to milliseconds
+        except Exception as e:
+            logger.warning(f"Failed to parse video_time '{video_time}' for goal at {minute}': {e}")
+    
+    # If video_time not available, try to calculate from match_time
+    if start_offset == 0 and session.match_start_time:
+        try:
+            minute_int = int(str(minute).replace("'", "").replace("min", "").strip())
+            start_offset = convert_game_time_to_video_milliseconds(session, minute_int, 0)
+        except Exception as e:
+            logger.warning(f"Failed to calculate start_offset from match_time: {e}")
     
     # Create event metadata
     event_metadata = {
@@ -178,11 +314,18 @@ def _create_goal_highlight(session, trace_player, player_data, goal, aggregation
         "jersey_number": player_data["jersey_number"]
     }
     
+    # Determine half from minute
+    try:
+        minute_int = int(str(minute).replace("'", "").replace("min", "").strip())
+        half = 1 if minute_int <= 45 else 2
+    except (ValueError, TypeError):
+        half = 1  # Default to first half
+    
     # Create TraceHighlight
     highlight = TraceHighlight.objects.create(
         highlight_id=highlight_id,
         video_id=0,
-        start_offset=0,  # Will be calculated from video_time if needed
+        start_offset=start_offset,
         duration=15000,  # 15 seconds for goals
         tags=[player_data["team_side"], "goal", minute],
         video_stream=session.video_url,
@@ -190,7 +333,7 @@ def _create_goal_highlight(session, trace_player, player_data, goal, aggregation
         source="excel_import",
         match_time=f"{minute}:00",
         video_time=video_time,
-        half=1 if int(minute) <= 45 else 2,  # Simple half determination
+        half=half,
         event_metadata=event_metadata,
         session=session,
         player=trace_player
@@ -291,22 +434,22 @@ def _create_card_highlight(session, trace_player, player_data, aggregation_servi
     return highlight, clip_reels_count
 
 
-def update_player_language_metadata(session, normalized_data):
+def update_player_language_metadata(session, normalized_data, generate_tokens=False):
     """
     Update TracePlayer language_metadata with multilingual names and roles.
-    Also maps WajoUsers to TracePlayers when creating new players.
+    Optionally generates account creation tokens for unmapped players.
     
     Args:
         session: TraceSession instance
         normalized_data: Normalized multilingual data
+        generate_tokens: If True, generate account_creation_token for players without one
         
     Returns:
-        dict: Update statistics
+        dict: Update statistics including tokens_generated and created_count
     """
-    from accounts.models import WajoUser
-    
     updated_count = 0
-    not_found_count = 0
+    created_count = 0
+    tokens_generated = 0
     update_details = []
     
     for player_data in normalized_data["players"]:
@@ -316,21 +459,18 @@ def update_player_language_metadata(session, normalized_data):
             team = session.home_team if player_data["team_side"] == "home" else session.away_team
             jersey_number = player_data["jersey_number"]
             
+            if not team:
+                logger.warning(f"No team found for side {player_data['team_side']} in session {session.id}")
+                continue
+            
+            # Find TracePlayer by team and jersey_number (across all sessions)
             trace_player = TracePlayer.objects.filter(
-                session=session,
                 team=team,
                 jersey_number=jersey_number
             ).first()
             
-            if not trace_player:
-                # Try finding by object_id pattern
-                object_id = f"{player_data['team_side']}_{jersey_number}"
-                trace_player = TracePlayer.objects.filter(
-                    session=session,
-                    object_id=object_id
-                ).first()
-            
             if trace_player:
+                # Update existing player
                 # Update language_metadata
                 if not trace_player.language_metadata:
                     trace_player.language_metadata = {}
@@ -357,41 +497,26 @@ def update_player_language_metadata(session, normalized_data):
                 elif player_data["name"]["he"]:
                     trace_player.name = player_data["name"]["he"]
                 
-                # Map to WajoUser if not already mapped
-                wajo_user_mapped = False
-                if not trace_player.user:
-                    # Try to find matching WajoUser
-                    wajo_user = None
-                    
-                    # Try to find by jersey number and team first
-                    wajo_user = WajoUser.objects.filter(
-                        jersey_number=jersey_number,
-                        team=team
-                    ).first()
-                    
-                    if not wajo_user:
-                        # Try to find by name similarity and team
-                        # Use first name from either English or Hebrew
-                        first_name = None
-                        if player_data["name"]["en"]:
-                            first_name = player_data["name"]["en"].split()[0]
-                        elif player_data["name"]["he"]:
-                            first_name = player_data["name"]["he"].split()[0]
-                        
-                        if first_name:
-                            wajo_user = WajoUser.objects.filter(
-                                team=team,
-                                name__icontains=first_name
-                            ).first()
-                    
-                    if wajo_user:
-                        trace_player.user = wajo_user
-                        wajo_user_mapped = True
-                        logger.info(
-                            f"Mapped existing TracePlayer #{jersey_number} to WajoUser: {wajo_user.phone_no}"
-                        )
+                # Update position if role is provided
+                if player_data["role"]["en"] or player_data["role"]["he"]:
+                    position = player_data["role"]["en"] or player_data["role"]["he"]
+                    trace_player.position = position
+                
+                # Generate token if requested and not already set
+                if generate_tokens and not trace_player.account_creation_token:
+                    token = generate_account_creation_token()
+                    # Ensure token is unique
+                    while TracePlayer.objects.filter(account_creation_token=token).exists():
+                        token = generate_account_creation_token()
+                    trace_player.account_creation_token = token
+                    tokens_generated += 1
                 
                 trace_player.save()
+                
+                # Add session to player's sessions if not already present
+                if session not in trace_player.sessions.all():
+                    trace_player.sessions.add(session)
+                
                 updated_count += 1
                 
                 update_details.append({
@@ -399,14 +524,12 @@ def update_player_language_metadata(session, normalized_data):
                     "team_side": player_data["team_side"],
                     "name_en": player_data["name"]["en"],
                     "name_he": player_data["name"]["he"],
-                    "mapped_to_user": trace_player.user.phone_no if trace_player.user else None,
-                    "user_mapped_now": wajo_user_mapped
+                    "player_id": trace_player.id
                 })
                 
                 logger.info(
                     f"Updated player #{jersey_number} ({player_data['team_side']}): "
                     f"EN={player_data['name']['en']}, HE={player_data['name']['he']}"
-                    f"{' - Mapped to WajoUser: ' + trace_player.user.phone_no if wajo_user_mapped else ''}"
                 )
             else:
                 # Create new TracePlayer if not found
@@ -430,30 +553,14 @@ def update_player_language_metadata(session, normalized_data):
                 # Determine position from role (use English role if available, else Hebrew, else "Unknown")
                 position = player_data["role"]["en"] or player_data["role"]["he"] or "Unknown"
                 
-                # Try to find matching WajoUser to map to this TracePlayer
-                # Following the same logic as map_player_to_trace_player in tasks.py
-                wajo_user = None
-                
-                # Try to find by jersey number and team first
-                wajo_user = WajoUser.objects.filter(
-                    jersey_number=jersey_number,
-                    team=team
-                ).first()
-                
-                if not wajo_user:
-                    # Try to find by name similarity and team
-                    # Use first name from either English or Hebrew
-                    first_name = None
-                    if player_data["name"]["en"]:
-                        first_name = player_data["name"]["en"].split()[0]
-                    elif player_data["name"]["he"]:
-                        first_name = player_data["name"]["he"].split()[0]
-                    
-                    if first_name:
-                        wajo_user = WajoUser.objects.filter(
-                            team=team,
-                            name__icontains=first_name
-                        ).first()
+                # Generate token if requested
+                account_token = None
+                if generate_tokens:
+                    account_token = generate_account_creation_token()
+                    # Ensure token is unique
+                    while TracePlayer.objects.filter(account_creation_token=account_token).exists():
+                        account_token = generate_account_creation_token()
+                    tokens_generated += 1
                 
                 # Create the new TracePlayer
                 trace_player = TracePlayer.objects.create(
@@ -462,12 +569,15 @@ def update_player_language_metadata(session, normalized_data):
                     jersey_number=jersey_number,
                     position=position,
                     team=team,
-                    session=session,
-                    user=wajo_user,  # Map to WajoUser if found
-                    language_metadata=language_metadata
+                    user=None,  # No user mapping - token-based flow only
+                    language_metadata=language_metadata,
+                    account_creation_token=account_token
                 )
                 
-                updated_count += 1
+                # Add session to player's sessions
+                trace_player.sessions.add(session)
+                
+                created_count += 1
                 
                 update_details.append({
                     "jersey_number": jersey_number,
@@ -475,13 +585,12 @@ def update_player_language_metadata(session, normalized_data):
                     "name_en": player_data["name"]["en"],
                     "name_he": player_data["name"]["he"],
                     "created": True,
-                    "mapped_to_user": wajo_user.phone_no if wajo_user else None
+                    "player_id": trace_player.id
                 })
                 
                 logger.info(
                     f"Created new player #{jersey_number} ({player_data['team_side']}): "
                     f"EN={player_data['name']['en']}, HE={player_data['name']['he']}"
-                    f"{' - Mapped to WajoUser: ' + wajo_user.phone_no if wajo_user else ''}"
                 )
         
         except Exception as e:
@@ -490,7 +599,8 @@ def update_player_language_metadata(session, normalized_data):
     
     return {
         "updated_count": updated_count,
-        "not_found_count": not_found_count,
+        "created_count": created_count,
+        "tokens_generated": tokens_generated,
         "total_players": len(normalized_data["players"]),
         "update_details": update_details
     }
@@ -521,18 +631,11 @@ def create_highlights_from_normalized_data(session, normalized_data):
             team = session.home_team if player_data["team_side"] == "home" else session.away_team
             jersey_number = player_data["jersey_number"]
             
+            # Find TracePlayer by team and jersey_number (across all sessions)
             trace_player = TracePlayer.objects.filter(
-                session=session,
                 team=team,
                 jersey_number=jersey_number
             ).first()
-            
-            if not trace_player:
-                object_id = f"{player_data['team_side']}_{jersey_number}"
-                trace_player = TracePlayer.objects.filter(
-                    session=session,
-                    object_id=object_id
-                ).first()
             
             if not trace_player:
                 logger.warning(
@@ -2807,3 +2910,294 @@ def extract_video_segment_from_azure(
     except Exception as e:
         logger.error(f"Error extracting video segment: {e}")
         raise
+
+
+def generate_account_creation_token():
+    """
+    Generate a unique token for TracePlayer account creation.
+    Uses UUID4 to ensure uniqueness.
+    
+    Returns:
+        str: Unique token string
+    """
+    return uuid.uuid4().hex
+
+
+def process_excel_and_create_players(session_id):
+    """
+    Process Excel file from TraceSession and:
+    1. Extract multilingual data using extract_multilingual_match_data
+    2. Update Game and Team multilingual data using update_trace_session_multilingual_data
+    3. Create/update TracePlayer instances (using team + jersey_number)
+    4. Create highlights for goals from Excel data (using game_time and video_time)
+    5. Calculate and store goal statistics in TraceVisionSessionStats
+    
+    Args:
+        session_id (int): TraceSession ID
+        
+    Returns:
+        dict: Result with success status and details
+    """
+    try:
+        from tracevision.models import TraceSession, TracePlayer, TraceVisionSessionStats, TraceHighlight
+        from tracevision.tasks import update_trace_session_multilingual_data
+        from tracevision.utils import create_highlights_from_normalized_data
+        from django.db import transaction
+        
+        # Get session
+        try:
+            # Note: basic_game_stats is a FileField, not a relation, so don't use select_related for it
+            session = TraceSession.objects.select_related(
+                "home_team", "away_team", "game"
+            ).get(id=session_id)
+        except TraceSession.DoesNotExist:
+            error_msg = f"TraceSession with ID {session_id} not found"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+        
+        # Check if Excel file exists
+        if not session.basic_game_stats:
+            error_msg = f"Session {session_id} has no basic_game_stats file"
+            logger.warning(error_msg)
+            return {"success": False, "error": error_msg}
+        
+        # Download Excel file from storage
+        logger.info(f"Downloading Excel file for session {session_id}")
+        try:
+            excel_file_path = download_excel_file_from_storage(session.basic_game_stats.url)
+        except Exception as e:
+            error_msg = f"Failed to download Excel file: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return {"success": False, "error": error_msg}
+        
+        # Step 1: Extract multilingual data using existing method
+        try:
+            logger.info(f"Extracting multilingual data from Excel file")
+            match_data = extract_multilingual_match_data(excel_file_path)
+        except Exception as e:
+            error_msg = f"Failed to extract multilingual data: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            try:
+                import os
+                if os.path.exists(excel_file_path):
+                    os.unlink(excel_file_path)
+            except:
+                pass
+            return {"success": False, "error": error_msg}
+        
+        # Step 2: Update TraceSession multilingual data (updates Game and Team) using existing method
+        try:
+            update_trace_session_multilingual_data(match_data, session_id)
+            logger.info(f"Updated multilingual data for session {session_id}")
+        except Exception as e:
+            logger.warning(f"Failed to update multilingual data: {str(e)}", exc_info=True)
+        
+        # Step 3: Process players and create highlights
+        players_created = 0
+        players_updated = 0
+        tokens_generated = 0
+        highlights_created = 0
+        
+        # Goal statistics
+        home_goals = 0
+        away_goals = 0
+        home_first_half_goals = 0
+        home_second_half_goals = 0
+        away_first_half_goals = 0
+        away_second_half_goals = 0
+        player_goals = {}  # {player_id: goal_count}
+        
+        try:
+            with transaction.atomic():
+                # Get normalized player data
+                normalized_data = normalize_multilingual_data(match_data)
+                
+                # Step 3: Update/create players and generate tokens using existing method
+                logger.info("Updating player language metadata and generating tokens...")
+                player_result = update_player_language_metadata(session, normalized_data, generate_tokens=True)
+                players_created = player_result.get("created_count", 0)
+                players_updated = player_result.get("updated_count", 0)
+                tokens_generated = player_result.get("tokens_generated", 0)
+                logger.info(
+                    f"Player processing complete: {players_created} created, {players_updated} updated, "
+                    f"{tokens_generated} tokens generated"
+                )
+                
+                # Step 4: Calculate goal statistics from normalized data
+                # Build a mapping of (team_side, jersey_number) -> player_id for goal tracking
+                player_id_map = {}  # {(team_side, jersey_number): player_id}
+                for detail in player_result.get("update_details", []):
+                    player_id = detail.get("player_id")
+                    jersey_number = detail.get("jersey_number")
+                    team_side = detail.get("team_side")
+                    if player_id and jersey_number and team_side:
+                        player_id_map[(team_side, jersey_number)] = player_id
+                
+                # Calculate goal statistics
+                for player_data in normalized_data.get("players", []):
+                    try:
+                        team_side = player_data.get("team_side", "home")
+                        team = session.home_team if team_side == "home" else session.away_team
+                        jersey_number = player_data.get("jersey_number")
+                        
+                        if not team or not jersey_number:
+                            continue
+                        
+                        # Get player_id from map
+                        player_id = player_id_map.get((team_side, jersey_number))
+                        if not player_id:
+                            # Fallback: try to find TracePlayer directly (using team + jersey_number, not session)
+                            trace_player = TracePlayer.objects.filter(
+                                team=team,
+                                jersey_number=jersey_number
+                            ).first()
+                            if trace_player:
+                                player_id = trace_player.id
+                                # Ensure player is added to this session's M2M relationship
+                                if session not in trace_player.sessions.all():
+                                    trace_player.sessions.add(session)
+                            else:
+                                continue
+                        
+                        # Process goals for this player
+                        goals = player_data.get("goals", [])
+                        player_goal_count = len(goals)
+                        if player_goal_count > 0:
+                            player_goals[player_id] = player_goal_count
+                            
+                            # Count goals by team and half
+                            for goal in goals:
+                                try:
+                                    minute = int(goal.get("minute", "0").replace("'", "").replace("min", "").strip())
+                                    if team_side == "home":
+                                        home_goals += 1
+                                        if minute <= 45:
+                                            home_first_half_goals += 1
+                                        else:
+                                            home_second_half_goals += 1
+                                    else:
+                                        away_goals += 1
+                                        if minute <= 45:
+                                            away_first_half_goals += 1
+                                        else:
+                                            away_second_half_goals += 1
+                                except (ValueError, TypeError):
+                                    # If minute parsing fails, count as first half
+                                    if team_side == "home":
+                                        home_goals += 1
+                                        home_first_half_goals += 1
+                                    else:
+                                        away_goals += 1
+                                        away_first_half_goals += 1
+                    
+                    except Exception as e:
+                        logger.error(
+                            f"Error calculating goal statistics for player {player_data}: {str(e)}",
+                            exc_info=True
+                        )
+                        continue
+                
+                # Step 5: Create highlights from normalized data using existing method
+                try:
+                    highlight_result = create_highlights_from_normalized_data(session, normalized_data)
+                    highlights_created = highlight_result.get("highlights_created", 0)
+                    logger.info(f"Created {highlights_created} highlights from Excel data")
+                except Exception as e:
+                    logger.warning(f"Failed to create highlights: {str(e)}", exc_info=True)
+                
+                # Step 6: Update or create TraceVisionSessionStats with goal statistics
+                try:
+                    session_stats, stats_created = TraceVisionSessionStats.objects.get_or_create(
+                        session=session,
+                        defaults={
+                            "home_team_stats": {},
+                            "away_team_stats": {},
+                            "possession_data": {},
+                            "tactical_analysis": {},
+                        }
+                    )
+                    
+                    # Separate player goals by team
+                    home_player_goals = {}
+                    away_player_goals = {}
+                    
+                    for pid, count in player_goals.items():
+                        try:
+                            player = TracePlayer.objects.get(id=pid)
+                            if player.team == session.home_team:
+                                home_player_goals[str(pid)] = count
+                            elif player.team == session.away_team:
+                                away_player_goals[str(pid)] = count
+                        except TracePlayer.DoesNotExist:
+                            continue
+                    
+                    # Update home team stats
+                    home_stats = session_stats.home_team_stats or {}
+                    home_stats.update({
+                        "total_goals": home_goals,
+                        "first_half_goals": home_first_half_goals,
+                        "second_half_goals": home_second_half_goals,
+                        "player_goals": home_player_goals
+                    })
+                    session_stats.home_team_stats = home_stats
+                    
+                    # Update away team stats
+                    away_stats = session_stats.away_team_stats or {}
+                    away_stats.update({
+                        "total_goals": away_goals,
+                        "first_half_goals": away_first_half_goals,
+                        "second_half_goals": away_second_half_goals,
+                        "player_goals": away_player_goals
+                    })
+                    session_stats.away_team_stats = away_stats
+                    
+                    session_stats.save(update_fields=["home_team_stats", "away_team_stats"])
+                    logger.info(f"Updated goal statistics in TraceVisionSessionStats for session {session_id}")
+                
+                except Exception as e:
+                    logger.warning(f"Failed to update goal statistics: {str(e)}", exc_info=True)
+                
+                logger.info(
+                    f"Processed Excel data for session {session_id}: "
+                    f"{players_created} players created, {players_updated} players updated, "
+                    f"{tokens_generated} tokens generated, {highlights_created} highlights created, "
+                    f"{home_goals} home goals, {away_goals} away goals"
+                )
+        
+        except Exception as e:
+            error_msg = f"Error processing players: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return {"success": False, "error": error_msg}
+        
+        finally:
+            # Clean up temp file
+            try:
+                import os
+                if os.path.exists(excel_file_path):
+                    os.unlink(excel_file_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete temp file {excel_file_path}: {e}")
+        
+        return {
+            "success": True,
+            "session_id": session_id,
+            "players_created": players_created,
+            "players_updated": players_updated,
+            "tokens_generated": tokens_generated,
+            "highlights_created": highlights_created,
+            "goal_statistics": {
+                "home_goals": home_goals,
+                "away_goals": away_goals,
+                "home_first_half_goals": home_first_half_goals,
+                "home_second_half_goals": home_second_half_goals,
+                "away_first_half_goals": away_first_half_goals,
+                "away_second_half_goals": away_second_half_goals,
+                "player_goals": player_goals
+            },
+            "message": "Excel data processed successfully. Players can now create accounts using their tokens."
+        }
+    
+    except Exception as e:
+        error_msg = f"Unexpected error processing Excel data: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {"success": False, "error": error_msg}

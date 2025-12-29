@@ -13,6 +13,7 @@ from .views import (
     GenerateHighlightClipReelView,
     MapUserToPlayerView,
     DeleteErroredTraceSessionView,
+    GetPlayerByTokenView,
 )
 
 urlpatterns = [
@@ -75,5 +76,10 @@ urlpatterns = [
         "players/map-user/",
         MapUserToPlayerView.as_view(),
         name="map-user-to-player",
+    ),
+    path(
+        "players/by-token/",
+        GetPlayerByTokenView.as_view(),
+        name="get-player-by-token",
     ),
 ]

@@ -18,6 +18,8 @@ from tracevision.utils import (
     transform_side_by_perspective,
     check_duplicate_game,
     get_or_create_canonical_game,
+    get_localized_team_name,
+    get_localized_player_name,
 )
 from teams.models import Team
 from tracevision.models import TraceSession
@@ -38,14 +40,26 @@ class TraceClipReelSerializer(serializers.ModelSerializer):
 
 
 class TraceVisionProcessesSerializer(serializers.ModelSerializer):
-    home_team_name = serializers.CharField(source="home_team.name", read_only=True)
-    away_team_name = serializers.CharField(source="away_team.name", read_only=True)
+    home_team_name = serializers.SerializerMethodField()
+    away_team_name = serializers.SerializerMethodField()
     home_team_jersey_color = serializers.CharField(
         source="home_team.jersey_color", read_only=True
     )
     away_team_jersey_color = serializers.CharField(
         source="away_team.jersey_color", read_only=True
     )
+    
+    def get_home_team_name(self, obj):
+        user_language = 'en'
+        if self.context.get('request') and hasattr(self.context['request'], 'user'):
+            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+        return get_localized_team_name(obj.home_team, user_language) if obj.home_team else None
+    
+    def get_away_team_name(self, obj):
+        user_language = 'en'
+        if self.context.get('request') and hasattr(self.context['request'], 'user'):
+            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+        return get_localized_team_name(obj.away_team, user_language) if obj.away_team else None
 
     class Meta:
         model = TraceSession
@@ -58,8 +72,20 @@ class TraceSessionListSerializer(serializers.ModelSerializer):
     Serializer for TraceSession list view with essential information and filtering
     """
 
-    home_team_name = serializers.CharField(source="home_team.name", read_only=True)
-    away_team_name = serializers.CharField(source="away_team.name", read_only=True)
+    home_team_name = serializers.SerializerMethodField()
+    away_team_name = serializers.SerializerMethodField()
+    
+    def get_home_team_name(self, obj):
+        user_language = 'en'
+        if self.context.get('request') and hasattr(self.context['request'], 'user'):
+            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+        return get_localized_team_name(obj.home_team, user_language) if obj.home_team else None
+    
+    def get_away_team_name(self, obj):
+        user_language = 'en'
+        if self.context.get('request') and hasattr(self.context['request'], 'user'):
+            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+        return get_localized_team_name(obj.away_team, user_language) if obj.away_team else None
     home_team_jersey_color = serializers.CharField(
         source="home_team.jersey_color", read_only=True
     )
@@ -600,12 +626,186 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                 }
             )
 
+    def _validate_and_extract_excel_teams(self, excel_file, home_team_name, away_team_name):
+        """
+        Validate Excel file team names match request team names and extract match data.
+        This is called FIRST before any DB operations to prevent creating invalid data.
+        
+        Args:
+            excel_file: Excel file from request
+            home_team_name: Home team name from request
+            away_team_name: Away team name from request
+            
+        Returns:
+            dict: Match data with language_metadata if validation passes
+            
+        Raises:
+            ValidationError if Excel data doesn't match input team names
+        """
+        import tempfile
+        import os
+        from tracevision.utils import extract_multilingual_match_data
+        
+        # Create temporary file
+        suffix = os.path.splitext(excel_file.name)[1] or '.xlsx'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+            for chunk in excel_file.chunks():
+                tmp_file.write(chunk)
+            tmp_file_path = tmp_file.name
+
+        try:
+            # Extract multilingual data
+            logger.info(f"Validating Excel file before creating any database objects")
+            match_data = extract_multilingual_match_data(tmp_file_path)
+            
+            # Extract team names from Excel (both languages)
+            excel_teams = {
+                "home": {"en": None, "he": None},
+                "away": {"en": None, "he": None}
+            }
+            
+            # Get team names from English and Hebrew sections
+            for lang in ["en", "he"]:
+                if lang in match_data and "Match_summary" in match_data[lang]:
+                    summary = match_data[lang]["Match_summary"]
+                    excel_teams["home"][lang] = summary.get("match_home_team")
+                    excel_teams["away"][lang] = summary.get("match_away_team")
+            
+            # Normalize names for comparison
+            def normalize(name):
+                return name.strip().lower() if name else ""
+
+            input_home = normalize(home_team_name)
+            input_away = normalize(away_team_name)
+            
+            # Validate Home Team - must match at least one language
+            excel_home_names = [
+                normalize(excel_teams["home"]["en"]),
+                normalize(excel_teams["home"]["he"])
+            ]
+            if input_home not in excel_home_names:
+                raise ValidationError({
+                    "error": "Team name mismatch",
+                    "message": f"Home team name '{home_team_name}' does not match the Excel file data.",
+                    "details": f"Excel file contains: EN='{excel_teams['home']['en']}', HE='{excel_teams['home']['he']}'"
+                })
+
+            # Validate Away Team - must match at least one language
+            excel_away_names = [
+                normalize(excel_teams["away"]["en"]),
+                normalize(excel_teams["away"]["he"])
+            ]
+            if input_away not in excel_away_names:
+                raise ValidationError({
+                    "error": "Team name mismatch",
+                    "message": f"Away team name '{away_team_name}' does not match the Excel file data.",
+                    "details": f"Excel file contains: EN='{excel_teams['away']['en']}', HE='{excel_teams['away']['he']}'"
+                })
+            
+            # Validation passed - return match data
+            logger.info(f"Excel validation passed - team names match")
+            return match_data
+            
+        except ValidationError:
+            raise
+        except Exception as e:
+            logger.error(f"Error processing basic_game_stats: {e}", exc_info=True)
+            raise ValidationError({
+                "error": "File processing error",
+                "message": f"Failed to process the game stats file: {str(e)}"
+            })
+        finally:
+            # Clean up temp file
+            if os.path.exists(tmp_file_path):
+                try:
+                    os.unlink(tmp_file_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete temp file {tmp_file_path}: {e}")
+
+    def _validate_user_team_assignment(self, user, home_team_name, away_team_name):
+        """
+        Validate that user's team matches the home team (for players only).
+        
+        Args:
+            user: WajoUser instance
+            home_team_name: Home team name from request
+            away_team_name: Away team name from request
+            
+        Raises:
+            ValidationError if team assignment is invalid
+        """
+        if user.role == "Coach" or not user.team:
+            return  # Skip validation for coaches or users without teams
+            
+        user_team_name = user.team.name or ""
+        
+        # Check if user's team is set as away team (should be home)
+        if user_team_name.lower() == away_team_name.lower():
+            raise ValidationError({
+                "error": "Team assignment error",
+                "message": f"Your team '{user.team.name or user.team.id}' is set as the away team. You should be on the home team.",
+                "user_team": user.team.name or user.team.id,
+                "away_team": away_team_name,
+                "suggestion": "Swap home and away teams, or update your team selection in your profile.",
+            })
+        
+        # Check if user's team matches home team
+        if user_team_name.lower() != home_team_name.lower():
+            raise ValidationError({
+                "error": "Team mismatch",
+                "message": f"Your team '{user.team.name or user.team.id}' does not match the home team '{home_team_name}'.",
+                "user_team": user.team.name or user.team.id,
+                "home_team": home_team_name,
+            })
+
+    def _get_or_create_team(self, team_name, jersey_color, team_type="team"):
+        """
+        Get or create a team by name, validating jersey color.
+        
+        Args:
+            team_name: Name of the team
+            jersey_color: Jersey color to validate/set
+            team_type: "home" or "away" for error messages
+            
+        Returns:
+            Team instance
+            
+        Raises:
+            ValidationError if jersey color doesn't match existing team
+        """
+        # Find existing team by name (case-insensitive)
+        team_obj = Team.objects.filter(name__iexact=team_name).first()
+
+        if team_obj:
+            # Team exists - validate jersey color matches
+            if team_obj.jersey_color and team_obj.jersey_color != jersey_color:
+                raise ValidationError({
+                    "error": "Jersey color mismatch",
+                    "message": f"The {team_type} team '{team_name}' already exists with jersey color '{team_obj.jersey_color}', but you provided '{jersey_color}'.",
+                    "team_name": team_name,
+                    "team_type": team_type,
+                    "existing_color": team_obj.jersey_color,
+                    "provided_color": jersey_color,
+                })
+        else:
+            # Create new team with UUID-based ID
+            team_id = uuid.uuid4().hex[:10]
+            while Team.objects.filter(id=team_id).exists():
+                team_id = uuid.uuid4().hex[:10]
+            
+            team_obj = Team.objects.create(
+                id=team_id,
+                name=team_name,
+                jersey_color=jersey_color,
+            )
+
+        return team_obj
+
     def create(self, validated_data):
         """
         Create TraceSession with all related objects (Teams, Game, GameUserRole).
         Handles video import/upload, duplicate checking, and TraceVision session creation.
         """
-
         # Extract validated data
         video_link = validated_data.get("video_link")
         video_file = validated_data.get("video_file")
@@ -614,8 +814,8 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         home_color = validated_data["home_team_jersey_color"]
         away_color = validated_data["away_team_jersey_color"]
         final_score_str = validated_data["final_score"]
-        game_date = validated_data["game_date"]  # Required field
-        game_time = validated_data.get("game_time")  # Optional field
+        game_date = validated_data["game_date"]
+        game_time = validated_data.get("game_time")
         start_time = validated_data.get("start_time")
         age_group = validated_data.get("age_group") or "SENIOR"
         pitch_length = validated_data.get("pitch_length")
@@ -626,6 +826,14 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         match_end_time = validated_data.get("match_end_time")
         basic_game_stats = validated_data.get("basic_game_stats")
         user = self.context["request"].user
+
+        # STEP 1: Validate Excel data FIRST (before any DB operations or API calls)
+        # This ensures we don't create teams, games, or TraceVision sessions if Excel is invalid
+        language_metadata_content = {}
+        if basic_game_stats:
+            language_metadata_content = self._validate_and_extract_excel_teams(
+                basic_game_stats, home_team_name, away_team_name
+            )
 
         # Set pitch size (custom or default based on age group)
         if pitch_length and pitch_width:
@@ -638,190 +846,65 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         # Parse the final score
         home_score, away_score = map(int, final_score_str.split("-"))
 
-        # Helper functions to reduce code duplication
-        def generate_short_team_id():
-            """Generate a short unique team ID (max 10 chars) using UUID."""
-            return uuid.uuid4().hex[:10]
+        # Validate user team assignment (for players only)
+        self._validate_user_team_assignment(user, home_team_name, away_team_name)
 
-        def teams_match_by_name(team_name1, team_name2):
-            """
-            Check if two team names match (case-insensitive).
-            Works with any language team names.
+        # Create or get teams
+        home_team_obj = self._get_or_create_team(home_team_name, home_color, "home")
+        away_team_obj = self._get_or_create_team(away_team_name, away_color, "away")
 
-            Args:
-                team_name1: First team name (string)
-                team_name2: Second team name (string)
+        # Set user's team if not set (for players only)
+        if user.role != "Coach" and not user.team:
+            user.team = home_team_obj
+            user.save(update_fields=["team"])
+            logger.info(f"Set home_team '{home_team_obj.name}' as team for user {user.phone_no}")
 
-            Returns:
-                bool: True if team names match, False otherwise
-            """
-            if not team_name1 or not team_name2:
-                return False
-            return team_name1.lower() == team_name2.lower()
-
-        def teams_match(team1, team2):
-            """
-            Check if two teams match by name (case-insensitive) or ID.
-            Works with any language team names.
-
-            Args:
-                team1: First Team instance
-                team2: Second Team instance
-
-            Returns:
-                bool: True if teams match, False otherwise
-            """
-            if not team1 or not team2:
-                return False
-
-            # Primary check: by name (case-insensitive, works with Hebrew/any language)
-            if team1.name and team2.name:
-                if team1.name.lower() == team2.name.lower():
-                    return True
-
-            # Fallback: by ID
-            return team1.id == team2.id
-
-        # Validation 1: Check if away_team matches user's team (user should be on home team)
-        # Only validate for players (not coaches)
-        if user.role != "Coach" and user.team:
-            # Check by name first (works with any language, before team creation)
-            if teams_match_by_name(away_team_name, user.team.name or ""):
-                raise ValidationError(
-                    {
-                        "error": "Team assignment error",
-                        "message": f"Your team '{user.team.name or user.team.id}' is set as the away team. You should be on the home team. Please fix the team name or team selection in the upload form.",
-                        "user_team": user.team.name or user.team.id,
-                        "away_team": away_team_name,
-                        "suggestion": "Swap home and away teams, or update your team selection in your profile.",
-                    }
-                )
-
-            # Validation 2: Check if home_team matches user's team (before creating teams)
-            user_team_obj = user.team
-            if not teams_match_by_name(home_team_name, user_team_obj.name or ""):
-                raise ValidationError(
-                    {
-                        "error": "Team mismatch",
-                        "message": f"Your team '{user_team_obj.name or user_team_obj.id}' does not match the home team '{home_team_name}'. Please ensure you are uploading a game for your team.",
-                        "user_team": user_team_obj.name or user_team_obj.id,
-                        "home_team": home_team_name,
-                    }
-                )
-
-        def get_or_create_team_with_validation(
-            team_name, jersey_color, team_type="team"
-        ):
-            """
-            Get or create a team by name, validating jersey color.
-
-            Args:
-                team_name: Name of the team
-                jersey_color: Jersey color to validate/set
-                team_type: "home" or "away" for error messages
-
-            Returns:
-                Team instance
-
-            Raises:
-                ValidationError if jersey color doesn't match existing team
-            """
-            # Find existing team by name (case-insensitive, works with any language)
-            team_obj = Team.objects.filter(name__iexact=team_name).first()
-
-            if team_obj:
-                # Team exists - validate jersey color matches (do not allow update)
-                if team_obj.jersey_color and team_obj.jersey_color != jersey_color:
-                    raise ValidationError(
-                        {
-                            "error": "Jersey color mismatch",
-                            "message": f"The {team_type} team '{team_name}' already exists with jersey color '{team_obj.jersey_color}', but you provided '{jersey_color}'. Please use the correct jersey color or contact support.",
-                            "team_name": team_name,
-                            "team_type": team_type,
-                            "existing_color": team_obj.jersey_color,
-                            "provided_color": jersey_color,
-                        }
-                    )
-            else:
-                # Team doesn't exist - create new one with UUID-based ID
-                team_id = generate_short_team_id()
-
-                # Ensure ID is unique (handle collisions)
-                while Team.objects.filter(id=team_id).exists():
-                    team_id = generate_short_team_id()
-
-                team_obj = Team.objects.create(
-                    id=team_id,
-                    name=team_name,
-                    jersey_color=jersey_color,
-                )
-
-            return team_obj
-
-        # Create teams only after all validations pass
-        home_team_obj = get_or_create_team_with_validation(
-            home_team_name, home_color, team_type="home"
-        )
-        away_team_obj = get_or_create_team_with_validation(
-            away_team_name, away_color, team_type="away"
-        )
-
-        # Task 3: Handle user team assignment (after teams are created)
-        # If user has no team, set home_team as their team
-        if user.role != "Coach":  # Only for players, not coaches
-            if not user.team:
-                # Set home_team as user's team
-                user.team = home_team_obj
-                user.save(update_fields=["team"])
-                logger.info(
-                    f"Set home_team '{home_team_obj.name}' as team for user {user.phone_no}"
-                )
 
         match_date = game_date
         duplicate_session = check_duplicate_game(
             home_team=home_team_obj, away_team=away_team_obj, match_date=match_date
         )
 
-        # if duplicate_session:
-        #     existing_game = duplicate_session.game
-        #     raise ValidationError(
-        #         {
-        #             "error": "Game already exists",
-        #             "message": "A game with these teams and date already exists. You can link to the existing game.",
-        #             "existing_data": {
-        #                 "session": {
-        #                     "id": duplicate_session.id,
-        #                     "session_id": duplicate_session.session_id,
-        #                     "match_date": duplicate_session.match_date.isoformat(),
-        #                     "home_team": (
-        #                         duplicate_session.home_team.name
-        #                         if duplicate_session.home_team
-        #                         else None
-        #                     ),
-        #                     "away_team": (
-        #                         duplicate_session.away_team.name
-        #                         if duplicate_session.away_team
-        #                         else None
-        #                     ),
-        #                     "status": duplicate_session.status,
-        #                 },
-        #                 "game": (
-        #                     {
-        #                         "id": existing_game.id if existing_game else None,
-        #                         "type": existing_game.type if existing_game else None,
-        #                         "name": existing_game.name if existing_game else None,
-        #                         "date": (
-        #                             existing_game.date.isoformat()
-        #                             if existing_game and existing_game.date
-        #                             else None
-        #                         ),
-        #                     }
-        #                     if existing_game
-        #                     else None
-        #                 ),
-        #             },
-        #         }
-        #     )
+        if duplicate_session:
+            existing_game = duplicate_session.game
+            raise ValidationError(
+                {
+                    "error": "Game already exists",
+                    "message": "A game with these teams and date already exists. You can link to the existing game.",
+                    "existing_data": {
+                        "session": {
+                            "id": duplicate_session.id,
+                            "session_id": duplicate_session.session_id,
+                            "match_date": duplicate_session.match_date.isoformat(),
+                            "home_team": (
+                                duplicate_session.home_team.name
+                                if duplicate_session.home_team
+                                else None
+                            ),
+                            "away_team": (
+                                duplicate_session.away_team.name
+                                if duplicate_session.away_team
+                                else None
+                            ),
+                            "status": duplicate_session.status,
+                        },
+                        "game": (
+                            {
+                                "id": existing_game.id if existing_game else None,
+                                "type": existing_game.type if existing_game else None,
+                                "name": existing_game.name if existing_game else None,
+                                "date": (
+                                    existing_game.date.isoformat()
+                                    if existing_game and existing_game.date
+                                    else None
+                                ),
+                            }
+                            if existing_game
+                            else None
+                        ),
+                    },
+                }
+            )
 
         # # Create TraceVision session
         customer_id = int(settings.TRACEVISION_CUSTOMER_ID)
@@ -880,7 +963,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         session_id = "1234567890"
 
         # Check for duplicate by video_url BEFORE processing video
-        video_url_for_db = None
+        video_url_for_db = "http://sfsfsfsf/sfs"
         # if video_link:
         #     video_url_for_db = video_link
         #     duplicate_session = check_duplicate_game(video_url=video_url_for_db)
@@ -944,36 +1027,6 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         #         }
         #     )
         # TODO: Implement video upload functionality later
-        # else:
-        #     # Get upload URL first, then check duplicate
-        #     upload_url = TraceVisionService.upload_game_video(
-        #         session_id=session_id,
-        #         video_file=video_file
-        #     )
-        #     video_url_for_db = upload_url
-
-        #     # Check for duplicate by upload URL
-        #     duplicate_session = check_duplicate_game(video_url=video_url_for_db)
-        #     if duplicate_session:
-        #         existing_game = duplicate_session.game
-        #         raise ValidationError({
-        #             "error": "Video already processed",
-        #             "message": "This video has already been uploaded and processed.",
-        #             "existing_session": {
-        #                 "id": duplicate_session.id,
-        #                 "session_id": duplicate_session.session_id,
-        #                 "match_date": duplicate_session.match_date.isoformat(),
-        #                 "home_team": duplicate_session.home_team.name if duplicate_session.home_team else None,
-        #                 "away_team": duplicate_session.away_team.name if duplicate_session.away_team else None,
-        #                 "status": duplicate_session.status
-        #             },
-        #             "existing_game": {
-        #                 "id": existing_game.id if existing_game else None,
-        #                 "type": existing_game.type if existing_game else None,
-        #                 "name": existing_game.name if existing_game else None,
-        #                 "date": existing_game.date.isoformat() if existing_game and existing_game.date else None
-        #             } if existing_game else None
-        #         })
 
         # Get or create canonical game
         canonical_game = get_or_create_canonical_game(
@@ -1021,124 +1074,7 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                 }
             )
 
-        # Create TraceSession
-        session = TraceSession.objects.create(
-            user=user,
-            session_id=session_id,
-            match_date=match_date,
-            home_team=home_team_obj,
-            away_team=away_team_obj,
-            home_score=home_score,
-            away_score=away_score,
-            age_group=age_group,
-            pitch_size=pitch_size,
-            final_score=final_score_str,
-            start_time=start_time,
-            video_url=video_url_for_db,
-            status="waiting_for_data",
-            match_start_time=match_start_time,
-            first_half_end_time=first_half_end_time,
-            second_half_start_time=second_half_start_time,
-            match_end_time=match_end_time,
-            basic_game_stats=basic_game_stats,
-            game=canonical_game,
-        )
-
-        # Create GameUserRole linking uploader to game
-        GameUserRole.objects.get_or_create(game=canonical_game, user=user)
-
-        # Process basic_game_stats if provided
-        language_metadata_content = {}
-        if basic_game_stats:
-            import tempfile
-            import os
-            from tracevision.utils import extract_multilingual_match_data
-
-            # Create a temporary file to save the uploaded Excel content
-            # We need to preserve the extension for pandas to read it correctly
-            suffix = os.path.splitext(basic_game_stats.name)[1]
-            if not suffix:
-                suffix = '.xlsx'
-                
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-                for chunk in basic_game_stats.chunks():
-                    tmp_file.write(chunk)
-                tmp_file_path = tmp_file.name
-
-            try:
-                # Extract data
-                logger.info(f"Extracting multilingual data from {tmp_file_path}")
-                match_data = extract_multilingual_match_data(tmp_file_path)
-                
-                # Extract team names from Excel (both languages)
-                excel_teams = {
-                    "home": {"en": None, "he": None},
-                    "away": {"en": None, "he": None}
-                }
-                
-                # Get English names
-                if "en" in match_data and "Match_summary" in match_data["en"]:
-                    excel_teams["home"]["en"] = match_data["en"]["Match_summary"].get("match_home_team")
-                    excel_teams["away"]["en"] = match_data["en"]["Match_summary"].get("match_away_team")
-                
-                # Get Hebrew names
-                if "he" in match_data and "Match_summary" in match_data["he"]:
-                    excel_teams["home"]["he"] = match_data["he"]["Match_summary"].get("match_home_team")
-                    excel_teams["away"]["he"] = match_data["he"]["Match_summary"].get("match_away_team")
-                
-                # Normalize names for comparison (strip and lower)
-                def normalize(name):
-                    return name.strip().lower() if name else ""
-
-                input_home = normalize(home_team_name)
-                input_away = normalize(away_team_name)
-                
-                excel_home_en = normalize(excel_teams["home"]["en"])
-                excel_home_he = normalize(excel_teams["home"]["he"])
-                excel_away_en = normalize(excel_teams["away"]["en"])
-                excel_away_he = normalize(excel_teams["away"]["he"])
-                
-                # Validate Home Team
-                # Match against either English or Hebrew name
-                home_match = False
-                if input_home == excel_home_en or input_home == excel_home_he:
-                    home_match = True
-                
-                if not home_match:
-                    raise ValidationError({
-                        "error": "Team name mismatch",
-                        "message": f"Home team name '{home_team_name}' does not match the file data.",
-                        "details": f"File contains: EN='{excel_teams['home']['en']}', HE='{excel_teams['home']['he']}'"
-                    })
-
-                # Validate Away Team
-                away_match = False
-                if input_away == excel_away_en or input_away == excel_away_he:
-                    away_match = True
-                
-                if not away_match:
-                    raise ValidationError({
-                        "error": "Team name mismatch",
-                        "message": f"Away team name '{away_team_name}' does not match the file data.",
-                        "details": f"File contains: EN='{excel_teams['away']['en']}', HE='{excel_teams['away']['he']}'"
-                    })
-                
-                # If validation passes, keep the data
-                language_metadata_content = match_data
-                
-            except ValidationError:
-                raise
-            except Exception as e:
-                logger.error(f"Error processing basic_game_stats: {e}")
-                raise ValidationError({
-                    "error": "File processing error",
-                    "message": f"Failed to process the game stats file: {str(e)}"
-                })
-            finally:
-                # Clean up temp file
-                if os.path.exists(tmp_file_path):
-                    os.unlink(tmp_file_path)
-
+        # Create TraceSession (single creation point)
         session = TraceSession.objects.create(
             user=user,
             session_id=session_id,
@@ -1162,6 +1098,15 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             language_metadata=language_metadata_content,
         )
 
+        # Create GameUserRole linking uploader to game
+        GameUserRole.objects.get_or_create(game=canonical_game, user=user)
+
+        # Trigger Excel processing task if Excel file is provided (runs before video download)
+        if basic_game_stats:
+            from tracevision.tasks import process_excel_and_create_players_task
+            process_excel_and_create_players_task.delay(session.id)
+            logger.info(f"Queued Excel processing task for session {session.id}")
+
         # Trigger video download task
         from tracevision.tasks import download_video_and_save_to_azure_blob
         download_video_and_save_to_azure_blob.delay(session.id)
@@ -1179,10 +1124,16 @@ class HighlightDatePlayerSerializer(serializers.ModelSerializer):
     """Serializer for player info in highlight dates response"""
 
     player_id = serializers.IntegerField(source="id", read_only=True)
-    player_name = serializers.CharField(source="name", read_only=True)
+    player_name = serializers.SerializerMethodField()
     player_jersey_number = serializers.IntegerField(
         source="jersey_number", read_only=True
     )
+    
+    def get_player_name(self, obj):
+        user_language = 'en'
+        if self.context.get('request') and hasattr(self.context['request'], 'user'):
+            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+        return get_localized_player_name(obj, user_language)
     player_position = serializers.CharField(source="position", read_only=True)
     side = serializers.SerializerMethodField()
     team = serializers.SerializerMethodField()
@@ -1200,7 +1151,16 @@ class HighlightDatePlayerSerializer(serializers.ModelSerializer):
 
     def get_side(self, obj):
         """Determine if player is on home or away team, transformed by viewer perspective"""
-        session = obj.session
+        # Get first session (or use context session if available)
+        session = None
+        if hasattr(self.context, 'session'):
+            session = self.context.get('session')
+        elif obj.sessions.exists():
+            session = obj.sessions.first()
+        
+        if not session:
+            return None
+            
         side = None
         if session.home_team and obj.team and session.home_team.id == obj.team.id:
             side = "home"
@@ -1223,9 +1183,14 @@ class HighlightDatePlayerSerializer(serializers.ModelSerializer):
         if not obj.team:
             return {"team_id": None, "team_name": None, "side": self.get_side(obj)}
 
+        # Get user language preference
+        user_language = 'en'
+        if self.context.get('request') and hasattr(self.context['request'], 'user'):
+            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+
         return {
             "team_id": obj.team.id,
-            "team_name": obj.team.name,
+            "team_name": get_localized_team_name(obj.team, user_language),
             "side": self.get_side(obj),
         }
 
@@ -1240,7 +1205,10 @@ class HighlightDateTeamSerializer(serializers.Serializer):
         """Handle None team instances"""
         if instance is None:
             return {"id": None, "name": None}
-        return {"id": instance.id, "name": instance.name}
+        user_language = 'en'
+        if self.context.get('request') and hasattr(self.context['request'], 'user'):
+            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+        return {"id": instance.id, "name": get_localized_team_name(instance, user_language)}
 
 
 class HighlightDateSessionSerializer(serializers.ModelSerializer):
@@ -1300,7 +1268,8 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
 
         # Serialize all players (filtered by team, not by session)
         for player in players:
-            serializer = HighlightDatePlayerSerializer(player)
+            # Pass context to serializer so it can access request and user language preference
+            serializer = HighlightDatePlayerSerializer(player, context=self.context)
             players_list.append(serializer.data)
 
         return players_list
@@ -1311,7 +1280,13 @@ class PlayerDetailSerializer(serializers.ModelSerializer):
 
     id = serializers.CharField(read_only=True)
     team_id = serializers.CharField(source="team.id", read_only=True)
-    team_name = serializers.CharField(source="team.name", read_only=True)
+    team_name = serializers.SerializerMethodField()
+    
+    def get_team_name(self, obj):
+        user_language = 'en'
+        if self.context.get('request') and hasattr(self.context['request'], 'user'):
+            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+        return get_localized_team_name(obj.team, user_language) if obj.team else None
     created_at = serializers.DateTimeField(
         format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True
     )
@@ -1363,38 +1338,44 @@ class MatchInfoSerializer(serializers.ModelSerializer):
     def get_home_team(self, obj):
         """Get home team, transformed to 'team' or 'opponent' based on viewer"""
         if obj.home_team:
-            team_data = {"id": str(obj.home_team.id), "name": obj.home_team.name}
-
-            # Transform label based on viewer perspective
+            # Get user language preference
+            user_language = 'en'
             request = self.context.get("request")
             if request and request.user:
+                user_language = getattr(request.user, 'selected_language', 'en') or 'en'
                 viewer_team = get_viewer_team(request.user)
                 if viewer_team:
                     viewer_perspective = determine_viewer_perspective(viewer_team, obj)
+                    team_data = {"id": str(obj.home_team.id), "name": get_localized_team_name(obj.home_team, user_language)}
                     if viewer_perspective == "home":
                         team_data["label"] = "team"
                     elif viewer_perspective == "away":
                         team_data["label"] = "opponent"
-
+                    return team_data
+            
+            team_data = {"id": str(obj.home_team.id), "name": get_localized_team_name(obj.home_team, user_language)}
             return team_data
         return None
 
     def get_away_team(self, obj):
         """Get away team, transformed to 'team' or 'opponent' based on viewer"""
         if obj.away_team:
-            team_data = {"id": str(obj.away_team.id), "name": obj.away_team.name}
-
-            # Transform label based on viewer perspective
+            # Get user language preference
+            user_language = 'en'
             request = self.context.get("request")
             if request and request.user:
+                user_language = getattr(request.user, 'selected_language', 'en') or 'en'
                 viewer_team = get_viewer_team(request.user)
                 if viewer_team:
                     viewer_perspective = determine_viewer_perspective(viewer_team, obj)
+                    team_data = {"id": str(obj.away_team.id), "name": get_localized_team_name(obj.away_team, user_language)}
                     if viewer_perspective == "away":
                         team_data["label"] = "team"
                     elif viewer_perspective == "home":
                         team_data["label"] = "opponent"
-
+                    return team_data
+            
+            team_data = {"id": str(obj.away_team.id), "name": get_localized_team_name(obj.away_team, user_language)}
             return team_data
         return None
 
@@ -1645,7 +1626,11 @@ class PossessionTeamMetricsSerializer(serializers.Serializer):
         """Get team details with transformed side"""
         team_data = None
         if obj.get("team"):
-            team_data = {"id": str(obj["team"].id), "name": obj["team"].name}
+            # Get user language preference
+            user_language = 'en'
+            if self.context.get('request') and hasattr(self.context['request'], 'user'):
+                user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+            team_data = {"id": str(obj["team"].id), "name": get_localized_team_name(obj["team"], user_language)}
 
         # Add transformed side to team data
         side = obj.get("side")
@@ -1704,9 +1689,14 @@ class PossessionPlayerMetricsSerializer(serializers.Serializer):
                 if viewer_perspective:
                     side = transform_side_by_perspective(side, viewer_perspective)
 
+        # Get user language preference
+        user_language = 'en'
+        if request and request.user:
+            user_language = getattr(request.user, 'selected_language', 'en') or 'en'
+        
         return {
             "id": str(player.id),
-            "name": player.name,
+            "name": get_localized_player_name(player, user_language),
             "jersey_number": player.jersey_number,
             "position": player.position,
             "object_id": player.object_id,

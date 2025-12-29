@@ -107,26 +107,32 @@ class TracePlayerAdmin(admin.ModelAdmin):
         "jersey_number",
         "team_name",
         "position",
-        "session",
+        "sessions_count",
         "is_mapped",
         "created_at",
     ]
     search_fields = ["name", "object_id", "team__name", "position", "user__email"]
-    list_filter = ["team", "position", "session__match_date", "created_at"]
-    readonly_fields = ["id", "created_at", "updated_at", "is_mapped", "team_name"]
+    list_filter = ["team", "position", "created_at"]
+    readonly_fields = ["id", "created_at", "updated_at", "is_mapped", "team_name", "sessions_count"]
     date_hierarchy = "created_at"
+    filter_horizontal = ["sessions"]
 
     fieldsets = (
         (
             "Player Information",
             {"fields": ("id", "object_id", "name", "jersey_number", "position", "language_metadata")},
         ),
-        ("Relationships", {"fields": ("session", "team", "user", "is_mapped")}),
+        ("Relationships", {"fields": ("sessions", "team", "user", "is_mapped", "sessions_count")}),
         (
             "Timestamps",
             {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
         ),
     )
+    
+    def sessions_count(self, obj):
+        """Display the number of sessions this player participates in"""
+        return obj.sessions.count()
+    sessions_count.short_description = "Sessions"
 
 
 class TraceHighlightAdmin(admin.ModelAdmin):
