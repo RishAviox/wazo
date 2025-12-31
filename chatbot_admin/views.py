@@ -12,7 +12,7 @@ import jwt
 from .permissions import IsAdminUser
 
 from accounts.models import WajoUser
-from accounts.utils import find_user_by_normalized_phone
+from accounts.utils import find_user_by_phone
 from questionnaire.models import DailyWellnessUserResponse, RPEUserResponse
 
 
@@ -76,7 +76,7 @@ class DailyWellnessUserResponseCreateView(APIView):
         if not phone_no:
             return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = find_user_by_normalized_phone(phone_no)
+        user = find_user_by_phone(phone_no)
         if not user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -105,7 +105,7 @@ class DailyWellnessUserResponseCreateView(APIView):
             serializer = DailyWellnessUserResponseSerializer(user_response)
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
-            data['user'] = phone_no
+            data['user'] = user.id
             serializer = DailyWellnessUserResponseSerializer(data=data)
             if serializer.is_valid():
                 serializer.save()
@@ -124,7 +124,7 @@ class RPEUserResponseCreateView(APIView):
         if not phone_no:
             return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = find_user_by_normalized_phone(phone_no)
+        user = find_user_by_phone(phone_no)
         if not user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -153,7 +153,7 @@ class RPEUserResponseCreateView(APIView):
             serializer = RPEUserResponseSerializer(user_response)
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
-            data['user'] = phone_no
+            data['user'] = user.id
             serializer = RPEUserResponseSerializer(data=data)
             if serializer.is_valid():
                 serializer.save()
@@ -172,11 +172,11 @@ class RecurringEventsCreateView(APIView):
         if not phone_no:
             return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = find_user_by_normalized_phone(phone_no)
+        user = find_user_by_phone(phone_no)
         if not user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        data['user'] = phone_no
+        data['user'] = user.id
         print("recurring event data: ", data)
         serializer = RecurringEventsSerializer(data=data)
         if serializer.is_valid():
@@ -200,11 +200,11 @@ class OneTimeEventsCreateView(APIView):
         if not phone_no:
             return Response({'error': 'User phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = find_user_by_normalized_phone(phone_no)
+        user = find_user_by_phone(phone_no)
         if not user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        data['user'] = phone_no
+        data['user'] = user.id
         print("one time event data: ", data)
         
         serializer = OneTimeEventsSerializer(data=data)

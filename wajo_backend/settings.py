@@ -215,7 +215,7 @@ AZURE_ACCOUNT_KEY = os.environ.get('wajo-azure-storage-account-key')
 # Extract account name from connection string if available, otherwise use env var
 AZURE_CONNECTION_STRING = os.environ.get('wajo-azure-storage-connection-string')
 
-logger.info(f"{'\n'*10}AZURE_CONNECTION_STRING: {AZURE_CONNECTION_STRING}{'\n'*10}")
+logger.info("\n" * 10 + f"AZURE_CONNECTION_STRING: {AZURE_CONNECTION_STRING}" + "\n" * 10)
 if AZURE_CONNECTION_STRING:
     # Parse connection string to extract account name
     import re

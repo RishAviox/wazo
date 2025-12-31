@@ -11,7 +11,8 @@ class OnboardingStep(WajoModel):
     updated_on = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user.phone_no} is at step {self.step}"
+        identifier = self.user.name or self.user.email or self.user.phone_no or f"User-{self.user.id}"
+        return f"{identifier} is at step {self.step}"
     
     class Meta:
         verbose_name = "Onboarding Flow"

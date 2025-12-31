@@ -2,7 +2,7 @@ from django.db.models import Q
 
 from teams.models import Team
 from accounts.models import WajoUser
-from accounts.utils import find_user_by_normalized_phone
+from accounts.utils import find_user_by_phone
 from games.models import Game
 
 from .models import *
@@ -148,7 +148,7 @@ def get_historical_context(match: BeproMatchData, team: Team):
 
 
 def get_player(user_id: str):
-    user = find_user_by_normalized_phone(user_id)
+    user = find_user_by_phone(user_id)
     if not user:
         raise WajoUser.DoesNotExist(f"User with phone number {user_id} not found")
     return user

@@ -23,13 +23,19 @@ class Game(WajoModel):
     teams = models.ManyToManyField(
         Team, related_name="games", blank=True
     )  # Teams that played in the game
+    referees = models.ManyToManyField(
+        WajoUser,
+        related_name="games_refereed",
+        blank=True,
+        limit_choices_to={"role": "Referee"},
+    )
 
     # Multilingual match data (English and Hebrew)
     language_metadata = models.JSONField(
         default=dict,
         blank=True,
         null=True,
-        help_text="Multilingual match data with 'en' and 'he' sections containing match summary, lineups, replacements, bench, coaches, and referees"
+        help_text="Multilingual match data with 'en' and 'he' sections containing match summary, lineups, replacements, bench, coaches, and referees",
     )
 
     created_on = models.DateTimeField(auto_now_add=True)

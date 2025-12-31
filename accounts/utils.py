@@ -13,78 +13,88 @@ from .models import OTPStore, WajoUser
 from teams.models import Team
 from games.models import Game
 from cards.utils import calculate_gps_athletic_skills, calculate_gps_football_abilities
-from cards.utils import calculate_attacking_skills, calculate_videocard_defensive, calculate_videocard_distributions
-from cards.models import GPSAthleticSkills, GPSFootballAbilities, AttackingSkills, VideoCardDefensive, VideoCardDistributions
+from cards.utils import (
+    calculate_attacking_skills,
+    calculate_videocard_defensive,
+    calculate_videocard_distributions,
+)
+from cards.models import (
+    GPSAthleticSkills,
+    GPSFootballAbilities,
+    AttackingSkills,
+    VideoCardDefensive,
+    VideoCardDistributions,
+)
 
 
-def normalize_phone_number(phone_no):
+import phonenumbers
+from phonenumbers import geocoder
+
+
+def get_country_from_phone(phone_no):
     """
-    Normalize phone number by extracting only digits and taking the last 10 digits.
-    This ensures that phone numbers with or without country codes are treated as the same.
-    
-    Examples:
-    - "1234567890" -> "1234567890"
-    - "+11234567890" -> "1234567890"
-    - "+911234567890" -> "1234567890"
-    - "12345678901" -> "1234567890" (if 11 digits, takes last 10)
+    Extract country name and country code from an international phone number.
+    Returns (country_name, country_code) or (None, None) if parsing fails.
+    """
+    if not phone_no:
+        return None, None
+    try:
+        parsed_number = phonenumbers.parse(phone_no, None)
+        if not phonenumbers.is_valid_number(parsed_number):
+            return None, None
+
+        country_code = f"+{parsed_number.country_code}"
+        country_name = geocoder.description_for_number(parsed_number, "en")
+
+        return country_name, country_code
+    except Exception:
+        return None, None
+
+
+def find_user_by_phone(phone_no):
+    """
+    Find a user by phone number (exact match).
+    Returns the user if found, None otherwise.
     """
     if not phone_no:
         return None
-    # Remove all non-digit characters
-    digits_only = ''.join(filter(str.isdigit, str(phone_no)))
-    # Take the last 10 digits (standard phone number length)
-    if len(digits_only) >= 10:
-        return digits_only[-10:]
-    return digits_only
+    try:
+        return WajoUser.objects.get(phone_no=phone_no)
+    except WajoUser.DoesNotExist:
+        return None
 
 
-def find_user_by_normalized_phone(phone_no):
+def find_user_by_email(email):
     """
-    Find a user by normalizing the phone number and comparing with existing users.
-    This handles cases where:
-    - User exists with normalized phone (e.g., "1234567890")
-    - User exists with country code (e.g., "+11234567890")
-    - User exists with different country code (e.g., "+911234567890")
-    
+    Find a user by email (exact match).
     Returns the user if found, None otherwise.
     """
-    normalized = normalize_phone_number(phone_no)
-    if not normalized:
+    if not email:
         return None
-    
-    # First, try exact match with normalized phone (fastest - handles already normalized numbers)
     try:
-        return WajoUser.objects.get(phone_no=normalized)
+        return WajoUser.objects.get(email=email)
     except WajoUser.DoesNotExist:
-        pass
-    
-    # If not found, check all users by normalizing their phone numbers
-    # This handles cases where existing users have different formats
-    for user in WajoUser.objects.all():
-        user_normalized = normalize_phone_number(user.phone_no)
-        if user_normalized == normalized:
-            return user
-    
-    return None
+        return None
 
 
 def generate_access_token(user):
     payload = {
-        'id': user.phone_no,
-        'exp': timezone.now() + settings.JWT_ACCESS_TOKEN_EXPIRATION,  # Short-lived
-        'iat': timezone.now(),
-        'token_type': 'access',
+        "id": str(user.id),
+        "exp": timezone.now() + settings.JWT_ACCESS_TOKEN_EXPIRATION,  # Short-lived
+        "iat": timezone.now(),
+        "token_type": "access",
     }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
 
 def generate_refresh_token(user):
     payload = {
-        'id': user.phone_no,
-        'exp': timezone.now() + settings.JWT_REFRESH_TOKEN_EXPIRATION,  # Long-lived
-        'iat': timezone.now(),
-        'token_type': 'refresh',
+        "id": str(user.id),
+        "exp": timezone.now() + settings.JWT_REFRESH_TOKEN_EXPIRATION,  # Long-lived
+        "iat": timezone.now(),
+        "token_type": "refresh",
     }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
 
 # generate, store and send otp
@@ -92,44 +102,41 @@ def generate_and_send_otp(phone_no):
     # For guest account
     if phone_no == "+14085551234":
         return "123456"
-    # Normalize phone number for consistent storage and lookup
-    normalized_phone = normalize_phone_number(phone_no)
-    if not normalized_phone:
-        raise ValueError("Invalid phone number format")
-    otp_number = secrets.randbelow(900000) + 100000 # 6 digit 
-    otp = OTPStore(data=str(otp_number), phone_no=normalized_phone)
+
+    if not phone_no:
+        raise ValueError("Phone number is required")
+
+    otp_number = secrets.randbelow(900000) + 100000  # 6 digit
+    otp = OTPStore(data=str(otp_number), phone_no=phone_no)
     otp.save()
 
     # send OTP via API call
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    data = {
-        "number": phone_no,
-        "OTP": str(otp_number)
-    }
+    headers = {"Content-Type": "application/json"}
+    data = {"number": phone_no, "OTP": str(otp_number)}
     print(data)
     if not settings.DEBUG:
-        response = requests.post(settings.WAJO_OTP_SERVICE_URL, headers=headers, json=data)
+        response = requests.post(
+            settings.WAJO_OTP_SERVICE_URL, headers=headers, json=data
+        )
         print(response.text)
     return otp
 
 
 def validate_otp(phone_no, input_otp):
     """
-        Prevent race conditions with atomic and select_for_update() for row level locking
-        Reference: https://docs.djangoproject.com/en/5.0/topics/db/transactions/
+    Prevent race conditions with atomic and select_for_update() for row level locking
+    Reference: https://docs.djangoproject.com/en/5.0/topics/db/transactions/
     """
     # For guest account
     if phone_no == "+14085551234" and input_otp == "123456":
         return True
-    # Normalize phone number for consistent lookup
-    normalized_phone = normalize_phone_number(phone_no)
-    if not normalized_phone:
-        return False
-    with transaction.atomic(): 
+    with transaction.atomic():
         try:
-            otp = OTPStore.objects.select_for_update().filter(phone_no=normalized_phone).latest('created_on')
+            otp = (
+                OTPStore.objects.select_for_update()
+                .filter(phone_no=phone_no)
+                .latest("created_on")
+            )
             if otp.is_valid() and otp.data == input_otp:
                 otp.is_used = True
                 otp.save()
@@ -142,14 +149,13 @@ def validate_otp(phone_no, input_otp):
 
 def process_gps_file(player_id_instance, data_file):
     try:
-        gps_sheet = pd.read_excel(data_file, sheet_name='Oliver GPS Metrcis')
+        gps_sheet = pd.read_excel(data_file, sheet_name="Oliver GPS Metrcis")
 
-        match_id = gps_sheet['MatchID'].iloc[0]
-    
+        match_id = gps_sheet["MatchID"].iloc[0]
+
         player_id = player_id_instance.player_id
         user = player_id_instance.user
 
-        
         # fetch the game
         game = Game.objects.get(
             id=match_id,
@@ -158,55 +164,65 @@ def process_gps_file(player_id_instance, data_file):
 
         # *************** cards stats calculations
         print(f"processing for player with id: {player_id}")
-        
+
         # Convert player_id columns to strings for consistent comparison
-        gps_sheet['Player ID'] = gps_sheet['Player ID'].astype(int).astype(str)
-        
-        gps_row = gps_sheet[gps_sheet['Player ID'] == player_id]
-            
+        gps_sheet["Player ID"] = gps_sheet["Player ID"].astype(int).astype(str)
+
+        gps_row = gps_sheet[gps_sheet["Player ID"] == player_id]
+
         if gps_row.empty:
-            print(f"GPS data is not available for the player({user}) with ID({player_id}).")
+            print(
+                f"GPS data is not available for the player({user}) with ID({player_id})."
+            )
         else:
             gps_athletic_skills = calculate_gps_athletic_skills(gps_row)
             gps_football_abilities = calculate_gps_football_abilities(gps_row)
-            print(f"Calculated GPS Athletic Skills for player {player_id}: {gps_athletic_skills}.")
-            print(f"Calculated GPS Football Abilities for player {player_id}: {gps_football_abilities}.")
-                
+            print(
+                f"Calculated GPS Athletic Skills for player {player_id}: {gps_athletic_skills}."
+            )
+            print(
+                f"Calculated GPS Football Abilities for player {player_id}: {gps_football_abilities}."
+            )
+
             # Create or update the GPS Athletic skills for the user
             athletic_skills, created = GPSAthleticSkills.objects.update_or_create(
-                user=user,
-                game=game,
-                defaults={'metrics': gps_athletic_skills}
+                user=user, game=game, defaults={"metrics": gps_athletic_skills}
             )
             if created:
-                print(f"Created GPS Athletic Skills for player {player_id} (phone: {user}).")
+                print(
+                    f"Created GPS Athletic Skills for player {player_id} (phone: {user})."
+                )
             else:
-                print(f"Updated GPS Athletic Skills for player {player_id} (phone: {user}).")
+                print(
+                    f"Updated GPS Athletic Skills for player {player_id} (phone: {user})."
+                )
             # Create or update the GPS Football abilities for the user
             football_abilities, created = GPSFootballAbilities.objects.update_or_create(
-                user=user,
-                game=game,
-                defaults={'metrics': gps_football_abilities}
+                user=user, game=game, defaults={"metrics": gps_football_abilities}
             )
             if created:
-                print(f"Created GPS Football Abilities for player {player_id} (phone: {user}).")
+                print(
+                    f"Created GPS Football Abilities for player {player_id} (phone: {user})."
+                )
             else:
-                print(f"Updated GPS Football Abilities for player {player_id} (phone: {user}).")
+                print(
+                    f"Updated GPS Football Abilities for player {player_id} (phone: {user})."
+                )
     except Exception as e:
-        print(f"Error processing GPS data file: {e}")        
-        
-        
+        print(f"Error processing GPS data file: {e}")
+
+
 def process_video_file(player_id_instance, data_file):
     try:
-        stats_sheet = pd.read_excel(data_file, sheet_name='PlayerStats_137183')
-        match_sheet = pd.read_excel(data_file, sheet_name='MatchDetails')
+        stats_sheet = pd.read_excel(data_file, sheet_name="PlayerStats_137183")
+        match_sheet = pd.read_excel(data_file, sheet_name="MatchDetails")
 
         # Extract Match ID
-        if 'id' not in match_sheet.columns:
+        if "id" not in match_sheet.columns:
             raise ValueError("Match Details sheet is missing the 'match_id' column.")
-            
-        match_id = match_sheet['id'].iloc[0]
-        
+
+        match_id = match_sheet["id"].iloc[0]
+
         player_id = player_id_instance.player_id
         user = player_id_instance.user
 
@@ -215,67 +231,82 @@ def process_video_file(player_id_instance, data_file):
             id=match_id,
         )
         print(f"Game retrieved: {game}")
-        
+
         # *************** cards stats calculations
         print(f"processing for player with id: {player_id}")
 
         # Convert player_id columns to strings for consistent comparison
-        stats_sheet['player_id'] = stats_sheet['player_id'].astype(int).astype(str)
-            
-        stats_row = stats_sheet[stats_sheet['player_id'] == player_id]
-                
+        stats_sheet["player_id"] = stats_sheet["player_id"].astype(int).astype(str)
+
+        stats_row = stats_sheet[stats_sheet["player_id"] == player_id]
+
         if stats_row.empty:
-            print(f"Stats Video data is not available for the player({user}) with ID({player_id}).")
-        else:                    
+            print(
+                f"Stats Video data is not available for the player({user}) with ID({player_id})."
+            )
+        else:
             # Extract data from rows
             stats_data = stats_row.iloc[0].to_dict()
-                    
+
             attacking_skills = calculate_attacking_skills(stats_data, match_sheet)
             videocard_defensive = calculate_videocard_defensive(stats_data, match_sheet)
-            videocard_distributions = calculate_videocard_distributions(stats_data, match_sheet)
+            videocard_distributions = calculate_videocard_distributions(
+                stats_data, match_sheet
+            )
 
-            print(f"Calculated Attacking Skills for player {player_id}: {attacking_skills}.")
-            print(f"Calculated Video Card Defensive for player {player_id}: {videocard_defensive}.")
-            print(f"Calculated Video Card Distributions for player {player_id}: {videocard_distributions}.")
+            print(
+                f"Calculated Attacking Skills for player {player_id}: {attacking_skills}."
+            )
+            print(
+                f"Calculated Video Card Defensive for player {player_id}: {videocard_defensive}."
+            )
+            print(
+                f"Calculated Video Card Distributions for player {player_id}: {videocard_distributions}."
+            )
 
             # Create or update the Attacking skills for the user
             _attacking_skills, created = AttackingSkills.objects.update_or_create(
-                user=user,
-                game=game,
-                defaults={'metrics': attacking_skills}
+                user=user, game=game, defaults={"metrics": attacking_skills}
             )
 
             if created:
-                print(f"Created Attacking Skills for player {player_id} (phone: {user}).")
+                print(
+                    f"Created Attacking Skills for player {player_id} (phone: {user})."
+                )
             else:
-                print(f"Updated Attacking Skills for player {player_id} (phone: {user}).")
-
+                print(
+                    f"Updated Attacking Skills for player {player_id} (phone: {user})."
+                )
 
             # Create or update the Video Card Defensive for the user
             _videocard_defensive, created = VideoCardDefensive.objects.update_or_create(
-                user=user,
-                game=game,
-                defaults={'metrics': videocard_defensive}
+                user=user, game=game, defaults={"metrics": videocard_defensive}
             )
-            
+
             if created:
-                print(f"Created Video Card Defensive for player {player_id} (phone: {user}).")
+                print(
+                    f"Created Video Card Defensive for player {player_id} (phone: {user})."
+                )
             else:
-                print(f"Updated Video Card Defensive for player {player_id} (phone: {user}).")
+                print(
+                    f"Updated Video Card Defensive for player {player_id} (phone: {user})."
+                )
 
             # Create or update the Video Card Distributions for the user
-            _videocard_distributions, created = VideoCardDistributions.objects.update_or_create(
-                user=user,
-                game=game,
-                defaults={'metrics': videocard_distributions}
+            _videocard_distributions, created = (
+                VideoCardDistributions.objects.update_or_create(
+                    user=user, game=game, defaults={"metrics": videocard_distributions}
+                )
             )
 
             if created:
-                print(f"Created Video Card Distributions for player {player_id} (phone: {user}).")
+                print(
+                    f"Created Video Card Distributions for player {player_id} (phone: {user})."
+                )
             else:
-                print(f"Updated Video Card Distributions for player {player_id} (phone: {user}).")
- 
+                print(
+                    f"Updated Video Card Distributions for player {player_id} (phone: {user})."
+                )
+
     except Exception as e:
         print(f"Error processing video data file: {e}")
-    
-

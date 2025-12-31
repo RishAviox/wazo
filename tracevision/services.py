@@ -574,10 +574,10 @@ class TraceVisionAggregationService:
     def _fetch_result_data_from_blob(self, session):
         """
         Fetch session result data from Azure blob storage using result_blob_url.
-        
+
         Args:
             session: TraceSession instance with result_blob_url
-            
+
         Returns:
             dict: Result data containing highlights and other session data, or None if failed
         """
@@ -607,7 +607,9 @@ class TraceVisionAggregationService:
                 # Already a relative path
                 relative_path = blob_url
 
-            self.logger.info(f"Using relative path for storage operations: {relative_path}")
+            self.logger.info(
+                f"Using relative path for storage operations: {relative_path}"
+            )
 
             # Use Django's default storage to download the file
             if default_storage.exists(relative_path):

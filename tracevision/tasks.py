@@ -59,7 +59,6 @@ def should_include_highlight(highlight_data, session, player_map):
         )
         return False
 
-
     # Exclude highlights with very short duration (less than 1 second)
     if duration < 1000:  # 1000ms = 1 second
         logger.debug(
@@ -846,14 +845,13 @@ def parse_and_store_session_data(session, result_data):
                 # Check if player already exists for this team and jersey_number (across all sessions)
                 # This matches the Excel processing logic which uses team + jersey_number
                 existing_player = TracePlayer.objects.filter(
-                    team=team,
-                    jersey_number=jersey_number
+                    team=team, jersey_number=jersey_number
                 ).first()
 
                 if existing_player:
                     # Use existing player from any session
                     trace_player = existing_player
-                    
+
                     # Update object_id if it's different
                     if trace_player.object_id != object_id:
                         trace_player.object_id = object_id
@@ -876,11 +874,11 @@ def parse_and_store_session_data(session, result_data):
                             logger.info(
                                 f"Updated player {object_id} name from '{current_name}' to '{updated_name}' (mapped: {existing_player.user is not None})"
                             )
-                    
+
                     # Add session to player's sessions if not already present
                     if session not in trace_player.sessions.all():
                         trace_player.sessions.add(session)
-                    
+
                     logger.info(
                         f"Using existing player (team: {team.name}, jersey: {jersey_number}, object_id: {object_id})"
                     )
@@ -899,7 +897,7 @@ def parse_and_store_session_data(session, result_data):
                         team=team,
                         user=None,  # Will be mapped later via account creation with token
                     )
-                    
+
                     # Add session to player's sessions
                     trace_player.sessions.add(session)
 
@@ -1130,17 +1128,20 @@ def process_excel_and_create_players_task(session_id):
     """
     Celery task to process Excel file and create/update players, highlights, and statistics.
     This task runs after session creation and before video download.
-    
+
     Args:
         session_id (int): TraceSession ID
-        
+
     Returns:
         dict: Task result with success status and details
     """
     from tracevision.utils import process_excel_and_create_players
+
     try:
         result = process_excel_and_create_players(session_id)
-        logger.info(f"Excel processing task completed for session {session_id}: {result}")
+        logger.info(
+            f"Excel processing task completed for session {session_id}: {result}"
+        )
         return result
     except Exception as e:
         error_msg = f"Error in Excel processing task for session {session_id}: {str(e)}"
@@ -1360,7 +1361,7 @@ def process_trace_sessions_task(trace_session_id=None):
 def compute_aggregates_task(session_id, only_possession_segments=False):
     """
     Compute CSV-equivalent aggregates in background and store them in DB.
-    
+
     Args:
         session_id (str): Session ID to process
         only_possession_segments (bool): If True, only compute possession segments (skip clips)
@@ -1382,7 +1383,7 @@ def compute_aggregates_task(session_id, only_possession_segments=False):
             return {"success": False, "error": msg}
 
         agg = TraceVisionAggregationService()
-        
+
         if only_possession_segments:
             result = agg.compute_possession_segments_only(session)
             logger.info(f"Computed possession segments only for session {session_id}")
@@ -1730,11 +1731,15 @@ def auto_map_user_to_player_task(user_phone_no):
             }
 
         # Find TracePlayers with matching jersey_number and team
-        matching_players = TracePlayer.objects.filter(
-            jersey_number=user.jersey_number,
-            team=user.team,
-            user__isnull=True,
-        ).select_related("team").prefetch_related("sessions")
+        matching_players = (
+            TracePlayer.objects.filter(
+                jersey_number=user.jersey_number,
+                team=user.team,
+                user__isnull=True,
+            )
+            .select_related("team")
+            .prefetch_related("sessions")
+        )
 
         if not matching_players.exists():
             logger.info(
@@ -1758,7 +1763,7 @@ def auto_map_user_to_player_task(user_phone_no):
                 # This handles edge cases where same jersey exists in both home and away teams
                 players_in_both_teams = False
                 player_sessions = player.sessions.all()
-                
+
                 for session in player_sessions:
                     if session.home_team and session.away_team:
                         # Use reverse M2M relationship for better query efficiency
@@ -1898,8 +1903,6 @@ def auto_map_user_to_player_task(user_phone_no):
         )
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}
-
-
 
 
 @shared_task
@@ -2303,10 +2306,6 @@ def determine_team_side(excel_team_name, session):
         return "away"
 
 
-
-
-
-
 def parse_match_time(time_input):
     """
     Parse various time formats and return MM:SS format
@@ -2368,11 +2367,12 @@ def resolve_game(existing_game, en_name, he_name):
         return existing_game
 
     from games.models import Game
+
     game = Game.objects.filter(
-        Q(name=en_name) |
-        Q(name=he_name) |
-        Q(language_metadata__en__name=en_name) |
-        Q(language_metadata__he__name=he_name)
+        Q(name=en_name)
+        | Q(name=he_name)
+        | Q(language_metadata__en__name=en_name)
+        | Q(language_metadata__he__name=he_name)
     ).first()
 
     if not game:
@@ -2382,6 +2382,7 @@ def resolve_game(existing_game, en_name, he_name):
     sync_language_field(game, "he", "name", he_name)
 
     return game
+
 
 def resolve_team(existing_team, en_name, he_name):
     """
@@ -2396,11 +2397,12 @@ def resolve_team(existing_team, en_name, he_name):
 
     # 2️⃣ Search existing teams
     from teams.models import Team
+
     team = Team.objects.filter(
-        Q(name=en_name) |
-        Q(name=he_name) |
-        Q(language_metadata__en__name=en_name) |
-        Q(language_metadata__he__name=he_name)
+        Q(name=en_name)
+        | Q(name=he_name)
+        | Q(language_metadata__en__name=en_name)
+        | Q(language_metadata__he__name=he_name)
     ).first()
 
     # 3️⃣ Create if not found
@@ -2412,6 +2414,7 @@ def resolve_team(existing_team, en_name, he_name):
 
     return team
 
+
 def update_trace_session_multilingual_data(match_data, session_id):
     """
     Update TraceSession, Team, and Game multilingual data using FK-first logic.
@@ -2422,11 +2425,19 @@ def update_trace_session_multilingual_data(match_data, session_id):
         ).get(id=session_id)
 
         # --- Extract team names ---
-        en_home = match_data.get("en", {}).get("Match_summary", {}).get("match_home_team")
-        he_home = match_data.get("he", {}).get("Match_summary", {}).get("match_home_team")
+        en_home = (
+            match_data.get("en", {}).get("Match_summary", {}).get("match_home_team")
+        )
+        he_home = (
+            match_data.get("he", {}).get("Match_summary", {}).get("match_home_team")
+        )
 
-        en_away = match_data.get("en", {}).get("Match_summary", {}).get("match_away_team")
-        he_away = match_data.get("he", {}).get("Match_summary", {}).get("match_away_team")
+        en_away = (
+            match_data.get("en", {}).get("Match_summary", {}).get("match_away_team")
+        )
+        he_away = (
+            match_data.get("he", {}).get("Match_summary", {}).get("match_away_team")
+        )
 
         # --- Extract game names ---
         en_game = f"{en_home} vs {en_away}" if en_home and en_away else None
@@ -2446,7 +2457,10 @@ def update_trace_session_multilingual_data(match_data, session_id):
         logger.error(f"TraceSession not found: {session_id}")
 
     except Exception as e:
-        logger.exception(f"Failed to update multilingual data for TraceSession {session_id}")
+        logger.exception(
+            f"Failed to update multilingual data for TraceSession {session_id}"
+        )
+
 
 @shared_task
 def process_excel_match_highlights_task(session_id, excel_file_path=None):
@@ -2501,15 +2515,15 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
                 # Use provided file path (for testing or direct file access)
                 logger.info(f"Using provided Excel file path: {excel_file_path}")
 
-
             # Process the new Excel file with the new language extraction function
             try:
                 from tracevision.utils import extract_multilingual_match_data
+
                 match_data = extract_multilingual_match_data(excel_file_path)
                 # Read the json file for now
                 # match_data = os.path.join( os.path.dirname(__file__), "./data", "Gmae_Match_Detail Template_multilingual.json")
                 # with open(match_data, "r", encoding="utf-8") as f:
-                    # match_data = json.load(f)
+                # match_data = json.load(f)
                 logger.info(f"Successfully parsed Excel file: {excel_file_path}")
             except Exception as e:
                 error_msg = f"Failed to process Excel file: {str(e)}"
@@ -2522,40 +2536,48 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
                 update_trace_session_multilingual_data(match_data, session.id)
                 logger.info("Successfully updated session multilingual data")
             except Exception as e:
-                logger.error(f"Error updating session multilingual data: {e}", exc_info=True)
+                logger.error(
+                    f"Error updating session multilingual data: {e}", exc_info=True
+                )
 
         except Exception as e:
             # If there's an error during setup, clean up and re-raise
             cleanup_temp_files(temp_files_to_cleanup)
             raise
-        
+
         # Normalize multilingual data and update players
         logger.info(f"Normalizing multilingual data...")
         try:
             from tracevision.utils import (
                 normalize_multilingual_data,
                 update_player_language_metadata,
-                create_highlights_from_normalized_data
+                create_highlights_from_normalized_data,
             )
-            
+
             normalized_data = normalize_multilingual_data(match_data)
-            logger.info(f"Normalized data for {len(normalized_data['players'])} players")
-            
+            logger.info(
+                f"Normalized data for {len(normalized_data['players'])} players"
+            )
+
             # Update TracePlayer language_metadata
             logger.info(f"Updating TracePlayer language metadata...")
-            player_update_result = update_player_language_metadata(session, normalized_data)
+            player_update_result = update_player_language_metadata(
+                session, normalized_data
+            )
             logger.info(
                 f"Player metadata updates: {player_update_result['updated_count']}/{player_update_result['total_players']} players updated"
             )
-            
+
             # Create highlights and clip reels for goals and cards
             logger.info(f"Creating highlights from normalized data...")
-            highlight_result = create_highlights_from_normalized_data(session, normalized_data)
+            highlight_result = create_highlights_from_normalized_data(
+                session, normalized_data
+            )
             logger.info(
                 f"Created {highlight_result['highlights_created']} highlights and "
                 f"{highlight_result['clip_reels_created']} clip reels"
             )
-            
+
         except Exception as e:
             error_msg = f"Error in multilingual processing: {e}"
             logger.error(error_msg, exc_info=True)
@@ -2600,3 +2622,6 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
         error_msg = f"Error in process_excel_match_highlights_task for session {session_id}: {str(e)}"
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}
+    selected_language = models.CharField(max_length=15)
+    # fcm_token = models.CharField(max_length=255)
+    # we have WajoUserDevice to store FCM tokens

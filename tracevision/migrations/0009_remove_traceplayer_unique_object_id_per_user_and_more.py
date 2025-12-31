@@ -3,6 +3,28 @@
 from django.db import migrations, models
 
 
+def deduplicate_trace_players(apps, schema_editor):
+    TracePlayer = apps.get_model('tracevision', 'TracePlayer')
+    
+    # Deduplicate (team, jersey_number) for null users
+    seen_no_user = set()
+    for player in TracePlayer.objects.filter(user__isnull=True).order_by('-id'):
+        key = (player.team_id, player.jersey_number)
+        if key in seen_no_user:
+            player.delete()
+        else:
+            seen_no_user.add(key)
+            
+    # Deduplicate (team, jersey_number, user) for non-null users
+    seen_with_user = set()
+    for player in TracePlayer.objects.filter(user__isnull=False).order_by('-id'):
+        key = (player.team_id, player.jersey_number, player.user_id)
+        if key in seen_with_user:
+            player.delete()
+        else:
+            seen_with_user.add(key)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -50,6 +72,7 @@ class Migration(migrations.Migration):
             model_name='traceplayer',
             index=models.Index(fields=['account_creation_token'], name='tracevision_account_8c84c2_idx'),
         ),
+        migrations.RunPython(deduplicate_trace_players, reverse_code=migrations.RunPython.noop),
         migrations.AddConstraint(
             model_name='traceplayer',
             constraint=models.UniqueConstraint(condition=models.Q(('user__isnull', True)), fields=('team', 'jersey_number'), name='unique_team_jersey_no_user'),

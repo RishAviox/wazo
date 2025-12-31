@@ -24,7 +24,13 @@ from django.core.files.storage import default_storage
 
 
 from cards.models import GPSAthleticSkills, GPSFootballAbilities
-from tracevision.models import TracePlayer, TraceHighlight, TraceClipReel, TraceHighlightObject, TraceObject
+from tracevision.models import (
+    TracePlayer,
+    TraceHighlight,
+    TraceClipReel,
+    TraceHighlightObject,
+    TraceObject,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,36 +38,36 @@ logger = logging.getLogger(__name__)
 def get_localized_name(obj, user_language=None, field_name="name"):
     """
     Get localized name from an object based on user's language preference.
-    
+
     Args:
         obj: Object with language_metadata field (Game, Team, or TracePlayer)
         user_language: User's language preference ('en' or 'he'), defaults to 'en'
         field_name: Field name to extract from language_metadata (default: 'name')
-    
+
     Returns:
         str: Localized name, or fallback to obj.name/obj.field_name if not available
     """
     if not obj:
         return None
-    
+
     # Default to 'en' if language not provided
     if not user_language:
-        user_language = 'en'
-    
+        user_language = "en"
+
     # Normalize language code
     user_language = user_language.lower()
-    if user_language not in ['en', 'he']:
-        user_language = 'en'
-    
+    if user_language not in ["en", "he"]:
+        user_language = "en"
+
     # Try to get from language_metadata
-    if hasattr(obj, 'language_metadata') and obj.language_metadata:
+    if hasattr(obj, "language_metadata") and obj.language_metadata:
         lang_data = obj.language_metadata.get(user_language)
-        
+
         # Handle different structures:
         # 1. Direct value: {'en': 'Team Name', 'he': 'שם קבוצה'}
         if isinstance(lang_data, str) and lang_data.strip():
             return lang_data
-        
+
         # 2. Nested dict: {'en': {'name': 'Team Name'}, 'he': {'name': 'שם קבוצה'}}
         if isinstance(lang_data, dict) and lang_data:
             value = lang_data.get(field_name)
@@ -74,17 +80,17 @@ def get_localized_name(obj, user_language=None, field_name="name"):
                 else:
                     # Non-string value (number, etc.) - return as is
                     return value
-    
+
     # Fallback to default field - always return the actual field value
     if hasattr(obj, field_name):
         field_value = getattr(obj, field_name, None)
         if field_value is not None:
             return field_value
-    if hasattr(obj, 'name'):
-        name_value = getattr(obj, 'name', None)
+    if hasattr(obj, "name"):
+        name_value = getattr(obj, "name", None)
         if name_value is not None:
             return name_value
-    
+
     return None
 
 
@@ -97,28 +103,28 @@ def get_localized_team_name(team, user_language=None):
     """Get localized Team name based on user's language preference."""
     if not team:
         return None
-    
+
     # Default to 'en' if language not provided
     if not user_language:
-        user_language = 'en'
-    
+        user_language = "en"
+
     # Normalize language code
     user_language = user_language.lower()
-    if user_language not in ['en', 'he']:
-        user_language = 'en'
-    
+    if user_language not in ["en", "he"]:
+        user_language = "en"
+
     # Try language_metadata first
-    if hasattr(team, 'language_metadata') and team.language_metadata:
+    if hasattr(team, "language_metadata") and team.language_metadata:
         lang_data = team.language_metadata.get(user_language)
-        
+
         # Handle different structures
         # 1. Direct value: {'en': 'Team Name', 'he': 'שם קבוצה'}
         if isinstance(lang_data, str) and lang_data.strip():
             return lang_data
-        
+
         # 2. Nested dict: {'en': {'name': 'Team Name'}, 'he': {'name': 'שם קבוצה'}}
         if isinstance(lang_data, dict) and lang_data:
-            value = lang_data.get('name')
+            value = lang_data.get("name")
             # Check if value exists and is not None/empty
             if value is not None:
                 # If it's a string, check it's not empty after stripping
@@ -128,13 +134,13 @@ def get_localized_team_name(team, user_language=None):
                 else:
                     # Non-string value (number, etc.) - return as is
                     return value
-    
+
     # Fallback to team.name - always return the actual field value
-    if hasattr(team, 'name'):
-        name_value = getattr(team, 'name', None)
+    if hasattr(team, "name"):
+        name_value = getattr(team, "name", None)
         if name_value is not None:
             return name_value
-    
+
     return None
 
 
@@ -143,55 +149,51 @@ def get_localized_player_name(player, user_language=None):
     return get_localized_name(player, user_language, field_name="name")
 
 
-
 def normalize_multilingual_data(match_data):
     """
     Normalize the multilingual match data into a structured format.
-    
+
     Args:
         match_data (dict): Raw multilingual data with 'en' and 'he' sections
-        
+
     Returns:
         dict: Normalized data structure with teams and players
     """
-    normalized = {
-        "teams": [],
-        "players": []
-    }
-    
+    normalized = {"teams": [], "players": []}
+
     # Extract team names
     en_data = match_data.get("en", {})
     he_data = match_data.get("he", {})
-    
+
     en_summary = en_data.get("Match_summary", {})
     he_summary = he_data.get("Match_summary", {})
-    
+
     # Normalize team data
     home_team = {
         "name": {
             "en": en_summary.get("match_home_team", ""),
-            "he": he_summary.get("match_home_team", "")
+            "he": he_summary.get("match_home_team", ""),
         },
         "side": "home",
-        "players": []
+        "players": [],
     }
-    
+
     away_team = {
         "name": {
             "en": en_summary.get("match_away_team", ""),
-            "he": he_summary.get("match_away_team", "")
+            "he": he_summary.get("match_away_team", ""),
         },
         "side": "away",
-        "players": []
+        "players": [],
     }
-    
+
     normalized["teams"] = [home_team, away_team]
-    
+
     # Normalize player data from starting lineups, replacements, and bench
     for section in ["starting_lineups", "replacements", "bench"]:
         en_section = en_data.get(section, {})
         he_section = he_data.get(section, {})
-        
+
         # Process each team
         for team_key_en in en_section.keys():
             # Find corresponding Hebrew team key
@@ -200,61 +202,64 @@ def normalize_multilingual_data(match_data):
                 if _teams_match(team_key_en, he_key, en_summary, he_summary):
                     team_key_he = he_key
                     break
-            
+
             if not team_key_he:
                 continue
-            
+
             # Determine team side
-            team_side = "home" if team_key_en == en_summary.get("match_home_team") else "away"
-            
+            team_side = (
+                "home" if team_key_en == en_summary.get("match_home_team") else "away"
+            )
+
             # Get players for this team
             en_players = en_section[team_key_en]
             he_players = he_section[team_key_he]
-            
+
             # Process each player by jersey number
             for jersey_num in en_players.keys():
                 if jersey_num not in he_players:
                     continue
-                
+
                 en_player = en_players[jersey_num]
                 he_player = he_players[jersey_num]
-                
+
                 # Extract player data
                 player_data = {
                     "jersey_number": int(jersey_num),
                     "team_side": team_side,
                     "name": {
                         "en": en_player.get("name", ""),
-                        "he": he_player.get("name", "")
+                        "he": he_player.get("name", ""),
                     },
                     "role": {
                         "en": en_player.get("role", ""),
-                        "he": he_player.get("role", "")
+                        "he": he_player.get("role", ""),
                     },
                     "goals": [],
                     "cards": en_player.get("cards", 0),
-                    "source": section
+                    "source": section,
                 }
-                
+
                 # Extract goals with video times
                 en_goals = en_player.get("goals", [])
                 he_video_goals = he_player.get("video_goal", [])
-                
+
                 for idx, goal_minute in enumerate(en_goals):
-                    video_time = he_video_goals[idx] if idx < len(he_video_goals) else None
-                    player_data["goals"].append({
-                        "minute": str(goal_minute),
-                        "video_time": video_time
-                    })
-                
+                    video_time = (
+                        he_video_goals[idx] if idx < len(he_video_goals) else None
+                    )
+                    player_data["goals"].append(
+                        {"minute": str(goal_minute), "video_time": video_time}
+                    )
+
                 # Add substitution info if applicable
                 if section == "starting_lineups":
                     player_data["sub_off_minute"] = en_player.get("sub_off_minute", 0)
                 elif section == "replacements":
                     player_data["replacer_minute"] = en_player.get("replacer_minute", 0)
-                
+
                 normalized["players"].append(player_data)
-    
+
     return normalized
 
 
@@ -264,7 +269,7 @@ def _teams_match(en_team, he_team, en_summary, he_summary):
     he_home = he_summary.get("match_home_team", "")
     en_away = en_summary.get("match_away_team", "")
     he_away = he_summary.get("match_away_team", "")
-    
+
     if en_team == en_home and he_team == he_home:
         return True
     if en_team == en_away and he_team == he_away:
@@ -272,19 +277,21 @@ def _teams_match(en_team, he_team, en_summary, he_summary):
     return False
 
 
-def _create_goal_highlight(session, trace_player, player_data, goal, aggregation_service):
+def _create_goal_highlight(
+    session, trace_player, player_data, goal, aggregation_service
+):
     """Create a highlight for a goal event."""
     minute = goal["minute"]
     video_time = goal.get("video_time")
-    
+
     # Create unique highlight ID
     highlight_id = f"excel-goal-{session.session_id}-{minute}-{trace_player.id}"
-    
+
     # Check if highlight already exists
     if TraceHighlight.objects.filter(highlight_id=highlight_id).exists():
         logger.info(f"Highlight {highlight_id} already exists, skipping")
         return None, 0
-    
+
     # Calculate start_offset from video_time if available
     start_offset = 0
     if video_time:
@@ -294,16 +301,20 @@ def _create_goal_highlight(session, trace_player, player_data, goal, aggregation
             if video_seconds is not None:
                 start_offset = video_seconds * 1000  # Convert to milliseconds
         except Exception as e:
-            logger.warning(f"Failed to parse video_time '{video_time}' for goal at {minute}': {e}")
-    
+            logger.warning(
+                f"Failed to parse video_time '{video_time}' for goal at {minute}': {e}"
+            )
+
     # If video_time not available, try to calculate from match_time
     if start_offset == 0 and session.match_start_time:
         try:
             minute_int = int(str(minute).replace("'", "").replace("min", "").strip())
-            start_offset = convert_game_time_to_video_milliseconds(session, minute_int, 0)
+            start_offset = convert_game_time_to_video_milliseconds(
+                session, minute_int, 0
+            )
         except Exception as e:
             logger.warning(f"Failed to calculate start_offset from match_time: {e}")
-    
+
     # Create event metadata
     event_metadata = {
         "scorer": player_data["name"]["en"] or player_data["name"]["he"],
@@ -311,16 +322,16 @@ def _create_goal_highlight(session, trace_player, player_data, goal, aggregation
         "minute": minute,
         "video_time": video_time,
         "team": player_data["team_side"],
-        "jersey_number": player_data["jersey_number"]
+        "jersey_number": player_data["jersey_number"],
     }
-    
+
     # Determine half from minute
     try:
         minute_int = int(str(minute).replace("'", "").replace("min", "").strip())
         half = 1 if minute_int <= 45 else 2
     except (ValueError, TypeError):
         half = 1  # Default to first half
-    
+
     # Create TraceHighlight
     highlight = TraceHighlight.objects.create(
         highlight_id=highlight_id,
@@ -336,35 +347,33 @@ def _create_goal_highlight(session, trace_player, player_data, goal, aggregation
         half=half,
         event_metadata=event_metadata,
         session=session,
-        player=trace_player
+        player=trace_player,
     )
-    
+
     # Calculate performance impact
     highlight.performance_impact = highlight.calculate_performance_impact()
     highlight.team_impact = abs(highlight.performance_impact) * 0.5
     highlight.save()
-    
+
     # Create highlight-object relationship
     trace_object = TraceObject.objects.filter(
         session=session, player=trace_player
     ).first()
-    
+
     if trace_object:
         TraceHighlightObject.objects.create(
-            highlight=highlight,
-            trace_object=trace_object,
-            player=trace_player
+            highlight=highlight, trace_object=trace_object, player=trace_player
         )
-    
+
     # Create TraceClipReel entries (6 variations)
     clip_reels_count = _create_clip_reels_for_highlight(
         highlight, session, trace_player, player_data["team_side"], aggregation_service
     )
-    
+
     logger.info(
         f"Created goal highlight {highlight_id} for {player_data['name']['en']} at {minute}'"
     )
-    
+
     return highlight, clip_reels_count
 
 
@@ -372,23 +381,23 @@ def _create_card_highlight(session, trace_player, player_data, aggregation_servi
     """Create a highlight for a card event."""
     # For now, create a generic card highlight (minute unknown from current data)
     # This can be enhanced when card minute data is available
-    
+
     highlight_id = f"excel-card-{session.session_id}-{trace_player.object_id}"
-    
+
     # Check if highlight already exists
     if TraceHighlight.objects.filter(highlight_id=highlight_id).exists():
         logger.info(f"Highlight {highlight_id} already exists, skipping")
         return None, 0
-    
+
     # Create event metadata
     event_metadata = {
         "player": player_data["name"]["en"] or player_data["name"]["he"],
         "player_name": player_data["name"],
         "card_type": "yellow",  # Default, can be enhanced
         "team": player_data["team_side"],
-        "jersey_number": player_data["jersey_number"]
+        "jersey_number": player_data["jersey_number"],
     }
-    
+
     # Create TraceHighlight
     highlight = TraceHighlight.objects.create(
         highlight_id=highlight_id,
@@ -402,35 +411,33 @@ def _create_card_highlight(session, trace_player, player_data, aggregation_servi
         match_time="00:00",  # Unknown for now
         event_metadata=event_metadata,
         session=session,
-        player=trace_player
+        player=trace_player,
     )
-    
+
     # Calculate performance impact
     highlight.performance_impact = highlight.calculate_performance_impact()
     highlight.team_impact = abs(highlight.performance_impact) * 0.5
     highlight.save()
-    
+
     # Create highlight-object relationship
     trace_object = TraceObject.objects.filter(
         session=session, player=trace_player
     ).first()
-    
+
     if trace_object:
         TraceHighlightObject.objects.create(
-            highlight=highlight,
-            trace_object=trace_object,
-            player=trace_player
+            highlight=highlight, trace_object=trace_object, player=trace_player
         )
-    
+
     # Create TraceClipReel entries
     clip_reels_count = _create_clip_reels_for_highlight(
         highlight, session, trace_player, player_data["team_side"], aggregation_service
     )
-    
+
     logger.info(
         f"Created card highlight {highlight_id} for {player_data['name']['en']}"
     )
-    
+
     return highlight, clip_reels_count
 
 
@@ -438,95 +445,100 @@ def update_player_language_metadata(session, normalized_data, generate_tokens=Fa
     """
     Update TracePlayer language_metadata with multilingual names and roles.
     Optionally generates account creation tokens for unmapped players.
-    
+
     Args:
         session: TraceSession instance
         normalized_data: Normalized multilingual data
         generate_tokens: If True, generate account_creation_token for players without one
-        
+
     Returns:
         dict: Update statistics including tokens_generated and created_count
     """
     updated_count = 0
     created_count = 0
-    tokens_generated = 0
     update_details = []
-    
+
     for player_data in normalized_data["players"]:
         logger.info(f"Processing player {player_data}")
         try:
             # Find TracePlayer by team and jersey number
-            team = session.home_team if player_data["team_side"] == "home" else session.away_team
+            team = (
+                session.home_team
+                if player_data["team_side"] == "home"
+                else session.away_team
+            )
             jersey_number = player_data["jersey_number"]
-            
+
             if not team:
-                logger.warning(f"No team found for side {player_data['team_side']} in session {session.id}")
+                logger.warning(
+                    f"No team found for side {player_data['team_side']} in session {session.id}"
+                )
                 continue
-            
+
             # Find TracePlayer by team and jersey_number (across all sessions)
             trace_player = TracePlayer.objects.filter(
-                team=team,
-                jersey_number=jersey_number
+                team=team, jersey_number=jersey_number
             ).first()
-            
+
             if trace_player:
                 # Update existing player
                 # Update language_metadata
                 if not trace_player.language_metadata:
                     trace_player.language_metadata = {}
-                
+
                 # Update English data
                 if player_data["name"]["en"]:
                     if "en" not in trace_player.language_metadata:
                         trace_player.language_metadata["en"] = {}
-                    trace_player.language_metadata["en"]["name"] = player_data["name"]["en"]
+                    trace_player.language_metadata["en"]["name"] = player_data["name"][
+                        "en"
+                    ]
                     if player_data["role"]["en"]:
-                        trace_player.language_metadata["en"]["role"] = player_data["role"]["en"]
-                
+                        trace_player.language_metadata["en"]["role"] = player_data[
+                            "role"
+                        ]["en"]
+
                 # Update Hebrew data
                 if player_data["name"]["he"]:
                     if "he" not in trace_player.language_metadata:
                         trace_player.language_metadata["he"] = {}
-                    trace_player.language_metadata["he"]["name"] = player_data["name"]["he"]
+                    trace_player.language_metadata["he"]["name"] = player_data["name"][
+                        "he"
+                    ]
                     if player_data["role"]["he"]:
-                        trace_player.language_metadata["he"]["role"] = player_data["role"]["he"]
-                
+                        trace_player.language_metadata["he"]["role"] = player_data[
+                            "role"
+                        ]["he"]
+
                 # Update primary name field (use English if available, else Hebrew)
                 if player_data["name"]["en"]:
                     trace_player.name = player_data["name"]["en"]
                 elif player_data["name"]["he"]:
                     trace_player.name = player_data["name"]["he"]
-                
+
                 # Update position if role is provided
                 if player_data["role"]["en"] or player_data["role"]["he"]:
                     position = player_data["role"]["en"] or player_data["role"]["he"]
                     trace_player.position = position
-                
-                # Generate token if requested and not already set
-                if generate_tokens and not trace_player.account_creation_token:
-                    token = generate_account_creation_token()
-                    # Ensure token is unique
-                    while TracePlayer.objects.filter(account_creation_token=token).exists():
-                        token = generate_account_creation_token()
-                    trace_player.account_creation_token = token
-                    tokens_generated += 1
-                
+
                 trace_player.save()
-                
+
                 # Add session to player's sessions if not already present
                 if session not in trace_player.sessions.all():
                     trace_player.sessions.add(session)
-                
+
                 updated_count += 1
-                
-                update_details.append({
-                    "jersey_number": jersey_number,
-                    "team_side": player_data["team_side"],
-                    "name_en": player_data["name"]["en"],
-                    "name_he": player_data["name"]["he"],
-                    "player_id": trace_player.id
-                })
-                
+
+                update_details.append(
+                    {
+                        "jersey_number": jersey_number,
+                        "team_side": player_data["team_side"],
+                        "name_en": player_data["name"]["en"],
+                        "name_he": player_data["name"]["he"],
+                        "player_id": trace_player.id,
+                    }
+                )
+
                 logger.info(
                     f"Updated player #{jersey_number} ({player_data['team_side']}): "
                     f"EN={player_data['name']['en']}, HE={player_data['name']['he']}"
@@ -534,34 +546,31 @@ def update_player_language_metadata(session, normalized_data, generate_tokens=Fa
             else:
                 # Create new TracePlayer if not found
                 object_id = f"{player_data['team_side']}_{jersey_number}"
-                
+
                 # Determine primary name (use English if available, else Hebrew)
-                primary_name = player_data["name"]["en"] or player_data["name"]["he"] or f"Player {jersey_number}"
-                
+                primary_name = (
+                    player_data["name"]["en"]
+                    or player_data["name"]["he"]
+                    or f"Player {jersey_number}"
+                )
+
                 # Build language_metadata
                 language_metadata = {}
                 if player_data["name"]["en"]:
                     language_metadata["en"] = {"name": player_data["name"]["en"]}
                     if player_data["role"]["en"]:
                         language_metadata["en"]["role"] = player_data["role"]["en"]
-                
+
                 if player_data["name"]["he"]:
                     language_metadata["he"] = {"name": player_data["name"]["he"]}
                     if player_data["role"]["he"]:
                         language_metadata["he"]["role"] = player_data["role"]["he"]
-                
+
                 # Determine position from role (use English role if available, else Hebrew, else "Unknown")
-                position = player_data["role"]["en"] or player_data["role"]["he"] or "Unknown"
-                
-                # Generate token if requested
-                account_token = None
-                if generate_tokens:
-                    account_token = generate_account_creation_token()
-                    # Ensure token is unique
-                    while TracePlayer.objects.filter(account_creation_token=account_token).exists():
-                        account_token = generate_account_creation_token()
-                    tokens_generated += 1
-                
+                position = (
+                    player_data["role"]["en"] or player_data["role"]["he"] or "Unknown"
+                )
+
                 # Create the new TracePlayer
                 trace_player = TracePlayer.objects.create(
                     object_id=object_id,
@@ -571,78 +580,81 @@ def update_player_language_metadata(session, normalized_data, generate_tokens=Fa
                     team=team,
                     user=None,  # No user mapping - token-based flow only
                     language_metadata=language_metadata,
-                    account_creation_token=account_token
                 )
-                
+
                 # Add session to player's sessions
                 trace_player.sessions.add(session)
-                
+
                 created_count += 1
-                
-                update_details.append({
-                    "jersey_number": jersey_number,
-                    "team_side": player_data["team_side"],
-                    "name_en": player_data["name"]["en"],
-                    "name_he": player_data["name"]["he"],
-                    "created": True,
-                    "player_id": trace_player.id
-                })
-                
+
+                update_details.append(
+                    {
+                        "jersey_number": jersey_number,
+                        "team_side": player_data["team_side"],
+                        "name_en": player_data["name"]["en"],
+                        "name_he": player_data["name"]["he"],
+                        "created": True,
+                        "player_id": trace_player.id,
+                    }
+                )
+
                 logger.info(
                     f"Created new player #{jersey_number} ({player_data['team_side']}): "
                     f"EN={player_data['name']['en']}, HE={player_data['name']['he']}"
                 )
-        
+
         except Exception as e:
             logger.error(f"Error updating player {player_data}: {e}", exc_info=True)
             continue
-    
+
     return {
         "updated_count": updated_count,
         "created_count": created_count,
-        "tokens_generated": tokens_generated,
         "total_players": len(normalized_data["players"]),
-        "update_details": update_details
+        "update_details": update_details,
     }
 
 
 def create_highlights_from_normalized_data(session, normalized_data):
     """
     Create TraceHighlight and TraceClipReel entries for goals and cards.
-    
+
     Args:
         session: TraceSession instance
         normalized_data: Normalized multilingual data
-        
+
     Returns:
         dict: Creation statistics
     """
     from tracevision.services import TraceVisionAggregationService
-    
+
     highlights_created = 0
     clip_reels_created = 0
     errors = []
-    
+
     aggregation_service = TraceVisionAggregationService()
-    
+
     for player_data in normalized_data["players"]:
         try:
             # Find TracePlayer
-            team = session.home_team if player_data["team_side"] == "home" else session.away_team
+            team = (
+                session.home_team
+                if player_data["team_side"] == "home"
+                else session.away_team
+            )
             jersey_number = player_data["jersey_number"]
-            
+
             # Find TracePlayer by team and jersey_number (across all sessions)
             trace_player = TracePlayer.objects.filter(
-                team=team,
-                jersey_number=jersey_number
+                team=team, jersey_number=jersey_number
             ).first()
-            
+
             if not trace_player:
                 logger.warning(
                     f"Skipping highlights for player #{jersey_number} - not found"
                 )
                 continue
-            
+
             # Create highlights for goals
             for goal in player_data["goals"]:
                 try:
@@ -656,7 +668,7 @@ def create_highlights_from_normalized_data(session, normalized_data):
                     error_msg = f"Error creating goal highlight: {e}"
                     logger.error(error_msg, exc_info=True)
                     errors.append(error_msg)
-            
+
             # Create highlights for cards (if cards > 0)
             if player_data.get("cards", 0) > 0:
                 try:
@@ -670,48 +682,52 @@ def create_highlights_from_normalized_data(session, normalized_data):
                     error_msg = f"Error creating card highlight: {e}"
                     logger.error(error_msg, exc_info=True)
                     errors.append(error_msg)
-        
+
         except Exception as e:
             error_msg = f"Error processing player {player_data}: {e}"
             logger.error(error_msg, exc_info=True)
             errors.append(error_msg)
             continue
-    
+
     return {
         "highlights_created": highlights_created,
         "clip_reels_created": clip_reels_created,
-        "errors": errors
+        "errors": errors,
     }
 
 
-def _create_clip_reels_for_highlight(highlight, session, trace_player, team_side, aggregation_service):
+def _create_clip_reels_for_highlight(
+    highlight, session, trace_player, team_side, aggregation_service
+):
     """
     Create 6 TraceClipReel entries for a highlight (3 tag combinations × 2 ratios).
     Similar to the logic in TraceVisionAggregationService._compute_clips.
     Uses video_time from highlight if available, with 40-second buffer before and after.
     """
     clip_reels_created = 0
-    
+
     # Get involved players
-    highlight_objects = highlight.highlight_objects.all().select_related("trace_object", "player")
+    highlight_objects = highlight.highlight_objects.all().select_related(
+        "trace_object", "player"
+    )
     involved_players = [ho.player for ho in highlight_objects if ho.player]
     if not involved_players and trace_player:
         involved_players = [trace_player]
-    
+
     primary_player = involved_players[0] if involved_players else None
-    
+
     # Determine event type from highlight
     event_type = highlight.event_type or "touch"
-    
+
     # Calculate start_ms and duration_ms based on video_time if available
     start_ms = highlight.start_offset
     duration_ms = highlight.duration
-    
+
     if highlight.video_time and highlight.video_time.strip():
         try:
             # Parse video_time (format: "mm:ss" or "hh:mm:ss")
             time_parts = highlight.video_time.strip().split(":")
-            
+
             if len(time_parts) == 2:  # mm:ss format
                 minutes, seconds = map(int, time_parts)
                 video_time_ms = (minutes * 60 + seconds) * 1000
@@ -721,16 +737,16 @@ def _create_clip_reels_for_highlight(highlight, session, trace_player, team_side
             else:
                 # Invalid format, use default
                 video_time_ms = None
-            
+
             if video_time_ms is not None and video_time_ms > 0:
                 # Add 40 seconds (40000ms) buffer before the event
                 buffer_ms = 40000
                 start_ms = max(0, video_time_ms - buffer_ms)  # Ensure non-negative
-                
+
                 # Duration includes the original duration plus 40 seconds after
                 # Total: 40s before + original duration + 40s after
                 duration_ms = highlight.duration + (2 * buffer_ms)
-                
+
                 logger.info(
                     f"Using video_time {highlight.video_time} for clip reel: "
                     f"start_ms={start_ms}, duration_ms={duration_ms}"
@@ -738,7 +754,7 @@ def _create_clip_reels_for_highlight(highlight, session, trace_player, team_side
         except (ValueError, AttributeError) as e:
             logger.warning(f"Failed to parse video_time '{highlight.video_time}': {e}")
             # Fall back to using highlight.start_offset and highlight.duration
-    
+
     # Define clip reel configurations
     clip_reel_configs = [
         {
@@ -778,15 +794,15 @@ def _create_clip_reels_for_highlight(highlight, session, trace_player, team_side
             "video_type": None,
         },
     ]
-    
+
     for config in clip_reel_configs:
         sorted_tags = sorted(config["tags"])
-        
+
         # Check if clip reel already exists with exact same config
         tag_filters = Q()
         for tag in config["tags"]:
             tag_filters &= Q(tags__contains=tag)
-        
+
         clip_reel = (
             TraceClipReel.objects.filter(
                 highlight=highlight,
@@ -795,7 +811,7 @@ def _create_clip_reels_for_highlight(highlight, session, trace_player, team_side
             .filter(tag_filters)
             .first()
         )
-        
+
         # Verify exact tag match
         if clip_reel:
             existing_tags = sorted(clip_reel.tags) if clip_reel.tags else []
@@ -804,7 +820,7 @@ def _create_clip_reels_for_highlight(highlight, session, trace_player, team_side
                 if involved_players:
                     clip_reel.involved_players.set(involved_players)
                 continue
-        
+
         # Create new clip reel
         defaults = {
             "session": session,
@@ -839,18 +855,18 @@ def _create_clip_reels_for_highlight(highlight, session, trace_player, team_side
                 "video_time": highlight.video_time if highlight.video_time else None,
             },
         }
-        
+
         clip_reel = TraceClipReel.objects.create(
             highlight=highlight,
             **defaults,
         )
-        
+
         # Add involved players
         if involved_players:
             clip_reel.involved_players.set(involved_players)
-        
+
         clip_reels_created += 1
-    
+
     return clip_reels_created
 
 
@@ -881,13 +897,25 @@ def parse_goals_value(value):
     Parse goals value and return list of goal minutes.
     Can be: "⚽ 19, 23, 61, 80" or "⚽ 14" or "—" or empty or list
     """
-    if value is None or value == "" or value == "—" or (isinstance(value, float) and math.isnan(value)):
+    if (
+        value is None
+        or value == ""
+        or value == "—"
+        or (isinstance(value, float) and math.isnan(value))
+    ):
         return []
-    
+
     if isinstance(value, list):
         # If value is already a list, filter out empty/"—" and non-numeric values, and return cleaned list as strings
-        return [str(g).strip() for g in value if g and str(g).strip() and str(g).strip() != "—" and re.match(r"^\d+$", str(g).strip())]
-    
+        return [
+            str(g).strip()
+            for g in value
+            if g
+            and str(g).strip()
+            and str(g).strip() != "—"
+            and re.match(r"^\d+$", str(g).strip())
+        ]
+
     if isinstance(value, str):
         value = value.strip()
         if value == "" or value == "—":
@@ -895,7 +923,7 @@ def parse_goals_value(value):
         # Extract all numbers (comma-separated), handles emoji like "⚽ 19, 23, 61, 80"
         numbers = re.findall(r"\d+", value)
         return numbers
-    
+
     # If it's a single number
     try:
         int(value)
@@ -917,7 +945,7 @@ def parse_video_goal_value(value):
             timestr = str(timestr)
 
         # Remove icons, words ("minute", "min", "mintue", etc.), and whitespace
-        timestr = re.sub(r'[^\d:]', '', timestr).strip()
+        timestr = re.sub(r"[^\d:]", "", timestr).strip()
         if not timestr:
             return None
 
@@ -925,7 +953,7 @@ def parse_video_goal_value(value):
         segments = timestr.split(":")
 
         # Case 1: Only a number ("13" => "13:00")
-        if len(segments) == 1 and re.match(r'^\d+$', segments[0]):
+        if len(segments) == 1 and re.match(r"^\d+$", segments[0]):
             mm = int(segments[0])
             if 0 <= mm <= 120:  # reasonable minute range
                 return f"{mm:02d}:00"
@@ -951,7 +979,12 @@ def parse_video_goal_value(value):
         return None
 
     # Canonicalize input
-    if value is None or value == "" or value == "—" or (isinstance(value, float) and math.isnan(value)):
+    if (
+        value is None
+        or value == ""
+        or value == "—"
+        or (isinstance(value, float) and math.isnan(value))
+    ):
         return []
 
     # If value is a list, flatten and process elements as str
@@ -959,7 +992,9 @@ def parse_video_goal_value(value):
         items = value
     else:
         # If a string, split on comma (for typical user entry)
-        items = [s.strip() for s in str(value).split(",") if s.strip() and s.strip() != "—"]
+        items = [
+            s.strip() for s in str(value).split(",") if s.strip() and s.strip() != "—"
+        ]
 
     result = []
     for item in items:
@@ -974,12 +1009,17 @@ def parse_sub_off_minute(value):
     Parse substitution off minute value.
     Returns the minute number or 0 if not substituted.
     """
-    if value is None or value == "" or value == "—" or (isinstance(value, float) and math.isnan(value)):
+    if (
+        value is None
+        or value == ""
+        or value == "—"
+        or (isinstance(value, float) and math.isnan(value))
+    ):
         return 0
-    
+
     if isinstance(value, (int, float)):
         return int(value)
-    
+
     if isinstance(value, str):
         value = value.strip()
         if value == "" or value == "—":
@@ -988,7 +1028,7 @@ def parse_sub_off_minute(value):
         match = re.search(r"\d+", value)
         if match:
             return int(match.group())
-    
+
     return 0
 
 
@@ -996,9 +1036,14 @@ def parse_cards_value(value):
     """
     Parse cards value. Returns 0 if no cards, or count if multiple cards mentioned.
     """
-    if value is None or value == "" or value == "—" or (isinstance(value, float) and math.isnan(value)):
+    if (
+        value is None
+        or value == ""
+        or value == "—"
+        or (isinstance(value, float) and math.isnan(value))
+    ):
         return 0
-    
+
     if isinstance(value, str):
         value = value.strip()
         if value == "" or value == "—":
@@ -1006,17 +1051,17 @@ def parse_cards_value(value):
         # Count occurrences of "Yellow" or "Red" or Hebrew equivalents
         # For now, if there's any text, count as 1 (can be enhanced)
         return 1 if value else 0
-    
+
     return 0
 
 
 def extract_multilingual_match_data(excel_file_path):
     """
     Extract multilingual match data from Excel file with _en and _he sheets.
-    
+
     Args:
         excel_file_path (str): Path to the Excel file
-        
+
     Returns:
         dict: Multilingual match data in the format:
         {
@@ -1043,14 +1088,14 @@ def extract_multilingual_match_data(excel_file_path):
     try:
         # Convert Path object to string if needed
         excel_file_path = str(excel_file_path)
-        
+
         # Check if file exists
         if not os.path.exists(excel_file_path):
             raise FileNotFoundError(f"Excel file not found: {excel_file_path}")
-        
+
         # Read all sheets from Excel file
         excel_data = pd.read_excel(excel_file_path, sheet_name=None)
-        
+
         result = {
             "en": {
                 "Match_summary": {},
@@ -1058,7 +1103,7 @@ def extract_multilingual_match_data(excel_file_path):
                 "replacements": {},
                 "bench": {},
                 "coaches": {},
-                "referees": []
+                "referees": [],
             },
             "he": {
                 "Match_summary": {},
@@ -1066,10 +1111,10 @@ def extract_multilingual_match_data(excel_file_path):
                 "replacements": {},
                 "bench": {},
                 "coaches": {},
-                "referees": []
-            }
+                "referees": [],
+            },
         }
-        
+
         # ===== Parse Match_Summary_en =====
         if "Match_Summary_en" in excel_data:
             summary_df = excel_data["Match_Summary_en"]
@@ -1078,7 +1123,7 @@ def extract_multilingual_match_data(excel_file_path):
                 summary_dict = summary_df.iloc[0].to_dict()
                 # Log available columns for debugging
                 logger.debug(f"Match_Summary_en columns: {list(summary_dict.keys())}")
-                
+
                 # Clean and structure match summary
                 # Map all available columns - use exact column names from Excel
                 def safe_get(d, key, default=""):
@@ -1087,7 +1132,7 @@ def extract_multilingual_match_data(excel_file_path):
                     if val is None or pd.isna(val):
                         return default
                     return val
-                
+
                 def safe_int(d, key, default=0):
                     """Safely get integer value"""
                     val = d.get(key)
@@ -1097,7 +1142,7 @@ def extract_multilingual_match_data(excel_file_path):
                         return int(float(val))
                     except (ValueError, TypeError):
                         return default
-                
+
                 # Map actual Excel column names to JSON keys
                 # Excel columns: 'Match Id', 'Competition', 'Date', 'Kickoff Time', etc.
                 # Handle time objects properly
@@ -1109,7 +1154,7 @@ def extract_multilingual_match_data(excel_file_path):
                     if isinstance(val, time):
                         return val.strftime("%H:%M:%S")
                     return str(val)
-                
+
                 result["en"]["Match_summary"] = {
                     "match_id": str(safe_get(summary_dict, "Match Id", "")),
                     "match_venue": str(safe_get(summary_dict, "Competition", "")),
@@ -1119,26 +1164,39 @@ def extract_multilingual_match_data(excel_file_path):
                     "match_address": str(safe_get(summary_dict, "Address", "")),
                     "match_home_team": str(safe_get(summary_dict, "Home Team", "")),
                     "match_away_team": str(safe_get(summary_dict, "Away Team", "")),
-                    "match_half_time_score": str(safe_get(summary_dict, "Half-Time Score", "")),
-                    "match_full_time_score": str(safe_get(summary_dict, "Full-Time Score", "")),
+                    "match_half_time_score": str(
+                        safe_get(summary_dict, "Half-Time Score", "")
+                    ),
+                    "match_full_time_score": str(
+                        safe_get(summary_dict, "Full-Time Score", "")
+                    ),
                     "match_home_goals": safe_int(summary_dict, "Home Goals", 0),
                     "match_away_goals": safe_int(summary_dict, "Away Goals", 0),
                     "match_age_group": str(safe_get(summary_dict, "Age Group", "")),
                     "match_game_format": str(safe_get(summary_dict, "Game Format", "")),
-                    "match_field_length": str(safe_get(summary_dict, "Field Length (m)", "")),
-                    "match_field_width": str(safe_get(summary_dict, "Field Width (m)", "")),
+                    "match_field_length": str(
+                        safe_get(summary_dict, "Field Length (m)", "")
+                    ),
+                    "match_field_width": str(
+                        safe_get(summary_dict, "Field Width (m)", "")
+                    ),
                     "match_goal_size": str(safe_get(summary_dict, "Goal Size (m)", "")),
                     "match_ball_size": str(safe_get(summary_dict, "Ball Size", "")),
-                    "match_half_length": str(safe_get(summary_dict, "Half Length (Minutes)", "")),
-                    "match_official_break_time": str(safe_get(summary_dict, "Official Break Time", "")),
+                    "match_half_length": str(
+                        safe_get(summary_dict, "Half Length (Minutes)", "")
+                    ),
+                    "match_official_break_time": str(
+                        safe_get(summary_dict, "Official Break Time", "")
+                    ),
                 }
-        
+
         # ===== Parse Match_Summary_he =====
         if "Match_Summary_he" in excel_data:
             summary_df = excel_data["Match_Summary_he"]
             summary_df = summary_df.where(pd.notna(summary_df), None)
             if not summary_df.empty:
                 summary_dict = summary_df.iloc[0].to_dict()
+
                 # Map Hebrew column names to English keys, but keep Hebrew values
                 # Handle time objects properly
                 def safe_get_time_he(d, key, default=""):
@@ -1149,7 +1207,7 @@ def extract_multilingual_match_data(excel_file_path):
                     if isinstance(val, time):
                         return val.strftime("%H:%M:%S")
                     return str(val)
-                
+
                 # Use English keys, but extract Hebrew values from Hebrew columns
                 result["he"]["Match_summary"] = {
                     "match_id": str(safe_get(summary_dict, "מזהה משחק", "")),
@@ -1157,46 +1215,83 @@ def extract_multilingual_match_data(excel_file_path):
                     "match_time": safe_get_time_he(summary_dict, "שעת פתיחה", ""),
                     "match_location": str(safe_get(summary_dict, "אצטדיון", "")),
                     "match_address": str(safe_get(summary_dict, "כתובת", "")),
-                    "match_venue": str(safe_get(summary_dict, "תחרות", "")),  # No trailing space
+                    "match_venue": str(
+                        safe_get(summary_dict, "תחרות", "")
+                    ),  # No trailing space
                     "match_home_team": str(safe_get(summary_dict, "קבוצה ביתית", "")),
                     "match_away_team": str(safe_get(summary_dict, "קבוצה אורחת", "")),
-                    "match_half_time_score": str(safe_get(summary_dict, "תוצאת מחצית", "")),
-                    "match_full_time_score": str(safe_get(summary_dict, "תוצאת סיום", "")),
+                    "match_half_time_score": str(
+                        safe_get(summary_dict, "תוצאת מחצית", "")
+                    ),
+                    "match_full_time_score": str(
+                        safe_get(summary_dict, "תוצאת סיום", "")
+                    ),
                     "match_home_goals": safe_int(summary_dict, "שערי בית", 0),
                     "match_away_goals": safe_int(summary_dict, "שערי חוץ", 0),
                     "match_age_group": str(safe_get(summary_dict, "קבוצת גיל", "")),
                     "match_game_format": str(safe_get(summary_dict, "פורמט משחק", "")),
-                    "match_field_length": str(safe_get(summary_dict, "אורך מגרש (מ')", "")),
-                    "match_field_width": str(safe_get(summary_dict, "רוחב מגרש (מ')", "")),
+                    "match_field_length": str(
+                        safe_get(summary_dict, "אורך מגרש (מ')", "")
+                    ),
+                    "match_field_width": str(
+                        safe_get(summary_dict, "רוחב מגרש (מ')", "")
+                    ),
                     "match_goal_size": str(safe_get(summary_dict, "גודל שער (מ')", "")),
                     "match_ball_size": str(safe_get(summary_dict, "גודל כדור", "")),
-                    "match_half_length": str(safe_get(summary_dict, "אורך מחצית (דקות)", "")),
-                    "match_official_break_time": str(safe_get(summary_dict, "הפסקה רשמית (דקות)", "")),
+                    "match_half_length": str(
+                        safe_get(summary_dict, "אורך מחצית (דקות)", "")
+                    ),
+                    "match_official_break_time": str(
+                        safe_get(summary_dict, "הפסקה רשמית (דקות)", "")
+                    ),
                 }
-        
+
         # ===== Parse Starting_Lineups_en =====
         if "Starting_Lineups_en" in excel_data:
             lineups_df = excel_data["Starting_Lineups_en"]
             lineups_df = lineups_df.where(pd.notna(lineups_df), None)
-            
+
             # Log column names for debugging
             logger.debug(f"Starting_Lineups_en columns: {list(lineups_df.columns)}")
-            
+
             # Group by team
             for _, row in lineups_df.iterrows():
                 # Try multiple possible column name variations
                 team = row.get("Team") or row.get("team") or row.get("TEAM")
-                number = row.get("Number") or row.get("number") or row.get("NUMBER") or row.get("No.") or row.get("No")
-                name = row.get("Name") or row.get("name") or row.get("NAME") or row.get("Player Name")
-                
+                number = (
+                    row.get("Number")
+                    or row.get("number")
+                    or row.get("NUMBER")
+                    or row.get("No.")
+                    or row.get("No")
+                )
+                name = (
+                    row.get("Name")
+                    or row.get("name")
+                    or row.get("NAME")
+                    or row.get("Player Name")
+                )
+
                 # Skip invalid rows
-                if not team or pd.isna(team) or (isinstance(team, str) and team.strip() in ["", "no.", "Team"]):
+                if (
+                    not team
+                    or pd.isna(team)
+                    or (isinstance(team, str) and team.strip() in ["", "no.", "Team"])
+                ):
                     continue
                 if not number or pd.isna(number):
                     continue
-                if not name or pd.isna(name) or (isinstance(name, str) and name.strip() in ["", "GOALS TABLE", "CARD TABLE", "name", "Name", "NAME"]):
+                if (
+                    not name
+                    or pd.isna(name)
+                    or (
+                        isinstance(name, str)
+                        and name.strip()
+                        in ["", "GOALS TABLE", "CARD TABLE", "name", "Name", "NAME"]
+                    )
+                ):
                     continue
-                
+
                 team = str(team).strip()
                 # Handle Number as float (e.g., 1.0, 4.0) - convert to int then string
                 try:
@@ -1204,22 +1299,39 @@ def extract_multilingual_match_data(excel_file_path):
                 except (ValueError, TypeError):
                     continue
                 name = str(name).strip()
-                
+
                 if team not in result["en"]["starting_lineups"]:
                     result["en"]["starting_lineups"][team] = {}
-                
+
                 # Get other fields - try multiple column name variations
-                role = row.get("Role") or row.get("role") or row.get("ROLE") or row.get("Position")
+                role = (
+                    row.get("Role")
+                    or row.get("role")
+                    or row.get("ROLE")
+                    or row.get("Position")
+                )
                 if pd.isna(role) or role is None:
                     role = "—"
                 else:
                     role = str(role).strip()
-                
-                goals = parse_goals_value(row.get("Goals") or row.get("goals") or row.get("GOALS"))
-                video_goal = parse_video_goal_value(row.get("VideoGoal") or row.get("video_goal") or row.get("Video Goal"))
-                sub_off_minute = parse_sub_off_minute(row.get("SubOffMinute") or row.get("sub_off_minute") or row.get("Sub Off Minute"))
-                cards = parse_cards_value(row.get("Cards") or row.get("cards") or row.get("CARDS"))
-                
+
+                goals = parse_goals_value(
+                    row.get("Goals") or row.get("goals") or row.get("GOALS")
+                )
+                video_goal = parse_video_goal_value(
+                    row.get("VideoGoal")
+                    or row.get("video_goal")
+                    or row.get("Video Goal")
+                )
+                sub_off_minute = parse_sub_off_minute(
+                    row.get("SubOffMinute")
+                    or row.get("sub_off_minute")
+                    or row.get("Sub Off Minute")
+                )
+                cards = parse_cards_value(
+                    row.get("Cards") or row.get("cards") or row.get("CARDS")
+                )
+
                 result["en"]["starting_lineups"][team][number] = {
                     "name": name,
                     "role": role,
@@ -1228,16 +1340,16 @@ def extract_multilingual_match_data(excel_file_path):
                     "sub_off_minute": sub_off_minute,
                     "cards": cards,
                 }
-        
+
         # ===== Parse Starting_Lineups_he =====
         if "Starting_Lineups_he" in excel_data:
             lineups_df = excel_data["Starting_Lineups_he"]
             lineups_df = lineups_df.where(pd.notna(lineups_df), None)
-            
+
             # Log column names for debugging
             logger.debug(f"Starting_Lineups_he columns: {list(lineups_df.columns)}")
-            
-            # Hebrew column names: קבוצה (Team), מס' (Number), שם שחקן (Player Name), תפקיד (Role), 
+
+            # Hebrew column names: קבוצה (Team), מס' (Number), שם שחקן (Player Name), תפקיד (Role),
             # שערים (Goals), שער_וידאו (Video Goal), דקה יציאה (Exit Minute), כרטיסים (Cards)
             # Try to find columns with flexible matching
             def get_hebrew_column(row, possible_names):
@@ -1248,43 +1360,54 @@ def extract_multilingual_match_data(excel_file_path):
                         if val is not None and not pd.isna(val):
                             return val
                 return None
-            
+
             for _, row in lineups_df.iterrows():
                 # Try multiple possible column name variations
                 team = get_hebrew_column(row, ["קבוצה", "קבוצה "])  # Team
                 number = get_hebrew_column(row, ["מס'", "מספר", "מס"])  # Number
-                name = get_hebrew_column(row, ["שם שחקן", "שם", "שם השחקן"])  # Player Name
-                
+                name = get_hebrew_column(
+                    row, ["שם שחקן", "שם", "שם השחקן"]
+                )  # Player Name
+
                 # Skip invalid rows
-                if not team or (isinstance(team, str) and team.strip() in ["", "no.", "קבוצה"]):
+                if not team or (
+                    isinstance(team, str) and team.strip() in ["", "no.", "קבוצה"]
+                ):
                     continue
                 if not number:
                     continue
-                if not name or (isinstance(name, str) and name.strip() in ["", "GOALS TABLE", "CARD TABLE", "שם שחקן"]):
+                if not name or (
+                    isinstance(name, str)
+                    and name.strip() in ["", "GOALS TABLE", "CARD TABLE", "שם שחקן"]
+                ):
                     continue
-                
+
                 team = str(team).strip()
                 try:
                     number = str(int(float(number))) if number is not None else None
                 except (ValueError, TypeError):
                     continue
                 name = str(name).strip()
-                
+
                 if team not in result["he"]["starting_lineups"]:
                     result["he"]["starting_lineups"][team] = {}
-                
+
                 # Get other fields - try multiple column name variations
                 role = get_hebrew_column(row, ["תפקיד", "תפקיד "])
                 if role is None or pd.isna(role):
                     role = "—"
                 else:
                     role = str(role).strip()
-                
+
                 goals = parse_goals_value(get_hebrew_column(row, ["שערים", "שער"]))
-                video_goal = parse_video_goal_value(get_hebrew_column(row, ["שער_וידאו", "שער וידאו", "וידאו שער"]))
-                sub_off_minute = parse_sub_off_minute(get_hebrew_column(row, ["דקה יציאה", "דקת יציאה", "יציאה"]))
+                video_goal = parse_video_goal_value(
+                    get_hebrew_column(row, ["שער_וידאו", "שער וידאו", "וידאו שער"])
+                )
+                sub_off_minute = parse_sub_off_minute(
+                    get_hebrew_column(row, ["דקה יציאה", "דקת יציאה", "יציאה"])
+                )
                 cards = parse_cards_value(get_hebrew_column(row, ["כרטיסים", "כרטיס"]))
-                
+
                 # Use English keys for player data structure (consistent with example)
                 result["he"]["starting_lineups"][team][number] = {
                     "name": name,
@@ -1294,86 +1417,98 @@ def extract_multilingual_match_data(excel_file_path):
                     "sub_off_minute": sub_off_minute,
                     "cards": cards,
                 }
-        
+
         # ===== Parse Replacements_en =====
         if "Replacements_en" in excel_data:
             replacements_df = excel_data["Replacements_en"]
             replacements_df = replacements_df.where(pd.notna(replacements_df), None)
-            
+
             for _, row in replacements_df.iterrows():
                 team = row.get("Team")
                 number = row.get("Number")
                 name = row.get("Name")
-                
-                if not team or pd.isna(team) or (isinstance(team, str) and team.strip() in ["", "Team"]):
+
+                if (
+                    not team
+                    or pd.isna(team)
+                    or (isinstance(team, str) and team.strip() in ["", "Team"])
+                ):
                     continue
                 if not number or pd.isna(number):
                     continue
-                if not name or pd.isna(name) or (isinstance(name, str) and name.strip() in ["", "Name"]):
+                if (
+                    not name
+                    or pd.isna(name)
+                    or (isinstance(name, str) and name.strip() in ["", "Name"])
+                ):
                     continue
-                
+
                 team = str(team).strip()
                 try:
                     number = str(int(float(number)))
                 except (ValueError, TypeError):
                     continue
                 name = str(name).strip()
-                
+
                 if team not in result["en"]["replacements"]:
                     result["en"]["replacements"][team] = {}
-                
+
                 role = row.get("Role", "—")
                 if pd.isna(role) or role is None:
                     role = "—"
                 else:
                     role = str(role).strip()
-                
+
                 goals = parse_goals_value(row.get("Goals"))
                 replacer_minute = parse_sub_off_minute(row.get("ReplacerMinute"))
-                
+
                 result["en"]["replacements"][team][number] = {
                     "name": name,
                     "role": role,
                     "goals": goals,
                     "replacer_minute": replacer_minute,
                 }
-        
+
         # ===== Parse Replacements_he =====
         if "Replacements_he" in excel_data:
             replacements_df = excel_data["Replacements_he"]
             replacements_df = replacements_df.where(pd.notna(replacements_df), None)
-            
+
             for _, row in replacements_df.iterrows():
                 team = get_hebrew_column(row, ["קבוצה", "קבוצה "])
                 number = get_hebrew_column(row, ["מס'", "מספר", "מס"])
                 name = get_hebrew_column(row, ["שם", "שם שחקן"])
-                
-                if not team or (isinstance(team, str) and team.strip() in ["", "קבוצה"]):
+
+                if not team or (
+                    isinstance(team, str) and team.strip() in ["", "קבוצה"]
+                ):
                     continue
                 if not number:
                     continue
                 if not name or (isinstance(name, str) and name.strip() in ["", "שם"]):
                     continue
-                
+
                 team = str(team).strip()  # Hebrew team name
                 try:
                     number = str(int(float(number)))
                 except (ValueError, TypeError):
                     continue
                 name = str(name).strip()  # Hebrew player name
-                
+
                 if team not in result["he"]["replacements"]:
                     result["he"]["replacements"][team] = {}
-                
+
                 role = get_hebrew_column(row, ["תפקיד", "תַפְקִיד"])
                 if role is None or pd.isna(role):
                     role = "—"
                 else:
                     role = str(role).strip()  # Hebrew role
-                
+
                 goals = parse_goals_value(get_hebrew_column(row, ["מטרות", "שערים"]))
-                replacer_minute = parse_sub_off_minute(get_hebrew_column(row, ["דקת כניסה", "דקה כניסה"]))
-                
+                replacer_minute = parse_sub_off_minute(
+                    get_hebrew_column(row, ["דקת כניסה", "דקה כניסה"])
+                )
+
                 # Use English keys, Hebrew values
                 result["he"]["replacements"][team][number] = {
                     "name": name,  # Hebrew name
@@ -1381,177 +1516,203 @@ def extract_multilingual_match_data(excel_file_path):
                     "goals": goals,
                     "replacer_minute": replacer_minute,
                 }
-        
+
         # ===== Parse Bench_en =====
         if "Bench_en" in excel_data:
             bench_df = excel_data["Bench_en"]
             bench_df = bench_df.where(pd.notna(bench_df), None)
-            
+
             for _, row in bench_df.iterrows():
                 team = row.get("Team")
                 number = row.get("Number")
                 name = row.get("Name")
-                
-                if not team or pd.isna(team) or (isinstance(team, str) and team.strip() in ["", "Team"]):
+
+                if (
+                    not team
+                    or pd.isna(team)
+                    or (isinstance(team, str) and team.strip() in ["", "Team"])
+                ):
                     continue
                 if not number or pd.isna(number):
                     continue
-                if not name or pd.isna(name) or (isinstance(name, str) and name.strip() in ["", "Name"]):
+                if (
+                    not name
+                    or pd.isna(name)
+                    or (isinstance(name, str) and name.strip() in ["", "Name"])
+                ):
                     continue
-                
+
                 team = str(team).strip()
                 try:
                     number = str(int(float(number)))
                 except (ValueError, TypeError):
                     continue
                 name = str(name).strip()
-                
+
                 if team not in result["en"]["bench"]:
                     result["en"]["bench"][team] = {}
-                
+
                 result["en"]["bench"][team][number] = {
                     "name": name,
                 }
-        
+
         # ===== Parse Bench_he =====
         if "Bench_he" in excel_data:
             bench_df = excel_data["Bench_he"]
             bench_df = bench_df.where(pd.notna(bench_df), None)
-            
+
             for _, row in bench_df.iterrows():
                 team = get_hebrew_column(row, ["קבוצה", "קבוצה "])
                 number = get_hebrew_column(row, ["מס'", "מספר", "מס"])
                 name = get_hebrew_column(row, ["שם", "שם שחקן"])
-                
-                if not team or (isinstance(team, str) and team.strip() in ["", "קבוצה"]):
+
+                if not team or (
+                    isinstance(team, str) and team.strip() in ["", "קבוצה"]
+                ):
                     continue
                 if not number:
                     continue
                 if not name or (isinstance(name, str) and name.strip() in ["", "שם"]):
                     continue
-                
+
                 team = str(team).strip()  # Hebrew team name
                 try:
                     number = str(int(float(number)))
                 except (ValueError, TypeError):
                     continue
                 name = str(name).strip()  # Hebrew player name
-                
+
                 if team not in result["he"]["bench"]:
                     result["he"]["bench"][team] = {}
-                
+
                 # Use English keys, Hebrew values
                 result["he"]["bench"][team][number] = {
                     "name": name,  # Hebrew name
                 }
-        
+
         # ===== Parse Coaches_en =====
         if "Coaches_en" in excel_data:
             coaches_df = excel_data["Coaches_en"]
             coaches_df = coaches_df.where(pd.notna(coaches_df), None)
-            
+
             for _, row in coaches_df.iterrows():
                 team = row.get("Team")
                 coach_name = row.get("Coach Name")
                 role = row.get("Role")
-                
-                if not team or pd.isna(team) or (isinstance(team, str) and team.strip() in ["", "Team"]):
+
+                if (
+                    not team
+                    or pd.isna(team)
+                    or (isinstance(team, str) and team.strip() in ["", "Team"])
+                ):
                     continue
                 if not coach_name or pd.isna(coach_name):
                     continue
-                
+
                 team = str(team).strip()
                 coach_name = str(coach_name).strip()
                 role = str(role).strip() if role and not pd.isna(role) else ""
-                
+
                 if team not in result["en"]["coaches"]:
                     result["en"]["coaches"][team] = []
-                
-                result["en"]["coaches"][team].append({
-                    "name": coach_name,
-                    "role": role,
-                })
-        
+
+                result["en"]["coaches"][team].append(
+                    {
+                        "name": coach_name,
+                        "role": role,
+                    }
+                )
+
         # ===== Parse Coaches_he =====
         if "Coaches_he" in excel_data:
             coaches_df = excel_data["Coaches_he"]
             coaches_df = coaches_df.where(pd.notna(coaches_df), None)
-            
+
             for _, row in coaches_df.iterrows():
                 team = get_hebrew_column(row, ["קבוצה", "קבוצה "])
                 coach_name = get_hebrew_column(row, ["שם המאמן", "מאמן"])
                 role = get_hebrew_column(row, ["תפקיד"])
-                
-                if not team or (isinstance(team, str) and team.strip() in ["", "קבוצה"]):
+
+                if not team or (
+                    isinstance(team, str) and team.strip() in ["", "קבוצה"]
+                ):
                     continue
                 if not coach_name:
                     continue
-                
+
                 team = str(team).strip()  # Hebrew team name
                 coach_name = str(coach_name).strip()  # Hebrew coach name
-                role = str(role).strip() if role and not pd.isna(role) else ""  # Hebrew role
-                
+                role = (
+                    str(role).strip() if role and not pd.isna(role) else ""
+                )  # Hebrew role
+
                 if team not in result["he"]["coaches"]:
                     result["he"]["coaches"][team] = []
-                
+
                 # Use English keys, Hebrew values
-                result["he"]["coaches"][team].append({
-                    "name": coach_name,  # Hebrew name
-                    "role": role,  # Hebrew role
-                })
-        
+                result["he"]["coaches"][team].append(
+                    {
+                        "name": coach_name,  # Hebrew name
+                        "role": role,  # Hebrew role
+                    }
+                )
+
         # ===== Parse Referees_en =====
         if "Referees_en" in excel_data:
             referees_df = excel_data["Referees_en"]
             referees_df = referees_df.where(pd.notna(referees_df), None)
-            
+
             for _, row in referees_df.iterrows():
                 position = row.get("Position")
                 name = row.get("Name")
-                
+
                 if not position or pd.isna(position):
                     continue
                 if not name or pd.isna(name):
                     continue
-                
+
                 position = str(position).strip()
                 name = str(name).strip()
-                
-                result["en"]["referees"].append({
-                    "position": position,
-                    "name": name,
-                })
-        
+
+                result["en"]["referees"].append(
+                    {
+                        "position": position,
+                        "name": name,
+                    }
+                )
+
         # ===== Parse Referees_he =====
         if "Referees_he" in excel_data:
             referees_df = excel_data["Referees_he"]
             referees_df = referees_df.where(pd.notna(referees_df), None)
-            
+
             for _, row in referees_df.iterrows():
                 position = get_hebrew_column(row, ["תפקיד"])
                 name = get_hebrew_column(row, ["שם"])
-                
+
                 if not position:
                     continue
                 if not name:
                     continue
-                
+
                 position = str(position).strip()  # Hebrew position
                 name = str(name).strip()  # Hebrew name
-                
+
                 # Use English keys, Hebrew values
-                result["he"]["referees"].append({
-                    "position": position,  # Hebrew position
-                    "name": name,  # Hebrew name
-                })
-        
+                result["he"]["referees"].append(
+                    {
+                        "position": position,  # Hebrew position
+                        "name": name,  # Hebrew name
+                    }
+                )
+
         # Convert to JSON-serializable format
         result = make_json_serializable(result)
-        
+
         # Validate structure
         logger.info("Validating extracted data structure...")
         validation_errors = []
-        
+
         # Check English structure
         if not result.get("en"):
             validation_errors.append("Missing 'en' key in result")
@@ -1568,7 +1729,7 @@ def extract_multilingual_match_data(excel_file_path):
                 validation_errors.append("Missing 'coaches' in 'en'")
             if "referees" not in result["en"]:
                 validation_errors.append("Missing 'referees' in 'en'")
-        
+
         # Check Hebrew structure
         if not result.get("he"):
             validation_errors.append("Missing 'he' key in result")
@@ -1585,66 +1746,93 @@ def extract_multilingual_match_data(excel_file_path):
                 validation_errors.append("Missing 'coaches' in 'he'")
             if "referees" not in result["he"]:
                 validation_errors.append("Missing 'referees' in 'he'")
-        
+
         if validation_errors:
             logger.warning(f"Validation warnings: {', '.join(validation_errors)}")
         else:
             logger.info("✓ Data structure validation passed")
-        
+
         # Save to JSON file in the data directory
         try:
             excel_dir = os.path.dirname(excel_file_path)
             excel_basename = os.path.basename(excel_file_path)
             json_filename = os.path.splitext(excel_basename)[0] + "_multilingual.json"
-            
+
             # Save in the same directory as Excel file (data directory)
             json_file_path = os.path.join(excel_dir, json_filename)
-            
+
             with open(json_file_path, "w", encoding="utf-8") as f:
                 json.dump(result, f, indent=4, ensure_ascii=False)
-            
+
             logger.info(f"Multilingual match data saved to JSON file: {json_file_path}")
             print(f"\n✓ Multilingual JSON file saved successfully at: {json_file_path}")
             print(f"  File size: {os.path.getsize(json_file_path)} bytes")
-            
+
             # Print summary of what was extracted
             en_teams = len(result.get("en", {}).get("starting_lineups", {}))
             he_teams = len(result.get("he", {}).get("starting_lineups", {}))
-            en_players = sum(len(players) for players in result.get("en", {}).get("starting_lineups", {}).values())
-            he_players = sum(len(players) for players in result.get("he", {}).get("starting_lineups", {}).values())
-            en_replacements = sum(len(players) for players in result.get("en", {}).get("replacements", {}).values())
-            he_replacements = sum(len(players) for players in result.get("he", {}).get("replacements", {}).values())
-            en_bench = sum(len(players) for players in result.get("en", {}).get("bench", {}).values())
-            he_bench = sum(len(players) for players in result.get("he", {}).get("bench", {}).values())
-            en_coaches = sum(len(coaches) for coaches in result.get("en", {}).get("coaches", {}).values())
-            he_coaches = sum(len(coaches) for coaches in result.get("he", {}).get("coaches", {}).values())
+            en_players = sum(
+                len(players)
+                for players in result.get("en", {}).get("starting_lineups", {}).values()
+            )
+            he_players = sum(
+                len(players)
+                for players in result.get("he", {}).get("starting_lineups", {}).values()
+            )
+            en_replacements = sum(
+                len(players)
+                for players in result.get("en", {}).get("replacements", {}).values()
+            )
+            he_replacements = sum(
+                len(players)
+                for players in result.get("he", {}).get("replacements", {}).values()
+            )
+            en_bench = sum(
+                len(players)
+                for players in result.get("en", {}).get("bench", {}).values()
+            )
+            he_bench = sum(
+                len(players)
+                for players in result.get("he", {}).get("bench", {}).values()
+            )
+            en_coaches = sum(
+                len(coaches)
+                for coaches in result.get("en", {}).get("coaches", {}).values()
+            )
+            he_coaches = sum(
+                len(coaches)
+                for coaches in result.get("he", {}).get("coaches", {}).values()
+            )
             en_referees = len(result.get("en", {}).get("referees", []))
             he_referees = len(result.get("he", {}).get("referees", []))
-            
+
             print(f"\n  Extracted Summary:")
             print(f"    English:")
-            print(f"      - Match Summary: {'✓' if result.get('en', {}).get('Match_summary') else '✗'}")
+            print(
+                f"      - Match Summary: {'✓' if result.get('en', {}).get('Match_summary') else '✗'}"
+            )
             print(f"      - Starting Lineups: {en_teams} teams, {en_players} players")
             print(f"      - Replacements: {en_replacements} players")
             print(f"      - Bench: {en_bench} players")
             print(f"      - Coaches: {en_coaches} coaches")
             print(f"      - Referees: {en_referees} referees")
             print(f"    Hebrew:")
-            print(f"      - Match Summary: {'✓' if result.get('he', {}).get('Match_summary') else '✗'}")
+            print(
+                f"      - Match Summary: {'✓' if result.get('he', {}).get('Match_summary') else '✗'}"
+            )
             print(f"      - Starting Lineups: {he_teams} teams, {he_players} players")
             print(f"      - Replacements: {he_replacements} players")
             print(f"      - Bench: {he_bench} players")
             print(f"      - Coaches: {he_coaches} coaches")
             print(f"      - Referees: {he_referees} referees")
-            
+
         except Exception as e:
             logger.warning(
-                f"Failed to save multilingual data to JSON file: {e}",
-                exc_info=True
+                f"Failed to save multilingual data to JSON file: {e}", exc_info=True
             )
-        
+
         return result
-        
+
     except Exception as e:
         logger.error(
             f"Error extracting multilingual match data from Excel file {excel_file_path}: {e}",
@@ -1652,8 +1840,6 @@ def extract_multilingual_match_data(excel_file_path):
             stack_info=True,
         )
         raise
-
-
 
 
 def parse_time_to_seconds(time_str: str) -> int:
@@ -2394,18 +2580,24 @@ def check_duplicate_game(
 
     # Check by video_url (exact match)
     if video_url:
-        existing_session = TraceSession.objects.filter(
-            video_url=video_url
-        ).exclude(status="process_error").first()
+        existing_session = (
+            TraceSession.objects.filter(video_url=video_url)
+            .exclude(status="process_error")
+            .first()
+        )
         if existing_session:
             logger.info(f"Duplicate found by video_url: {video_url}")
             return existing_session
 
     # Check by (home_team, away_team, match_date)
     if home_team and away_team and match_date:
-        existing_session = TraceSession.objects.filter(
-            home_team=home_team, away_team=away_team, match_date=match_date
-        ).exclude(status="process_error").first()
+        existing_session = (
+            TraceSession.objects.filter(
+                home_team=home_team, away_team=away_team, match_date=match_date
+            )
+            .exclude(status="process_error")
+            .first()
+        )
         if existing_session:
             logger.info(
                 f"Duplicate found by teams and date: {home_team} vs {away_team} on {match_date}"
@@ -2500,7 +2692,7 @@ def get_or_create_canonical_game(home_team, away_team, match_date, game_type="ma
     # Generate game ID from teams and date using hash to ensure uniqueness
     # Format: Hash of HOME_TEAM_ID_AWAY_TEAM_ID_YYYYMMDD (truncated to 10 chars)
     import hashlib
-    
+
     home_id = "".join(c for c in str(home_team.id).upper() if c.isalnum())[:5]
     away_id = "".join(c for c in str(away_team.id).upper() if c.isalnum())[:5]
     date_str = match_date.strftime("%Y%m%d")
@@ -2912,17 +3104,6 @@ def extract_video_segment_from_azure(
         raise
 
 
-def generate_account_creation_token():
-    """
-    Generate a unique token for TracePlayer account creation.
-    Uses UUID4 to ensure uniqueness.
-    
-    Returns:
-        str: Unique token string
-    """
-    return uuid.uuid4().hex
-
-
 def process_excel_and_create_players(session_id):
     """
     Process Excel file from TraceSession and:
@@ -2931,19 +3112,24 @@ def process_excel_and_create_players(session_id):
     3. Create/update TracePlayer instances (using team + jersey_number)
     4. Create highlights for goals from Excel data (using game_time and video_time)
     5. Calculate and store goal statistics in TraceVisionSessionStats
-    
+
     Args:
         session_id (int): TraceSession ID
-        
+
     Returns:
         dict: Result with success status and details
     """
     try:
-        from tracevision.models import TraceSession, TracePlayer, TraceVisionSessionStats, TraceHighlight
+        from tracevision.models import (
+            TraceSession,
+            TracePlayer,
+            TraceVisionSessionStats,
+            TraceHighlight,
+        )
         from tracevision.tasks import update_trace_session_multilingual_data
         from tracevision.utils import create_highlights_from_normalized_data
         from django.db import transaction
-        
+
         # Get session
         try:
             # Note: basic_game_stats is a FileField, not a relation, so don't use select_related for it
@@ -2954,22 +3140,24 @@ def process_excel_and_create_players(session_id):
             error_msg = f"TraceSession with ID {session_id} not found"
             logger.error(error_msg)
             return {"success": False, "error": error_msg}
-        
+
         # Check if Excel file exists
         if not session.basic_game_stats:
             error_msg = f"Session {session_id} has no basic_game_stats file"
             logger.warning(error_msg)
             return {"success": False, "error": error_msg}
-        
+
         # Download Excel file from storage
         logger.info(f"Downloading Excel file for session {session_id}")
         try:
-            excel_file_path = download_excel_file_from_storage(session.basic_game_stats.url)
+            excel_file_path = download_excel_file_from_storage(
+                session.basic_game_stats.url
+            )
         except Exception as e:
             error_msg = f"Failed to download Excel file: {str(e)}"
             logger.error(error_msg, exc_info=True)
             return {"success": False, "error": error_msg}
-        
+
         # Step 1: Extract multilingual data using existing method
         try:
             logger.info(f"Extracting multilingual data from Excel file")
@@ -2979,25 +3167,28 @@ def process_excel_and_create_players(session_id):
             logger.error(error_msg, exc_info=True)
             try:
                 import os
+
                 if os.path.exists(excel_file_path):
                     os.unlink(excel_file_path)
             except:
                 pass
             return {"success": False, "error": error_msg}
-        
+
         # Step 2: Update TraceSession multilingual data (updates Game and Team) using existing method
         try:
             update_trace_session_multilingual_data(match_data, session_id)
             logger.info(f"Updated multilingual data for session {session_id}")
         except Exception as e:
-            logger.warning(f"Failed to update multilingual data: {str(e)}", exc_info=True)
-        
+            logger.warning(
+                f"Failed to update multilingual data: {str(e)}", exc_info=True
+            )
+
         # Step 3: Process players and create highlights
         players_created = 0
         players_updated = 0
         tokens_generated = 0
         highlights_created = 0
-        
+
         # Goal statistics
         home_goals = 0
         away_goals = 0
@@ -3006,15 +3197,19 @@ def process_excel_and_create_players(session_id):
         away_first_half_goals = 0
         away_second_half_goals = 0
         player_goals = {}  # {player_id: goal_count}
-        
+
         try:
             with transaction.atomic():
                 # Get normalized player data
                 normalized_data = normalize_multilingual_data(match_data)
-                
+
                 # Step 3: Update/create players and generate tokens using existing method
-                logger.info("Updating player language metadata and generating tokens...")
-                player_result = update_player_language_metadata(session, normalized_data, generate_tokens=True)
+                logger.info(
+                    "Updating player language metadata and generating tokens..."
+                )
+                player_result = update_player_language_metadata(
+                    session, normalized_data, generate_tokens=True
+                )
                 players_created = player_result.get("created_count", 0)
                 players_updated = player_result.get("updated_count", 0)
                 tokens_generated = player_result.get("tokens_generated", 0)
@@ -3022,7 +3217,7 @@ def process_excel_and_create_players(session_id):
                     f"Player processing complete: {players_created} created, {players_updated} updated, "
                     f"{tokens_generated} tokens generated"
                 )
-                
+
                 # Step 4: Calculate goal statistics from normalized data
                 # Build a mapping of (team_side, jersey_number) -> player_id for goal tracking
                 player_id_map = {}  # {(team_side, jersey_number): player_id}
@@ -3032,24 +3227,27 @@ def process_excel_and_create_players(session_id):
                     team_side = detail.get("team_side")
                     if player_id and jersey_number and team_side:
                         player_id_map[(team_side, jersey_number)] = player_id
-                
+
                 # Calculate goal statistics
                 for player_data in normalized_data.get("players", []):
                     try:
                         team_side = player_data.get("team_side", "home")
-                        team = session.home_team if team_side == "home" else session.away_team
+                        team = (
+                            session.home_team
+                            if team_side == "home"
+                            else session.away_team
+                        )
                         jersey_number = player_data.get("jersey_number")
-                        
+
                         if not team or not jersey_number:
                             continue
-                        
+
                         # Get player_id from map
                         player_id = player_id_map.get((team_side, jersey_number))
                         if not player_id:
                             # Fallback: try to find TracePlayer directly (using team + jersey_number, not session)
                             trace_player = TracePlayer.objects.filter(
-                                team=team,
-                                jersey_number=jersey_number
+                                team=team, jersey_number=jersey_number
                             ).first()
                             if trace_player:
                                 player_id = trace_player.id
@@ -3058,17 +3256,22 @@ def process_excel_and_create_players(session_id):
                                     trace_player.sessions.add(session)
                             else:
                                 continue
-                        
+
                         # Process goals for this player
                         goals = player_data.get("goals", [])
                         player_goal_count = len(goals)
                         if player_goal_count > 0:
                             player_goals[player_id] = player_goal_count
-                            
+
                             # Count goals by team and half
                             for goal in goals:
                                 try:
-                                    minute = int(goal.get("minute", "0").replace("'", "").replace("min", "").strip())
+                                    minute = int(
+                                        goal.get("minute", "0")
+                                        .replace("'", "")
+                                        .replace("min", "")
+                                        .strip()
+                                    )
                                     if team_side == "home":
                                         home_goals += 1
                                         if minute <= 45:
@@ -3089,38 +3292,46 @@ def process_excel_and_create_players(session_id):
                                     else:
                                         away_goals += 1
                                         away_first_half_goals += 1
-                    
+
                     except Exception as e:
                         logger.error(
                             f"Error calculating goal statistics for player {player_data}: {str(e)}",
-                            exc_info=True
+                            exc_info=True,
                         )
                         continue
-                
+
                 # Step 5: Create highlights from normalized data using existing method
                 try:
-                    highlight_result = create_highlights_from_normalized_data(session, normalized_data)
+                    highlight_result = create_highlights_from_normalized_data(
+                        session, normalized_data
+                    )
                     highlights_created = highlight_result.get("highlights_created", 0)
-                    logger.info(f"Created {highlights_created} highlights from Excel data")
+                    logger.info(
+                        f"Created {highlights_created} highlights from Excel data"
+                    )
                 except Exception as e:
-                    logger.warning(f"Failed to create highlights: {str(e)}", exc_info=True)
-                
+                    logger.warning(
+                        f"Failed to create highlights: {str(e)}", exc_info=True
+                    )
+
                 # Step 6: Update or create TraceVisionSessionStats with goal statistics
                 try:
-                    session_stats, stats_created = TraceVisionSessionStats.objects.get_or_create(
-                        session=session,
-                        defaults={
-                            "home_team_stats": {},
-                            "away_team_stats": {},
-                            "possession_data": {},
-                            "tactical_analysis": {},
-                        }
+                    session_stats, stats_created = (
+                        TraceVisionSessionStats.objects.get_or_create(
+                            session=session,
+                            defaults={
+                                "home_team_stats": {},
+                                "away_team_stats": {},
+                                "possession_data": {},
+                                "tactical_analysis": {},
+                            },
+                        )
                     )
-                    
+
                     # Separate player goals by team
                     home_player_goals = {}
                     away_player_goals = {}
-                    
+
                     for pid, count in player_goals.items():
                         try:
                             player = TracePlayer.objects.get(id=pid)
@@ -3130,54 +3341,65 @@ def process_excel_and_create_players(session_id):
                                 away_player_goals[str(pid)] = count
                         except TracePlayer.DoesNotExist:
                             continue
-                    
+
                     # Update home team stats
                     home_stats = session_stats.home_team_stats or {}
-                    home_stats.update({
-                        "total_goals": home_goals,
-                        "first_half_goals": home_first_half_goals,
-                        "second_half_goals": home_second_half_goals,
-                        "player_goals": home_player_goals
-                    })
+                    home_stats.update(
+                        {
+                            "total_goals": home_goals,
+                            "first_half_goals": home_first_half_goals,
+                            "second_half_goals": home_second_half_goals,
+                            "player_goals": home_player_goals,
+                        }
+                    )
                     session_stats.home_team_stats = home_stats
-                    
+
                     # Update away team stats
                     away_stats = session_stats.away_team_stats or {}
-                    away_stats.update({
-                        "total_goals": away_goals,
-                        "first_half_goals": away_first_half_goals,
-                        "second_half_goals": away_second_half_goals,
-                        "player_goals": away_player_goals
-                    })
+                    away_stats.update(
+                        {
+                            "total_goals": away_goals,
+                            "first_half_goals": away_first_half_goals,
+                            "second_half_goals": away_second_half_goals,
+                            "player_goals": away_player_goals,
+                        }
+                    )
                     session_stats.away_team_stats = away_stats
-                    
-                    session_stats.save(update_fields=["home_team_stats", "away_team_stats"])
-                    logger.info(f"Updated goal statistics in TraceVisionSessionStats for session {session_id}")
-                
+
+                    session_stats.save(
+                        update_fields=["home_team_stats", "away_team_stats"]
+                    )
+                    logger.info(
+                        f"Updated goal statistics in TraceVisionSessionStats for session {session_id}"
+                    )
+
                 except Exception as e:
-                    logger.warning(f"Failed to update goal statistics: {str(e)}", exc_info=True)
-                
+                    logger.warning(
+                        f"Failed to update goal statistics: {str(e)}", exc_info=True
+                    )
+
                 logger.info(
                     f"Processed Excel data for session {session_id}: "
                     f"{players_created} players created, {players_updated} players updated, "
                     f"{tokens_generated} tokens generated, {highlights_created} highlights created, "
                     f"{home_goals} home goals, {away_goals} away goals"
                 )
-        
+
         except Exception as e:
             error_msg = f"Error processing players: {str(e)}"
             logger.error(error_msg, exc_info=True)
             return {"success": False, "error": error_msg}
-        
+
         finally:
             # Clean up temp file
             try:
                 import os
+
                 if os.path.exists(excel_file_path):
                     os.unlink(excel_file_path)
             except Exception as e:
                 logger.warning(f"Failed to delete temp file {excel_file_path}: {e}")
-        
+
         return {
             "success": True,
             "session_id": session_id,
@@ -3192,11 +3414,11 @@ def process_excel_and_create_players(session_id):
                 "home_second_half_goals": home_second_half_goals,
                 "away_first_half_goals": away_first_half_goals,
                 "away_second_half_goals": away_second_half_goals,
-                "player_goals": player_goals
+                "player_goals": player_goals,
             },
-            "message": "Excel data processed successfully. Players can now create accounts using their tokens."
+            "message": "Excel data processed successfully. Players can now create accounts using their tokens.",
         }
-    
+
     except Exception as e:
         error_msg = f"Unexpected error processing Excel data: {str(e)}"
         logger.error(error_msg, exc_info=True)

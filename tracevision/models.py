@@ -137,7 +137,7 @@ class TraceSession(models.Model):
         default=dict,
         blank=True,
         null=True,
-        help_text="Multilingual match data with 'en' and 'he' sections containing match summary, lineups, replacements, bench, coaches, and referees"
+        help_text="Multilingual match data with 'en' and 'he' sections containing match summary, lineups, replacements, bench, coaches, and referees",
     )
 
     # Timestamp fields
@@ -216,7 +216,7 @@ class TracePlayer(models.Model):
         default=dict,
         blank=True,
         null=True,
-        help_text="Multilingual player data: {'en': {'name': 'Player Name', 'role': 'GK'}, 'he': {'name': 'שם שחקן', 'role': 'שוער'}}"
+        help_text="Multilingual player data: {'en': {'name': 'Player Name', 'role': 'GK'}, 'he': {'name': 'שם שחקן', 'role': 'שוער'}}",
     )
 
     # Relationships
@@ -240,16 +240,6 @@ class TracePlayer(models.Model):
         related_name="players",
         blank=True,
         help_text="TraceVision sessions this player has participated in",
-    )
-
-    # Account creation token for linking player to user account
-    account_creation_token = models.CharField(
-        max_length=64,
-        unique=True,
-        null=True,
-        blank=True,
-        help_text="Unique token for account creation. User can use this token to create account and link to this TracePlayer.",
-        db_index=True,
     )
 
     # Metadata
@@ -278,8 +268,9 @@ class TracePlayer(models.Model):
         indexes = [
             models.Index(fields=["object_id"]),
             models.Index(fields=["user"]),
-            models.Index(fields=["team", "jersey_number"]),  # Combined index for common lookups
-            models.Index(fields=["account_creation_token"]),
+            models.Index(
+                fields=["team", "jersey_number"]
+            ),  # Combined index for common lookups
         ]
 
     def __str__(self):

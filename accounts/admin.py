@@ -4,25 +4,32 @@ from core.admin import admin_site
 
 
 class WajoUserAdmin(admin.ModelAdmin):
-    list_display = ('phone_no', 'name', 'selected_language', 'role', 'created_on', 'updated_on', )
+    list_display = (
+        "phone_no",
+        "name",
+        "selected_language",
+        "role",
+        "created_on",
+        "updated_on",
+    )
 
 
 class WajoUserDeviceAdmin(admin.ModelAdmin):
-    list_display = ['user', 'fcm_token', 'created_on', 'updated_on']
+    list_display = ["user", "fcm_token", "created_on", "updated_on"]
 
 
 class PlayerIDMappingAdmin(admin.ModelAdmin):
-    list_display = ['user', 'player_id', 'player_position', 'created_on', 'updated_on']
+    list_display = ["user", "player_id", "player_position", "created_on", "updated_on"]
 
 
 class OTPStoreAdmin(admin.ModelAdmin):
-    list_display = ['phone_no', 'data', 'is_used', 'created_on']
+    list_display = ["phone_no", "data", "is_used", "created_on"]
 
 
 class UserRequestAdmin(admin.ModelAdmin):
-    list_display = ['user', 'request_type', 'status', 'requested_at', 'processed_at']
-    list_filter = ['request_type', 'status', 'requested_at']
-    search_fields = ['user__phone_no', 'description']
+    list_display = ["user", "request_type", "status", "requested_at", "processed_at"]
+    list_filter = ["request_type", "status", "requested_at"]
+    search_fields = ["user__phone_no", "description"]
 
 
 admin_site.register(WajoUser, WajoUserAdmin)

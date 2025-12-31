@@ -29,6 +29,7 @@ from tracevision.tasks import download_video_and_save_to_azure_blob
 
 logger = logging.getLogger(__name__)
 
+
 class TraceClipReelSerializer(serializers.ModelSerializer):
     age_group = serializers.CharField(source="session.age_group", read_only=True)
     match_date = serializers.DateField(source="session.match_date", read_only=True)
@@ -48,18 +49,30 @@ class TraceVisionProcessesSerializer(serializers.ModelSerializer):
     away_team_jersey_color = serializers.CharField(
         source="away_team.jersey_color", read_only=True
     )
-    
+
     def get_home_team_name(self, obj):
-        user_language = 'en'
-        if self.context.get('request') and hasattr(self.context['request'], 'user'):
-            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
-        return get_localized_team_name(obj.home_team, user_language) if obj.home_team else None
-    
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
+        return (
+            get_localized_team_name(obj.home_team, user_language)
+            if obj.home_team
+            else None
+        )
+
     def get_away_team_name(self, obj):
-        user_language = 'en'
-        if self.context.get('request') and hasattr(self.context['request'], 'user'):
-            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
-        return get_localized_team_name(obj.away_team, user_language) if obj.away_team else None
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
+        return (
+            get_localized_team_name(obj.away_team, user_language)
+            if obj.away_team
+            else None
+        )
 
     class Meta:
         model = TraceSession
@@ -74,18 +87,31 @@ class TraceSessionListSerializer(serializers.ModelSerializer):
 
     home_team_name = serializers.SerializerMethodField()
     away_team_name = serializers.SerializerMethodField()
-    
+
     def get_home_team_name(self, obj):
-        user_language = 'en'
-        if self.context.get('request') and hasattr(self.context['request'], 'user'):
-            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
-        return get_localized_team_name(obj.home_team, user_language) if obj.home_team else None
-    
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
+        return (
+            get_localized_team_name(obj.home_team, user_language)
+            if obj.home_team
+            else None
+        )
+
     def get_away_team_name(self, obj):
-        user_language = 'en'
-        if self.context.get('request') and hasattr(self.context['request'], 'user'):
-            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
-        return get_localized_team_name(obj.away_team, user_language) if obj.away_team else None
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
+        return (
+            get_localized_team_name(obj.away_team, user_language)
+            if obj.away_team
+            else None
+        )
+
     home_team_jersey_color = serializers.CharField(
         source="home_team.jersey_color", read_only=True
     )
@@ -550,11 +576,11 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                 if base_tab in available_tabs:
                     found_tabs[base_tab] = base_tab
                     continue
-                
+
                 # Check for multilingual format (_en and _he suffixes)
                 en_tab = f"{base_tab}_en"
                 he_tab = f"{base_tab}_he"
-                
+
                 if en_tab in available_tabs or he_tab in available_tabs:
                     # At least one language version exists
                     if en_tab in available_tabs:
@@ -562,19 +588,21 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                     elif he_tab in available_tabs:
                         found_tabs[base_tab] = he_tab
                     continue
-                
+
                 # Tab not found in any format
                 missing_tabs.append(base_tab)
 
             if missing_tabs:
-                errors.append(f"Missing required tabs: {', '.join(missing_tabs)}. Expected either '{missing_tabs[0]}' or '{missing_tabs[0]}_en'/'{missing_tabs[0]}_he' format.")
+                errors.append(
+                    f"Missing required tabs: {', '.join(missing_tabs)}. Expected either '{missing_tabs[0]}' or '{missing_tabs[0]}_en'/'{missing_tabs[0]}_he' format."
+                )
 
             # Check columns for each found tab (use English version if available, otherwise Hebrew)
             for base_tab, actual_tab_name in found_tabs.items():
                 required_cols = required_columns.get(base_tab, [])
                 if not required_cols:  # Skip column check if no columns required
                     continue
-                    
+
                 try:
                     df = pd.read_excel(value, sheet_name=actual_tab_name)
                     actual_columns = df.columns.tolist()
@@ -626,28 +654,30 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                 }
             )
 
-    def _validate_and_extract_excel_teams(self, excel_file, home_team_name, away_team_name):
+    def _validate_and_extract_excel_teams(
+        self, excel_file, home_team_name, away_team_name
+    ):
         """
         Validate Excel file team names match request team names and extract match data.
         This is called FIRST before any DB operations to prevent creating invalid data.
-        
+
         Args:
             excel_file: Excel file from request
             home_team_name: Home team name from request
             away_team_name: Away team name from request
-            
+
         Returns:
             dict: Match data with language_metadata if validation passes
-            
+
         Raises:
             ValidationError if Excel data doesn't match input team names
         """
         import tempfile
         import os
         from tracevision.utils import extract_multilingual_match_data
-        
+
         # Create temporary file
-        suffix = os.path.splitext(excel_file.name)[1] or '.xlsx'
+        suffix = os.path.splitext(excel_file.name)[1] or ".xlsx"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
             for chunk in excel_file.chunks():
                 tmp_file.write(chunk)
@@ -657,63 +687,69 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             # Extract multilingual data
             logger.info(f"Validating Excel file before creating any database objects")
             match_data = extract_multilingual_match_data(tmp_file_path)
-            
+
             # Extract team names from Excel (both languages)
             excel_teams = {
                 "home": {"en": None, "he": None},
-                "away": {"en": None, "he": None}
+                "away": {"en": None, "he": None},
             }
-            
+
             # Get team names from English and Hebrew sections
             for lang in ["en", "he"]:
                 if lang in match_data and "Match_summary" in match_data[lang]:
                     summary = match_data[lang]["Match_summary"]
                     excel_teams["home"][lang] = summary.get("match_home_team")
                     excel_teams["away"][lang] = summary.get("match_away_team")
-            
+
             # Normalize names for comparison
             def normalize(name):
                 return name.strip().lower() if name else ""
 
             input_home = normalize(home_team_name)
             input_away = normalize(away_team_name)
-            
+
             # Validate Home Team - must match at least one language
             excel_home_names = [
                 normalize(excel_teams["home"]["en"]),
-                normalize(excel_teams["home"]["he"])
+                normalize(excel_teams["home"]["he"]),
             ]
             if input_home not in excel_home_names:
-                raise ValidationError({
-                    "error": "Team name mismatch",
-                    "message": f"Home team name '{home_team_name}' does not match the Excel file data.",
-                    "details": f"Excel file contains: EN='{excel_teams['home']['en']}', HE='{excel_teams['home']['he']}'"
-                })
+                raise ValidationError(
+                    {
+                        "error": "Team name mismatch",
+                        "message": f"Home team name '{home_team_name}' does not match the Excel file data.",
+                        "details": f"Excel file contains: EN='{excel_teams['home']['en']}', HE='{excel_teams['home']['he']}'",
+                    }
+                )
 
             # Validate Away Team - must match at least one language
             excel_away_names = [
                 normalize(excel_teams["away"]["en"]),
-                normalize(excel_teams["away"]["he"])
+                normalize(excel_teams["away"]["he"]),
             ]
             if input_away not in excel_away_names:
-                raise ValidationError({
-                    "error": "Team name mismatch",
-                    "message": f"Away team name '{away_team_name}' does not match the Excel file data.",
-                    "details": f"Excel file contains: EN='{excel_teams['away']['en']}', HE='{excel_teams['away']['he']}'"
-                })
-            
+                raise ValidationError(
+                    {
+                        "error": "Team name mismatch",
+                        "message": f"Away team name '{away_team_name}' does not match the Excel file data.",
+                        "details": f"Excel file contains: EN='{excel_teams['away']['en']}', HE='{excel_teams['away']['he']}'",
+                    }
+                )
+
             # Validation passed - return match data
             logger.info(f"Excel validation passed - team names match")
             return match_data
-            
+
         except ValidationError:
             raise
         except Exception as e:
             logger.error(f"Error processing basic_game_stats: {e}", exc_info=True)
-            raise ValidationError({
-                "error": "File processing error",
-                "message": f"Failed to process the game stats file: {str(e)}"
-            })
+            raise ValidationError(
+                {
+                    "error": "File processing error",
+                    "message": f"Failed to process the game stats file: {str(e)}",
+                }
+            )
         finally:
             # Clean up temp file
             if os.path.exists(tmp_file_path):
@@ -725,51 +761,55 @@ class TraceVisionProcessSerializer(serializers.Serializer):
     def _validate_user_team_assignment(self, user, home_team_name, away_team_name):
         """
         Validate that user's team matches the home team (for players only).
-        
+
         Args:
             user: WajoUser instance
             home_team_name: Home team name from request
             away_team_name: Away team name from request
-            
+
         Raises:
             ValidationError if team assignment is invalid
         """
         if user.role == "Coach" or not user.team:
             return  # Skip validation for coaches or users without teams
-            
+
         user_team_name = user.team.name or ""
-        
+
         # Check if user's team is set as away team (should be home)
         if user_team_name.lower() == away_team_name.lower():
-            raise ValidationError({
-                "error": "Team assignment error",
-                "message": f"Your team '{user.team.name or user.team.id}' is set as the away team. You should be on the home team.",
-                "user_team": user.team.name or user.team.id,
-                "away_team": away_team_name,
-                "suggestion": "Swap home and away teams, or update your team selection in your profile.",
-            })
-        
+            raise ValidationError(
+                {
+                    "error": "Team assignment error",
+                    "message": f"Your team '{user.team.name or user.team.id}' is set as the away team. You should be on the home team.",
+                    "user_team": user.team.name or user.team.id,
+                    "away_team": away_team_name,
+                    "suggestion": "Swap home and away teams, or update your team selection in your profile.",
+                }
+            )
+
         # Check if user's team matches home team
         if user_team_name.lower() != home_team_name.lower():
-            raise ValidationError({
-                "error": "Team mismatch",
-                "message": f"Your team '{user.team.name or user.team.id}' does not match the home team '{home_team_name}'.",
-                "user_team": user.team.name or user.team.id,
-                "home_team": home_team_name,
-            })
+            raise ValidationError(
+                {
+                    "error": "Team mismatch",
+                    "message": f"Your team '{user.team.name or user.team.id}' does not match the home team '{home_team_name}'.",
+                    "user_team": user.team.name or user.team.id,
+                    "home_team": home_team_name,
+                }
+            )
 
     def _get_or_create_team(self, team_name, jersey_color, team_type="team"):
         """
         Get or create a team by name, validating jersey color.
-        
+
         Args:
             team_name: Name of the team
             jersey_color: Jersey color to validate/set
             team_type: "home" or "away" for error messages
-            
+
         Returns:
             Team instance
-            
+
         Raises:
             ValidationError if jersey color doesn't match existing team
         """
@@ -779,20 +819,22 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         if team_obj:
             # Team exists - validate jersey color matches
             if team_obj.jersey_color and team_obj.jersey_color != jersey_color:
-                raise ValidationError({
-                    "error": "Jersey color mismatch",
-                    "message": f"The {team_type} team '{team_name}' already exists with jersey color '{team_obj.jersey_color}', but you provided '{jersey_color}'.",
-                    "team_name": team_name,
-                    "team_type": team_type,
-                    "existing_color": team_obj.jersey_color,
-                    "provided_color": jersey_color,
-                })
+                raise ValidationError(
+                    {
+                        "error": "Jersey color mismatch",
+                        "message": f"The {team_type} team '{team_name}' already exists with jersey color '{team_obj.jersey_color}', but you provided '{jersey_color}'.",
+                        "team_name": team_name,
+                        "team_type": team_type,
+                        "existing_color": team_obj.jersey_color,
+                        "provided_color": jersey_color,
+                    }
+                )
         else:
             # Create new team with UUID-based ID
             team_id = uuid.uuid4().hex[:10]
             while Team.objects.filter(id=team_id).exists():
                 team_id = uuid.uuid4().hex[:10]
-            
+
             team_obj = Team.objects.create(
                 id=team_id,
                 name=team_name,
@@ -857,8 +899,9 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         if user.role != "Coach" and not user.team:
             user.team = home_team_obj
             user.save(update_fields=["team"])
-            logger.info(f"Set home_team '{home_team_obj.name}' as team for user {user.phone_no}")
-
+            logger.info(
+                f"Set home_team '{home_team_obj.name}' as team for user {user.phone_no}"
+            )
 
         match_date = game_date
         duplicate_session = check_duplicate_game(
@@ -1104,11 +1147,13 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         # Trigger Excel processing task if Excel file is provided (runs before video download)
         if basic_game_stats:
             from tracevision.tasks import process_excel_and_create_players_task
+
             process_excel_and_create_players_task.delay(session.id)
             logger.info(f"Queued Excel processing task for session {session.id}")
 
         # Trigger video download task
         from tracevision.tasks import download_video_and_save_to_azure_blob
+
         download_video_and_save_to_azure_blob.delay(session.id)
 
         return session
@@ -1128,12 +1173,15 @@ class HighlightDatePlayerSerializer(serializers.ModelSerializer):
     player_jersey_number = serializers.IntegerField(
         source="jersey_number", read_only=True
     )
-    
+
     def get_player_name(self, obj):
-        user_language = 'en'
-        if self.context.get('request') and hasattr(self.context['request'], 'user'):
-            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
         return get_localized_player_name(obj, user_language)
+
     player_position = serializers.CharField(source="position", read_only=True)
     side = serializers.SerializerMethodField()
     team = serializers.SerializerMethodField()
@@ -1153,14 +1201,14 @@ class HighlightDatePlayerSerializer(serializers.ModelSerializer):
         """Determine if player is on home or away team, transformed by viewer perspective"""
         # Get first session (or use context session if available)
         session = None
-        if hasattr(self.context, 'session'):
-            session = self.context.get('session')
+        if hasattr(self.context, "session"):
+            session = self.context.get("session")
         elif obj.sessions.exists():
             session = obj.sessions.first()
-        
+
         if not session:
             return None
-            
+
         side = None
         if session.home_team and obj.team and session.home_team.id == obj.team.id:
             side = "home"
@@ -1184,9 +1232,11 @@ class HighlightDatePlayerSerializer(serializers.ModelSerializer):
             return {"team_id": None, "team_name": None, "side": self.get_side(obj)}
 
         # Get user language preference
-        user_language = 'en'
-        if self.context.get('request') and hasattr(self.context['request'], 'user'):
-            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
 
         return {
             "team_id": obj.team.id,
@@ -1205,10 +1255,15 @@ class HighlightDateTeamSerializer(serializers.Serializer):
         """Handle None team instances"""
         if instance is None:
             return {"id": None, "name": None}
-        user_language = 'en'
-        if self.context.get('request') and hasattr(self.context['request'], 'user'):
-            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
-        return {"id": instance.id, "name": get_localized_team_name(instance, user_language)}
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
+        return {
+            "id": instance.id,
+            "name": get_localized_team_name(instance, user_language),
+        }
 
 
 class HighlightDateSessionSerializer(serializers.ModelSerializer):
@@ -1281,12 +1336,15 @@ class PlayerDetailSerializer(serializers.ModelSerializer):
     id = serializers.CharField(read_only=True)
     team_id = serializers.CharField(source="team.id", read_only=True)
     team_name = serializers.SerializerMethodField()
-    
+
     def get_team_name(self, obj):
-        user_language = 'en'
-        if self.context.get('request') and hasattr(self.context['request'], 'user'):
-            user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
         return get_localized_team_name(obj.team, user_language) if obj.team else None
+
     created_at = serializers.DateTimeField(
         format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True
     )
@@ -1339,21 +1397,27 @@ class MatchInfoSerializer(serializers.ModelSerializer):
         """Get home team, transformed to 'team' or 'opponent' based on viewer"""
         if obj.home_team:
             # Get user language preference
-            user_language = 'en'
+            user_language = "en"
             request = self.context.get("request")
             if request and request.user:
-                user_language = getattr(request.user, 'selected_language', 'en') or 'en'
+                user_language = getattr(request.user, "selected_language", "en") or "en"
                 viewer_team = get_viewer_team(request.user)
                 if viewer_team:
                     viewer_perspective = determine_viewer_perspective(viewer_team, obj)
-                    team_data = {"id": str(obj.home_team.id), "name": get_localized_team_name(obj.home_team, user_language)}
+                    team_data = {
+                        "id": str(obj.home_team.id),
+                        "name": get_localized_team_name(obj.home_team, user_language),
+                    }
                     if viewer_perspective == "home":
                         team_data["label"] = "team"
                     elif viewer_perspective == "away":
                         team_data["label"] = "opponent"
                     return team_data
-            
-            team_data = {"id": str(obj.home_team.id), "name": get_localized_team_name(obj.home_team, user_language)}
+
+            team_data = {
+                "id": str(obj.home_team.id),
+                "name": get_localized_team_name(obj.home_team, user_language),
+            }
             return team_data
         return None
 
@@ -1361,21 +1425,27 @@ class MatchInfoSerializer(serializers.ModelSerializer):
         """Get away team, transformed to 'team' or 'opponent' based on viewer"""
         if obj.away_team:
             # Get user language preference
-            user_language = 'en'
+            user_language = "en"
             request = self.context.get("request")
             if request and request.user:
-                user_language = getattr(request.user, 'selected_language', 'en') or 'en'
+                user_language = getattr(request.user, "selected_language", "en") or "en"
                 viewer_team = get_viewer_team(request.user)
                 if viewer_team:
                     viewer_perspective = determine_viewer_perspective(viewer_team, obj)
-                    team_data = {"id": str(obj.away_team.id), "name": get_localized_team_name(obj.away_team, user_language)}
+                    team_data = {
+                        "id": str(obj.away_team.id),
+                        "name": get_localized_team_name(obj.away_team, user_language),
+                    }
                     if viewer_perspective == "away":
                         team_data["label"] = "team"
                     elif viewer_perspective == "home":
                         team_data["label"] = "opponent"
                     return team_data
-            
-            team_data = {"id": str(obj.away_team.id), "name": get_localized_team_name(obj.away_team, user_language)}
+
+            team_data = {
+                "id": str(obj.away_team.id),
+                "name": get_localized_team_name(obj.away_team, user_language),
+            }
             return team_data
         return None
 
@@ -1627,10 +1697,16 @@ class PossessionTeamMetricsSerializer(serializers.Serializer):
         team_data = None
         if obj.get("team"):
             # Get user language preference
-            user_language = 'en'
-            if self.context.get('request') and hasattr(self.context['request'], 'user'):
-                user_language = getattr(self.context['request'].user, 'selected_language', 'en') or 'en'
-            team_data = {"id": str(obj["team"].id), "name": get_localized_team_name(obj["team"], user_language)}
+            user_language = "en"
+            if self.context.get("request") and hasattr(self.context["request"], "user"):
+                user_language = (
+                    getattr(self.context["request"].user, "selected_language", "en")
+                    or "en"
+                )
+            team_data = {
+                "id": str(obj["team"].id),
+                "name": get_localized_team_name(obj["team"], user_language),
+            }
 
         # Add transformed side to team data
         side = obj.get("side")
@@ -1690,10 +1766,10 @@ class PossessionPlayerMetricsSerializer(serializers.Serializer):
                     side = transform_side_by_perspective(side, viewer_perspective)
 
         # Get user language preference
-        user_language = 'en'
+        user_language = "en"
         if request and request.user:
-            user_language = getattr(request.user, 'selected_language', 'en') or 'en'
-        
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+
         return {
             "id": str(player.id),
             "name": get_localized_player_name(player, user_language),

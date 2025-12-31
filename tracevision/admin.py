@@ -113,25 +113,45 @@ class TracePlayerAdmin(admin.ModelAdmin):
     ]
     search_fields = ["name", "object_id", "team__name", "position", "user__email"]
     list_filter = ["team", "position", "created_at"]
-    readonly_fields = ["id", "created_at", "updated_at", "is_mapped", "team_name", "sessions_count"]
+    readonly_fields = [
+        "id",
+        "created_at",
+        "updated_at",
+        "is_mapped",
+        "team_name",
+        "sessions_count",
+    ]
     date_hierarchy = "created_at"
     filter_horizontal = ["sessions"]
 
     fieldsets = (
         (
             "Player Information",
-            {"fields": ("id", "object_id", "name", "jersey_number", "position", "language_metadata")},
+            {
+                "fields": (
+                    "id",
+                    "object_id",
+                    "name",
+                    "jersey_number",
+                    "position",
+                    "language_metadata",
+                )
+            },
         ),
-        ("Relationships", {"fields": ("sessions", "team", "user", "is_mapped", "sessions_count")}),
+        (
+            "Relationships",
+            {"fields": ("sessions", "team", "user", "is_mapped", "sessions_count")},
+        ),
         (
             "Timestamps",
             {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
         ),
     )
-    
+
     def sessions_count(self, obj):
         """Display the number of sessions this player participates in"""
         return obj.sessions.count()
+
     sessions_count.short_description = "Sessions"
 
 
@@ -157,7 +177,16 @@ class TraceHighlightAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Highlight Information",
-            {"fields": ("id", "highlight_id", "video_id", "start_offset", "duration", "video_time")},
+            {
+                "fields": (
+                    "id",
+                    "highlight_id",
+                    "video_id",
+                    "start_offset",
+                    "duration",
+                    "video_time",
+                )
+            },
         ),
         (
             "Event Details",

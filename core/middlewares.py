@@ -7,7 +7,6 @@ from django.contrib import auth
 from django.utils.deprecation import MiddlewareMixin
 
 from accounts.models import WajoUser
-from accounts.utils import find_user_by_normalized_phone
 from .models import APILog
 
 
@@ -39,7 +38,7 @@ class JWTAuthentication(authentication.BaseAuthentication):
             if payload['token_type'] != 'access':
                 raise exceptions.AuthenticationFailed('Invalid token type, expected access token')
 
-            user = find_user_by_normalized_phone(payload['id'])
+            user = WajoUser.objects.get(id=payload['id'])
             if not user:
                 raise exceptions.AuthenticationFailed('No such user')
             return (user, None)
