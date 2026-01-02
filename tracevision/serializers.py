@@ -376,20 +376,20 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                     )
 
             # Check if user belongs to a team (for coaches, check teams_coached)
-            has_team = False
-            if user.role == "Coach":
-                has_team = user.teams_coached.exists()
-            else:
-                # For players and other roles, check team ForeignKey
-                has_team = user.team is not None
+            # has_team = False
+            # if user.role == "Coach":
+            #     has_team = user.teams_coached.exists()
+            # else:
+            #     # For players and other roles, check team ForeignKey
+            #     has_team = user.team is not None
 
-            if not has_team:
-                raise serializers.ValidationError(
-                    {
-                        "error": "Team required",
-                        "message": "Please select your team in your profile to continue.",
-                    }
-                )
+            # if not has_team:
+            #     raise serializers.ValidationError(
+            #         {
+            #             "error": "Team required",
+            #             "message": "Please select your team in your profile to continue.",
+            #         }
+            #     )
 
         # Ensure team names are different
         if data["home_team_name"].lower() == data["away_team_name"].lower():
@@ -1152,9 +1152,9 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             logger.info(f"Queued Excel processing task for session {session.id}")
 
         # Trigger video download task
-        from tracevision.tasks import download_video_and_save_to_azure_blob
+        # from tracevision.tasks import download_video_and_save_to_azure_blob
 
-        download_video_and_save_to_azure_blob.delay(session.id)
+        # download_video_and_save_to_azure_blob.delay(session.id)
 
         return session
 

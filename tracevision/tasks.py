@@ -2622,6 +2622,6 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
         error_msg = f"Error in process_excel_match_highlights_task for session {session_id}: {str(e)}"
         logger.exception(error_msg)
         return {"success": False, "error": error_msg}
-    selected_language = models.CharField(max_length=15)
+    # selected_language = models.CharField(max_length=15)
     # fcm_token = models.CharField(max_length=255)
     # we have WajoUserDevice to store FCM tokens

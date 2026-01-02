@@ -43,6 +43,12 @@ class WajoUser(models.Model):
     sleep_time = models.TimeField(blank=True, null=True)
     picture = models.ImageField(blank=True, null=True, upload_to=profile_picture_path)
     jersey_number = models.IntegerField(blank=True, null=True)
+    language_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        null=True,
+        help_text="Multilingual match data with 'en' and 'he' sections containing match summary, lineups, replacements, bench, coaches, and referees",
+    )
 
     # Team relationship for players
     team = models.ForeignKey(

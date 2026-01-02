@@ -23,6 +23,7 @@ from typing import Dict, Tuple, Optional
 from django.core.files.storage import default_storage
 
 
+from accounts.models import WajoUser
 from cards.models import GPSAthleticSkills, GPSFootballAbilities
 from tracevision.models import (
     TracePlayer,
@@ -33,6 +34,33 @@ from tracevision.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def create_wajo_user(team, jersey_number, player_data: dict, player_role: str = "Player"):
+    """
+    Create a WajoUser for the given team and jersey number.
+    Fills in available details from player_data.
+    """
+    if not team:
+        raise ValueError("Team must be provided to create WajoUser")
+    
+
+    # Create the WajoUser
+    user = WajoUser.objects.create(
+        name=player_data["name"]["en"] or player_data["name"]["he"] or f"Player {jersey_number}",
+        jersey_number=jersey_number,
+        team=team,
+        language_metadata={
+            "en": {"name": player_data["name"]["en"]},
+            "he": {"name": player_data["name"]["he"]},
+        },
+        is_registered=False,
+        created_via="EXCEL",
+        role=player_role,
+    )
+
+    return user
+
 
 
 def get_localized_name(obj, user_language=None, field_name="name"):
@@ -166,7 +194,7 @@ def normalize_multilingual_data(match_data):
     he_data = match_data.get("he", {})
 
     en_summary = en_data.get("Match_summary", {})
-    he_summary = he_data.get("Match_summary", {})
+    he_summary = he_data.get("MatcMaih_summary", {})
 
     # Normalize team data
     home_team = {
@@ -603,6 +631,17 @@ def update_player_language_metadata(session, normalized_data, generate_tokens=Fa
                     f"EN={player_data['name']['en']}, HE={player_data['name']['he']}"
                 )
 
+            """
+            1: Now check for the existing user using the team, jersey number
+                1. If player_data is player
+                    if trace_player.user is Not none, then skip,
+                    if trace_player.user is none, then:
+                        First check for existing user with the team and jearsey number, and if found, map it to trace_player.user
+                        if not found, then creaet a WajoUser using the available_date and map the trace_player.user to the newly created user. for the new user the mobile number & email will be empty, but try to fill all other detail like name, team, jersey number, position etc.
+
+            
+            """
+            
         except Exception as e:
             logger.error(f"Error updating player {player_data}: {e}", exc_info=True)
             continue
@@ -3148,31 +3187,36 @@ def process_excel_and_create_players(session_id):
             return {"success": False, "error": error_msg}
 
         # Download Excel file from storage
-        logger.info(f"Downloading Excel file for session {session_id}")
-        try:
-            excel_file_path = download_excel_file_from_storage(
-                session.basic_game_stats.url
-            )
-        except Exception as e:
-            error_msg = f"Failed to download Excel file: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return {"success": False, "error": error_msg}
+        # logger.info(f"Downloading Excel file for session {session_id}")
+        # try:
+        #     excel_file_path = download_excel_file_from_storage(
+        #         session.basic_game_stats.url
+        #     )
+        # except Exception as e:
+        #     error_msg = f"Failed to download Excel file: {str(e)}"
+        #     logger.error(error_msg, exc_info=True)
+        #     return {"success": False, "error": error_msg}
 
         # Step 1: Extract multilingual data using existing method
-        try:
-            logger.info(f"Extracting multilingual data from Excel file")
-            match_data = extract_multilingual_match_data(excel_file_path)
-        except Exception as e:
-            error_msg = f"Failed to extract multilingual data: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            try:
-                import os
-
-                if os.path.exists(excel_file_path):
-                    os.unlink(excel_file_path)
-            except:
-                pass
-            return {"success": False, "error": error_msg}
+        # try:
+        #     logger.info(f"Extracting multilingual data from Excel file")
+        #     match_data = extract_multilingual_match_data(excel_file_path)
+        # except Exception as e:
+        #     error_msg = f"Failed to extract multilingual data: {str(e)}"
+        #     logger.error(error_msg, exc_info=True)
+        #     try:
+        #         if os.path.exists(excel_file_path):
+        #             os.unlink(excel_file_path)
+        #     except Exception as e:
+        #         logger.error(f"Failed to unlink the file due to the: {e}")
+        #         pass
+        #     return {"success": False, "error": error_msg}
+        match_data = None
+        # Read the Match data from the  already saved json file.
+        match_data_json_path = "./tracevision/data/Gmae_Match_Detail Template_multilingual.json"
+        with open(match_data_json_path, 'r', encoding='urf-8') as f:
+            match_data = json.load(f)
+        
 
         # Step 2: Update TraceSession multilingual data (updates Game and Team) using existing method
         try:
@@ -3384,7 +3428,6 @@ def process_excel_and_create_players(session_id):
                     f"{tokens_generated} tokens generated, {highlights_created} highlights created, "
                     f"{home_goals} home goals, {away_goals} away goals"
                 )
-
         except Exception as e:
             error_msg = f"Error processing players: {str(e)}"
             logger.error(error_msg, exc_info=True)
@@ -3392,13 +3435,12 @@ def process_excel_and_create_players(session_id):
 
         finally:
             # Clean up temp file
-            try:
-                import os
-
-                if os.path.exists(excel_file_path):
-                    os.unlink(excel_file_path)
-            except Exception as e:
-                logger.warning(f"Failed to delete temp file {excel_file_path}: {e}")
+            pass
+            # try:
+            #     if os.path.exists(excel_file_path):
+            #         os.unlink(excel_file_path)
+            # except Exception as e:
+            #     logger.warning(f"Failed to delete temp file {excel_file_path}: {e}")
 
         return {
             "success": True,
