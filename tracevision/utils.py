@@ -36,27 +36,77 @@ from tracevision.models import (
 logger = logging.getLogger(__name__)
 
 
-def create_wajo_user(team, jersey_number, player_data: dict, player_role: str = "Player"):
+def create_wajo_user(team, jersey_number, user_data: dict, user_role: str = "Player"):
     """
-    Create a WajoUser for the given team and jersey number.
-    Fills in available details from player_data.
-    """
-    if not team:
-        raise ValueError("Team must be provided to create WajoUser")
+    Create a WajoUser for the given role (Player, Coach, Referee, etc.).
+    Fills in available details from user_data.
     
-
+    Args:
+        team: Team instance (required for Players and Coaches, None for Referees)
+        jersey_number: Jersey number (required for Players, None for Coaches/Referees)
+        user_data: Dict with multilingual name data, e.g., {"name": {"en": "...", "he": "..."}, "role": {"en": "...", "he": "..."}}
+        user_role: Role type - "Player", "Coach", "Referee", etc.
+    
+    Returns:
+        WajoUser instance
+    """
+    if user_role == "Player":
+        if not team:
+            raise ValueError("Team must be provided to create WajoUser for Player role")
+        if jersey_number is None:
+            raise ValueError("Jersey number must be provided to create WajoUser for Player role")
+    elif user_role == "Coach":
+        if not team:
+            raise ValueError("Team must be provided to create WajoUser for Coach role")
+        # jersey_number should be None for coaches
+        jersey_number = None
+    elif user_role == "Referee":
+        # Referees don't have team or jersey_number
+        team = None
+        jersey_number = None
+    
+    if not user_data:
+        user_data = {"name": {"en": "", "he": ""}, "role": {"en": "", "he": ""}}
+    
+    # Determine primary name (use English if available, else Hebrew, else default)
+    name_en = user_data.get("name", {}).get("en", "").strip()
+    name_he = user_data.get("name", {}).get("he", "").strip()
+    
+    if user_role == "Player":
+        primary_name = name_en or name_he or f"Player {jersey_number}"
+    elif user_role == "Coach":
+        primary_name = name_en or name_he or "Coach"
+    elif user_role == "Referee":
+        primary_name = name_en or name_he or "Referee"
+    else:
+        primary_name = name_en or name_he or user_role
+    
+    # Build language_metadata
+    language_metadata = {}
+    if name_en:
+        language_metadata["en"] = {"name": name_en}
+        role_en = user_data.get("role", {}).get("en", "").strip()
+        if role_en:
+            language_metadata["en"]["role"] = role_en
+    
+    if name_he:
+        language_metadata["he"] = {"name": name_he}
+        role_he = user_data.get("role", {}).get("he", "").strip()
+        if role_he:
+            language_metadata["he"]["role"] = role_he
+    
     # Create the WajoUser
+    # For coaches and referees, phone_no should be None (they don't have phone numbers from Excel)
     user = WajoUser.objects.create(
-        name=player_data["name"]["en"] or player_data["name"]["he"] or f"Player {jersey_number}",
+        name=primary_name,
         jersey_number=jersey_number,
         team=team,
-        language_metadata={
-            "en": {"name": player_data["name"]["en"]},
-            "he": {"name": player_data["name"]["he"]},
-        },
+        phone_no=None,  # Explicitly set to None for coaches/referees (and players without phone numbers)
+        language_metadata=language_metadata,
         is_registered=False,
         created_via="EXCEL",
-        role=player_role,
+        role=user_role,
+        selected_language="en",
     )
 
     return user
@@ -194,7 +244,7 @@ def normalize_multilingual_data(match_data):
     he_data = match_data.get("he", {})
 
     en_summary = en_data.get("Match_summary", {})
-    he_summary = he_data.get("MatcMaih_summary", {})
+    he_summary = he_data.get("Match_summary", {})  # Fixed typo: was "MatcMaih_summary"
 
     # Normalize team data
     home_team = {
@@ -486,7 +536,20 @@ def update_player_language_metadata(session, normalized_data, generate_tokens=Fa
     created_count = 0
     update_details = []
 
-    for player_data in normalized_data["players"]:
+    players_list = normalized_data.get("players", [])
+    logger.info(f"Processing {len(players_list)} players from normalized data")
+    
+    if not players_list:
+        logger.warning("No players found in normalized_data['players'] - check normalize_multilingual_data function")
+        return {
+            "updated_count": 0,
+            "created_count": 0,
+            "tokens_generated": 0,
+            "total_players": 0,
+            "update_details": [],
+        }
+
+    for player_data in players_list:
         logger.info(f"Processing player {player_data}")
         try:
             # Find TracePlayer by team and jersey number
@@ -631,16 +694,48 @@ def update_player_language_metadata(session, normalized_data, generate_tokens=Fa
                     f"EN={player_data['name']['en']}, HE={player_data['name']['he']}"
                 )
 
-            """
-            1: Now check for the existing user using the team, jersey number
-                1. If player_data is player
-                    if trace_player.user is Not none, then skip,
-                    if trace_player.user is none, then:
-                        First check for existing user with the team and jearsey number, and if found, map it to trace_player.user
-                        if not found, then creaet a WajoUser using the available_date and map the trace_player.user to the newly created user. for the new user the mobile number & email will be empty, but try to fill all other detail like name, team, jersey number, position etc.
-
-            
-            """
+            # Check for existing WajoUser and map/create if needed
+            # Use team + jersey_number as the primary identifier (not name, to avoid duplicates)
+            if not trace_player.user:
+                existing_user = WajoUser.objects.filter(
+                    team=team, jersey_number=jersey_number, role="Player"
+                ).first()
+                
+                if existing_user:
+                    trace_player.user = existing_user
+                    trace_player.save(update_fields=["user"])
+                    logger.debug(
+                        f"Mapped existing WajoUser {existing_user.id} to TracePlayer #{jersey_number}"
+                    )
+                else:
+                    # Create new WajoUser
+                    user_data = {
+                        "name": {
+                            "en": player_data.get("name", {}).get("en", ""),
+                            "he": player_data.get("name", {}).get("he", ""),
+                        },
+                        "role": {
+                            "en": player_data.get("role", {}).get("en", ""),
+                            "he": player_data.get("role", {}).get("he", ""),
+                        },
+                    }
+                    try:
+                        new_user = create_wajo_user(
+                            team=team,
+                            jersey_number=jersey_number,
+                            user_data=user_data,
+                            user_role="Player"
+                        )
+                        trace_player.user = new_user
+                        trace_player.save(update_fields=["user"])
+                        logger.debug(
+                            f"Created new WajoUser {new_user.id} and mapped to TracePlayer #{jersey_number}"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to create WajoUser for player #{jersey_number}: {e}",
+                            exc_info=True
+                        )
             
         except Exception as e:
             logger.error(f"Error updating player {player_data}: {e}", exc_info=True)
@@ -759,25 +854,17 @@ def _create_clip_reels_for_highlight(
     event_type = highlight.event_type or "touch"
 
     # Calculate start_ms and duration_ms based on video_time if available
+    # Use highlight.start_offset (which was calculated from video_time in _create_goal_highlight)
     start_ms = highlight.start_offset
     duration_ms = highlight.duration
 
+    # If video_time is available, recalculate with buffer for clip reels
     if highlight.video_time and highlight.video_time.strip():
         try:
-            # Parse video_time (format: "mm:ss" or "hh:mm:ss")
-            time_parts = highlight.video_time.strip().split(":")
-
-            if len(time_parts) == 2:  # mm:ss format
-                minutes, seconds = map(int, time_parts)
-                video_time_ms = (minutes * 60 + seconds) * 1000
-            elif len(time_parts) == 3:  # hh:mm:ss format
-                hours, minutes, seconds = map(int, time_parts)
-                video_time_ms = (hours * 3600 + minutes * 60 + seconds) * 1000
-            else:
-                # Invalid format, use default
-                video_time_ms = None
-
-            if video_time_ms is not None and video_time_ms > 0:
+            # Use the same parse_time_to_seconds function for consistency
+            video_seconds = parse_time_to_seconds(highlight.video_time)
+            if video_seconds is not None and video_seconds > 0:
+                video_time_ms = video_seconds * 1000
                 # Add 40 seconds (40000ms) buffer before the event
                 buffer_ms = 40000
                 start_ms = max(0, video_time_ms - buffer_ms)  # Ensure non-negative
@@ -786,12 +873,18 @@ def _create_clip_reels_for_highlight(
                 # Total: 40s before + original duration + 40s after
                 duration_ms = highlight.duration + (2 * buffer_ms)
 
-                logger.info(
+                logger.debug(
                     f"Using video_time {highlight.video_time} for clip reel: "
                     f"start_ms={start_ms}, duration_ms={duration_ms}"
                 )
-        except (ValueError, AttributeError) as e:
-            logger.warning(f"Failed to parse video_time '{highlight.video_time}': {e}")
+            else:
+                # If parsing failed, use highlight.start_offset (which may have been calculated from match_time)
+                logger.debug(
+                    f"Using highlight.start_offset {highlight.start_offset}ms for clip reel "
+                    f"(video_time parsing returned None or 0)"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to parse video_time '{highlight.video_time}' for clip reel: {e}")
             # Fall back to using highlight.start_offset and highlight.duration
 
     # Define clip reel configurations
@@ -3163,7 +3256,6 @@ def process_excel_and_create_players(session_id):
             TraceSession,
             TracePlayer,
             TraceVisionSessionStats,
-            TraceHighlight,
         )
         from tracevision.tasks import update_trace_session_multilingual_data
         from tracevision.utils import create_highlights_from_normalized_data
@@ -3187,35 +3279,30 @@ def process_excel_and_create_players(session_id):
             return {"success": False, "error": error_msg}
 
         # Download Excel file from storage
-        # logger.info(f"Downloading Excel file for session {session_id}")
-        # try:
-        #     excel_file_path = download_excel_file_from_storage(
-        #         session.basic_game_stats.url
-        #     )
-        # except Exception as e:
-        #     error_msg = f"Failed to download Excel file: {str(e)}"
-        #     logger.error(error_msg, exc_info=True)
-        #     return {"success": False, "error": error_msg}
+        logger.info(f"Downloading Excel file for session {session_id}")
+        try:
+            excel_file_path = download_excel_file_from_storage(
+                session.basic_game_stats.url
+            )
+        except Exception as e:
+            error_msg = f"Failed to download Excel file: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return {"success": False, "error": error_msg}
 
         # Step 1: Extract multilingual data using existing method
-        # try:
-        #     logger.info(f"Extracting multilingual data from Excel file")
-        #     match_data = extract_multilingual_match_data(excel_file_path)
-        # except Exception as e:
-        #     error_msg = f"Failed to extract multilingual data: {str(e)}"
-        #     logger.error(error_msg, exc_info=True)
-        #     try:
-        #         if os.path.exists(excel_file_path):
-        #             os.unlink(excel_file_path)
-        #     except Exception as e:
-        #         logger.error(f"Failed to unlink the file due to the: {e}")
-        #         pass
-        #     return {"success": False, "error": error_msg}
-        match_data = None
-        # Read the Match data from the  already saved json file.
-        match_data_json_path = "./tracevision/data/Gmae_Match_Detail Template_multilingual.json"
-        with open(match_data_json_path, 'r', encoding='urf-8') as f:
-            match_data = json.load(f)
+        try:
+            logger.info(f"Extracting multilingual data from Excel file")
+            match_data = extract_multilingual_match_data(excel_file_path)
+        except Exception as e:
+            error_msg = f"Failed to extract multilingual data: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            try:
+                if os.path.exists(excel_file_path):
+                    os.unlink(excel_file_path)
+            except Exception as e:
+                logger.error(f"Failed to unlink the file due to the: {e}")
+                pass
+            return {"success": False, "error": error_msg}
         
 
         # Step 2: Update TraceSession multilingual data (updates Game and Team) using existing method
@@ -3246,6 +3333,15 @@ def process_excel_and_create_players(session_id):
             with transaction.atomic():
                 # Get normalized player data
                 normalized_data = normalize_multilingual_data(match_data)
+                
+                # Debug: Log normalized data structure
+                logger.info(
+                    f"Normalized data: {len(normalized_data.get('players', []))} players found"
+                )
+                if normalized_data.get("players"):
+                    logger.debug(
+                        f"First few players: {normalized_data['players'][:3]}"
+                    )
 
                 # Step 3: Update/create players and generate tokens using existing method
                 logger.info(
@@ -3344,7 +3440,155 @@ def process_excel_and_create_players(session_id):
                         )
                         continue
 
-                # Step 5: Create highlights from normalized data using existing method
+                # Step 5: Process coaches and referees from match_data
+                coaches_created = 0
+                referees_created = 0
+                
+                try:
+                    from games.models import Game
+                    
+                    en_data = match_data.get("en", {})
+                    he_data = match_data.get("he", {})
+                    
+                    # Helper function to match team by name
+                    def find_team_by_name(team_name):
+                        """Find team by matching name in English or Hebrew."""
+                        if not team_name:
+                            return None
+                        team_name = team_name.strip()
+                        
+                        # Check direct name match
+                        if team_name == session.home_team.name:
+                            return session.home_team
+                        if team_name == session.away_team.name:
+                            return session.away_team
+                        
+                        # Check language_metadata
+                        for team in [session.home_team, session.away_team]:
+                            if team.language_metadata:
+                                en_name = team.language_metadata.get("en", {}).get("name", "").strip()
+                                he_name = team.language_metadata.get("he", {}).get("name", "").strip()
+                                if team_name == en_name or team_name == he_name:
+                                    return team
+                        return None
+                    
+                    # Process coaches
+                    en_coaches = en_data.get("coaches", {})
+                    he_coaches = he_data.get("coaches", {})
+                    
+                    for team_name_en, coaches_list_en in en_coaches.items():
+                        team = find_team_by_name(team_name_en)
+                        if not team:
+                            # Try Hebrew team names
+                            for he_team_name in he_coaches.keys():
+                                team = find_team_by_name(he_team_name)
+                                if team:
+                                    break
+                        
+                        if not team:
+                            logger.warning(f"Could not find team for coach team name: {team_name_en}")
+                            continue
+                        
+                        # Get corresponding Hebrew coaches list
+                        coaches_list_he = []
+                        for he_team_name, coaches_list_he_candidate in he_coaches.items():
+                            if find_team_by_name(he_team_name) == team:
+                                coaches_list_he = coaches_list_he_candidate
+                                break
+                        if not coaches_list_he and team_name_en in he_coaches:
+                            coaches_list_he = he_coaches[team_name_en]
+                        
+                        # Process each coach
+                        for idx, coach_en in enumerate(coaches_list_en):
+                            coach_he = coaches_list_he[idx] if idx < len(coaches_list_he) else {}
+                            coach_name_en = coach_en.get("name", "").strip()
+                            coach_name_he = coach_he.get("name", "").strip() if coach_he else ""
+                            
+                            if not coach_name_en and not coach_name_he:
+                                continue
+                            
+                            # Check if coach already exists (by name, regardless of team)
+                            existing_coach = WajoUser.objects.filter(role="Coach").filter(
+                                Q(name=coach_name_en) | Q(name=coach_name_he) |
+                                Q(language_metadata__en__name=coach_name_en) |
+                                Q(language_metadata__he__name=coach_name_he)
+                            ).first() if (coach_name_en or coach_name_he) else None
+                            
+                            if not existing_coach:
+                                # Create new coach
+                                user_data = {
+                                    "name": {"en": coach_name_en, "he": coach_name_he},
+                                    "role": {"en": coach_en.get("role", "Coach"), "he": coach_he.get("role", "מאמן") if coach_he else ""},
+                                }
+                                try:
+                                    new_coach = create_wajo_user(team=team, jersey_number=None, user_data=user_data, user_role="Coach")
+                                    coaches_created += 1
+                                    # Map coach to team via M2M relationship
+                                    if new_coach not in team.coach.all():
+                                        team.coach.add(new_coach)
+                                    logger.debug(f"Created coach: {coach_name_en or coach_name_he} for team {team.name}")
+                                except Exception as e:
+                                    logger.error(f"Failed to create coach {coach_name_en or coach_name_he}: {e}", exc_info=True)
+                            else:
+                                # Coach exists - update team assignment and map to team
+                                if existing_coach.team != team:
+                                    existing_coach.team = team
+                                    existing_coach.save(update_fields=["team"])
+                                
+                                # Ensure coach is mapped to team via M2M relationship
+                                if existing_coach not in team.coach.all():
+                                    team.coach.add(existing_coach)
+                                    logger.debug(f"Mapped existing coach {existing_coach.name} to team {team.name}")
+                    
+                    # Process referees
+                    en_referees = en_data.get("referees", [])
+                    he_referees = he_data.get("referees", [])
+                    game = session.game
+                    
+                    if game:
+                        for idx, referee_en in enumerate(en_referees):
+                            referee_he = he_referees[idx] if idx < len(he_referees) else {}
+                            referee_name_en = referee_en.get("name", "").strip()
+                            referee_name_he = referee_he.get("name", "").strip() if referee_he else ""
+                            
+                            if not referee_name_en and not referee_name_he:
+                                continue
+                            
+                            # Check if referee already exists (by name only, no team)
+                            existing_referee = WajoUser.objects.filter(role="Referee").filter(
+                                Q(name=referee_name_en) | Q(name=referee_name_he) |
+                                Q(language_metadata__en__name=referee_name_en) |
+                                Q(language_metadata__he__name=referee_name_he)
+                            ).first() if (referee_name_en or referee_name_he) else None
+                            
+                            if not existing_referee:
+                                # Create new referee
+                                user_data = {
+                                    "name": {"en": referee_name_en, "he": referee_name_he},
+                                    "role": {"en": referee_en.get("position", "Referee"), "he": referee_he.get("position", "שופט") if referee_he else ""},
+                                }
+                                try:
+                                    new_referee = create_wajo_user(team=None, jersey_number=None, user_data=user_data, user_role="Referee")
+                                    referees_created += 1
+                                    # Map referee to game via M2M relationship
+                                    if new_referee not in game.referees.all():
+                                        game.referees.add(new_referee)
+                                    logger.debug(f"Created referee: {referee_name_en or referee_name_he}")
+                                except Exception as e:
+                                    logger.error(f"Failed to create referee {referee_name_en or referee_name_he}: {e}", exc_info=True)
+                            else:
+                                # Referee exists - ensure mapped to game
+                                if existing_referee not in game.referees.all():
+                                    game.referees.add(existing_referee)
+                                    logger.debug(f"Mapped existing referee {existing_referee.name} to game {game.id}")
+                    else:
+                        logger.warning(f"Session {session_id} has no associated game, skipping referee assignment")
+                    
+                    logger.info(f"Coaches and referees processing complete: {coaches_created} coaches created, {referees_created} referees created")
+                except Exception as e:
+                    logger.warning(f"Failed to process coaches and referees: {str(e)}", exc_info=True)
+                
+                # Step 6: Create highlights from normalized data using existing method
                 try:
                     highlight_result = create_highlights_from_normalized_data(
                         session, normalized_data
@@ -3358,7 +3602,7 @@ def process_excel_and_create_players(session_id):
                         f"Failed to create highlights: {str(e)}", exc_info=True
                     )
 
-                # Step 6: Update or create TraceVisionSessionStats with goal statistics
+                # Step 7: Update or create TraceVisionSessionStats with goal statistics
                 try:
                     session_stats, stats_created = (
                         TraceVisionSessionStats.objects.get_or_create(
@@ -3426,6 +3670,7 @@ def process_excel_and_create_players(session_id):
                     f"Processed Excel data for session {session_id}: "
                     f"{players_created} players created, {players_updated} players updated, "
                     f"{tokens_generated} tokens generated, {highlights_created} highlights created, "
+                    f"{coaches_created} coaches created, {referees_created} referees created, "
                     f"{home_goals} home goals, {away_goals} away goals"
                 )
         except Exception as e:
@@ -3449,6 +3694,8 @@ def process_excel_and_create_players(session_id):
             "players_updated": players_updated,
             "tokens_generated": tokens_generated,
             "highlights_created": highlights_created,
+            "coaches_created": coaches_created,
+            "referees_created": referees_created,
             "goal_statistics": {
                 "home_goals": home_goals,
                 "away_goals": away_goals,

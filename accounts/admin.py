@@ -5,8 +5,10 @@ from core.admin import admin_site
 
 class WajoUserAdmin(admin.ModelAdmin):
     list_display = (
-        "phone_no",
+        "id",
         "name",
+        "email",
+        "phone_no",
         "selected_language",
         "role",
         "created_on",

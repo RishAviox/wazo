@@ -1,11 +1,8 @@
-import logging
-import os
-import requests
 import uuid
-import hashlib
-from datetime import datetime
-from django.conf import settings
+import logging
+import requests
 from django.db.models import Q
+from django.conf import settings
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
@@ -20,12 +17,12 @@ from tracevision.utils import (
     get_or_create_canonical_game,
     get_localized_team_name,
     get_localized_player_name,
+    get_localized_name,
 )
 from teams.models import Team
 from tracevision.models import TraceSession
 from tracevision.services import TraceVisionService
-from games.models import GameUserRole, Game
-from tracevision.tasks import download_video_and_save_to_azure_blob
+from games.models import GameUserRole
 
 logger = logging.getLogger(__name__)
 
@@ -954,121 +951,121 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         api_key = settings.TRACEVISION_API_KEY
         graphql_url = settings.TRACEVISION_GRAPHQL_URL
 
-        # session_payload = {
-        #     "query": """
-        #         mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
-        #             createSession(token: $token, sessionData: $sessionData) {
-        #                 session { session_id }
-        #                 success
-        #                 error
-        #             }
-        #         }
-        #     """,
-        #     "variables": {
-        #         "token": {"customer_id": customer_id, "token": api_key},
-        #         "sessionData": {
-        #             "type": "soccer_game",
-        #             "game_info": {
-        #                 "home_team": {
-        #                     "name": home_team_name,
-        #                     "score": home_score,
-        #                     "color": home_color,
-        #                 },
-        #                 "away_team": {
-        #                     "name": away_team_name,
-        #                     "score": away_score,
-        #                     "color": away_color,
-        #                 },
-        #             },
-        #             "capabilities": ["tracking", "highlights"],
-        #         },
-        #     },
-        # }
+        session_payload = {
+            "query": """
+                mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
+                    createSession(token: $token, sessionData: $sessionData) {
+                        session { session_id }
+                        success
+                        error
+                    }
+                }
+            """,
+            "variables": {
+                "token": {"customer_id": customer_id, "token": api_key},
+                "sessionData": {
+                    "type": "soccer_game",
+                    "game_info": {
+                        "home_team": {
+                            "name": home_team_name,
+                            "score": home_score,
+                            "color": home_color,
+                        },
+                        "away_team": {
+                            "name": away_team_name,
+                            "score": away_score,
+                            "color": away_color,
+                        },
+                    },
+                    "capabilities": ["tracking", "highlights"],
+                },
+            },
+        }
 
-        # session_response = requests.post(
-        #     graphql_url,
-        #     headers={"Content-Type": "application/json"},
-        #     json=session_payload,
-        # )
-        # session_json = session_response.json()
+        session_response = requests.post(
+            graphql_url,
+            headers={"Content-Type": "application/json"},
+            json=session_payload,
+        )
+        session_json = session_response.json()
 
-        # if session_response.status_code != 200 or not session_json.get("data", {}).get(
-        #     "createSession", {}
-        # ).get("success"):
-        #     raise ValidationError(
-        #         {
-        #             "error": "TraceVision session creation failed",
-        #             "details": session_json,
-        #         }
-        #     )
+        if session_response.status_code != 200 or not session_json.get("data", {}).get(
+            "createSession", {}
+        ).get("success"):
+            raise ValidationError(
+                {
+                    "error": "TraceVision session creation failed",
+                    "details": session_json,
+                }
+            )
 
-        # session_id = session_json["data"]["createSession"]["session"]["session_id"]
-        session_id = "1234567890"
+        session_id = session_json["data"]["createSession"]["session"]["session_id"]
+        # session_id = "1234567890"
 
         # Check for duplicate by video_url BEFORE processing video
-        video_url_for_db = "http://sfsfsfsf/sfs"
-        # if video_link:
-        #     video_url_for_db = video_link
-        #     duplicate_session = check_duplicate_game(video_url=video_url_for_db)
-        #     if duplicate_session:
-        #         existing_game = duplicate_session.game
-        #         raise ValidationError(
-        #             {
-        #                 "error": "Video already processed",
-        #                 "message": "This video has already been uploaded and processed.",
-        #                 "existing_data": {
-        #                     "session": {
-        #                         "id": duplicate_session.id,
-        #                         "session_id": duplicate_session.session_id,
-        #                         "match_date": duplicate_session.match_date.isoformat(),
-        #                         "home_team": (
-        #                             duplicate_session.home_team.name
-        #                             if duplicate_session.home_team
-        #                             else None
-        #                         ),
-        #                         "away_team": (
-        #                             duplicate_session.away_team.name
-        #                             if duplicate_session.away_team
-        #                             else None
-        #                         ),
-        #                         "status": duplicate_session.status,
-        #                     },
-        #                     "game": (
-        #                         {
-        #                             "id": existing_game.id if existing_game else None,
-        #                             "type": (
-        #                                 existing_game.type if existing_game else None
-        #                             ),
-        #                             "name": (
-        #                                 existing_game.name if existing_game else None
-        #                             ),
-        #                             "date": (
-        #                                 existing_game.date.isoformat()
-        #                                 if existing_game and existing_game.date
-        #                                 else None
-        #                             ),
-        #                         }
-        #                         if existing_game
-        #                         else None
-        #                     ),
-        #                 },
-        #             }
-        #         )
+        # video_url_for_db = "http://sfsfsfsf/sfs"
+        if video_link:
+            video_url_for_db = video_link
+            duplicate_session = check_duplicate_game(video_url=video_url_for_db)
+            if duplicate_session:
+                existing_game = duplicate_session.game
+                raise ValidationError(
+                    {
+                        "error": "Video already processed",
+                        "message": "This video has already been uploaded and processed.",
+                        "existing_data": {
+                            "session": {
+                                "id": duplicate_session.id,
+                                "session_id": duplicate_session.session_id,
+                                "match_date": duplicate_session.match_date.isoformat(),
+                                "home_team": (
+                                    duplicate_session.home_team.name
+                                    if duplicate_session.home_team
+                                    else None
+                                ),
+                                "away_team": (
+                                    duplicate_session.away_team.name
+                                    if duplicate_session.away_team
+                                    else None
+                                ),
+                                "status": duplicate_session.status,
+                            },
+                            "game": (
+                                {
+                                    "id": existing_game.id if existing_game else None,
+                                    "type": (
+                                        existing_game.type if existing_game else None
+                                    ),
+                                    "name": (
+                                        existing_game.name if existing_game else None
+                                    ),
+                                    "date": (
+                                        existing_game.date.isoformat()
+                                        if existing_game and existing_game.date
+                                        else None
+                                    ),
+                                }
+                                if existing_game
+                                else None
+                            ),
+                        },
+                    }
+                )
 
         # Handle video processing
-        # if video_link:
-        #     video_url_for_db = TraceVisionService.import_game_video(
-        #         session_id=session_id, video_link=video_link, start_time=start_time
-        #     )
-        # else:
-        #     # Video file upload is not supported - this should be caught by validation
-        #     # but adding safety check here as well
-        #     raise ValidationError(
-        #         {
-        #             "error": "Video file upload not supported",
-        #             "message": "Video file upload is currently not supported. Please use video_link instead to provide a URL to your video.",
-        #         }
-        #     )
+        if video_link:
+            video_url_for_db = TraceVisionService.import_game_video(
+                session_id=session_id, video_link=video_link, start_time=start_time
+            )
+        else:
+            # Video file upload is not supported - this should be caught by validation
+            # but adding safety check here as well
+            raise ValidationError(
+                {
+                    "error": "Video file upload not supported",
+                    "message": "Video file upload is currently not supported. Please use video_link instead to provide a URL to your video.",
+                }
+            )
         # TODO: Implement video upload functionality later
 
         # Get or create canonical game
@@ -1152,9 +1149,9 @@ class TraceVisionProcessSerializer(serializers.Serializer):
             logger.info(f"Queued Excel processing task for session {session.id}")
 
         # Trigger video download task
-        # from tracevision.tasks import download_video_and_save_to_azure_blob
+        from tracevision.tasks import download_video_and_save_to_azure_blob
+        download_video_and_save_to_azure_blob.delay(session.id)
 
-        # download_video_and_save_to_azure_blob.delay(session.id)
 
         return session
 
@@ -1250,11 +1247,23 @@ class HighlightDateTeamSerializer(serializers.Serializer):
 
     id = serializers.CharField(allow_null=True)
     name = serializers.CharField(allow_null=True)
+    logo = serializers.SerializerMethodField()
+
+    def get_logo(self, instance):
+        """Get team logo URL"""
+        if instance is None:
+            return None
+        if instance.logo:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(instance.logo.url)
+            return instance.logo.url
+        return None
 
     def to_representation(self, instance):
         """Handle None team instances"""
         if instance is None:
-            return {"id": None, "name": None}
+            return {"id": None, "name": None, "logo": None}
         user_language = "en"
         if self.context.get("request") and hasattr(self.context["request"], "user"):
             user_language = (
@@ -1263,6 +1272,7 @@ class HighlightDateTeamSerializer(serializers.Serializer):
         return {
             "id": instance.id,
             "name": get_localized_team_name(instance, user_language),
+            "logo": self.get_logo(instance),
         }
 
 
@@ -1275,6 +1285,11 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
     home_team = HighlightDateTeamSerializer(read_only=True)
     away_team = HighlightDateTeamSerializer(read_only=True)
     players = serializers.SerializerMethodField()
+    match_logo = serializers.SerializerMethodField()
+    match_status = serializers.SerializerMethodField()
+    score = serializers.SerializerMethodField()
+    goal_scorers = serializers.SerializerMethodField()
+    stadium = serializers.SerializerMethodField()
 
     class Meta:
         model = TraceSession
@@ -1294,7 +1309,228 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             "match_end_time",
             "players",
             "video_url",
+            "match_logo",
+            "match_status",
+            "score",
+            "goal_scorers",
+            "stadium",
         ]
+
+    def get_match_logo(self, obj):
+        """Get match logo from home team (preferred) or away team"""
+        # Prefer home team logo
+        if obj.home_team and obj.home_team.logo:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(obj.home_team.logo.url)
+            return obj.home_team.logo.url
+        # Fallback to away team logo
+        elif obj.away_team and obj.away_team.logo:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(obj.away_team.logo.url)
+            return obj.away_team.logo.url
+        return None
+
+    def get_match_status(self, obj):
+        """Determine match status: Scheduled, Live, or Ended"""
+        from django.utils import timezone
+        from datetime import datetime, date, time as dt_time
+        
+        if not obj.match_date:
+            return "Scheduled"
+        
+        today = timezone.now().date()
+        match_date = obj.match_date
+        
+        # If match date is in the future, it's Scheduled
+        if match_date > today:
+            return "Scheduled"
+        
+        # If match date is today, check if it's live based on match_start_time and match_end_time
+        if match_date == today:
+            if obj.match_start_time and obj.match_end_time:
+                try:
+                    # Parse match times
+                    start_time = datetime.strptime(obj.match_start_time, "%H:%M:%S").time()
+                    end_time = datetime.strptime(obj.match_end_time, "%H:%M:%S").time()
+                    current_time = timezone.now().time()
+                    
+                    # Check if current time is between start and end
+                    if start_time <= current_time <= end_time:
+                        return "Live"
+                except (ValueError, AttributeError):
+                    pass
+            
+            # If status is processed, it's likely ended
+            if obj.status == "processed":
+                return "Ended"
+            
+            # Default to Live if today and no clear end time
+            return "Live"
+        
+        # If match date is in the past, it's Ended
+        if match_date < today:
+            return "Ended"
+        
+        # Default to Scheduled
+        return "Scheduled"
+
+    def get_score(self, obj):
+        """Get match score when match is Ended"""
+        match_status = self.get_match_status(obj)
+        if match_status == "Ended":
+            return {
+                "home": obj.home_score if obj.home_score is not None else 0,
+                "away": obj.away_score if obj.away_score is not None else 0,
+            }
+        return None
+
+    def get_goal_scorers(self, obj):
+        """Get goal scorers grouped by team with half information"""
+        from tracevision.models import TraceVisionSessionStats
+        
+        # Get user language preference
+        user_language = "en"
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        # Use prefetched highlights if available, otherwise query
+        if hasattr(obj, "_prefetched_goal_highlights"):
+            goal_highlights = obj._prefetched_goal_highlights
+        else:
+            # Get all goal highlights for this session
+            goal_highlights = TraceHighlight.objects.filter(
+                session=obj,
+                event_type="goal"
+            ).select_related("player", "player__team").order_by("half", "match_time")
+        
+        # Structure: {team_side: [goals], goal_counts: {home: {first_half: X, second_half: Y}, away: {...}}}
+        home_goals = []
+        away_goals = []
+        home_first_half_count = 0
+        home_second_half_count = 0
+        away_first_half_count = 0
+        away_second_half_count = 0
+        
+        for highlight in goal_highlights:
+            if not highlight.player:
+                continue
+            
+            # Get player name in user's language
+            player_name = get_localized_name(highlight.player, user_language, "name")
+            if not player_name:
+                player_name = highlight.player.name or f"Player {highlight.player.jersey_number}"
+            
+            # Get goal minute
+            goal_minute = highlight.match_time or highlight.event_metadata.get("minute", "")
+            
+            # Determine team side
+            team_side = None
+            if highlight.player.team == obj.home_team:
+                team_side = "home"
+            elif highlight.player.team == obj.away_team:
+                team_side = "away"
+            else:
+                # Try to get from tags or event_metadata
+                if "home" in (highlight.tags or []):
+                    team_side = "home"
+                elif "away" in (highlight.tags or []):
+                    team_side = "away"
+                elif highlight.event_metadata:
+                    team_side = highlight.event_metadata.get("team", "").lower()
+            
+            if not team_side:
+                continue
+            
+            # Determine half
+            half = highlight.half or 1
+            if highlight.match_time:
+                try:
+                    # Parse match_time (format: "MM:SS" or "MM")
+                    minute_str = highlight.match_time.split(":")[0] if ":" in highlight.match_time else highlight.match_time
+                    minute = int(minute_str.replace("'", "").replace("min", "").strip())
+                    half = 1 if minute <= 45 else 2
+                except (ValueError, AttributeError):
+                    pass
+            
+            goal_data = {
+                "player_name": player_name,
+                "jersey_number": highlight.player.jersey_number,
+                "minute": goal_minute,
+                "half": half,
+            }
+            
+            if team_side == "home":
+                home_goals.append(goal_data)
+                if half == 1:
+                    home_first_half_count += 1
+                else:
+                    home_second_half_count += 1
+            else:
+                away_goals.append(goal_data)
+                if half == 1:
+                    away_first_half_count += 1
+                else:
+                    away_second_half_count += 1
+        
+        # Also check TraceVisionSessionStats for goal counts (more accurate)
+        # Use prefetched session_stats if available
+        try:
+            if hasattr(obj, "session_stats") and obj.session_stats.exists():
+                session_stats = obj.session_stats.first()
+            else:
+                from tracevision.models import TraceVisionSessionStats
+                session_stats = TraceVisionSessionStats.objects.filter(session=obj).first()
+            
+            if session_stats:
+                home_stats = session_stats.home_team_stats or {}
+                away_stats = session_stats.away_team_stats or {}
+                
+                if home_stats.get("first_half_goals") is not None:
+                    home_first_half_count = home_stats.get("first_half_goals", 0)
+                    home_second_half_count = home_stats.get("second_half_goals", 0)
+                
+                if away_stats.get("first_half_goals") is not None:
+                    away_first_half_count = away_stats.get("first_half_goals", 0)
+                    away_second_half_count = away_stats.get("second_half_goals", 0)
+        except Exception:
+            pass
+        
+        return {
+            "home": home_goals,
+            "away": away_goals,
+            "goal_counts": {
+                "home": {
+                    "first_half": home_first_half_count,
+                    "second_half": home_second_half_count,
+                    "total": home_first_half_count + home_second_half_count,
+                },
+                "away": {
+                    "first_half": away_first_half_count,
+                    "second_half": away_second_half_count,
+                    "total": away_first_half_count + away_second_half_count,
+                },
+            },
+        }
+
+    def get_stadium(self, obj):
+        """Get stadium/venue from language_metadata"""
+        user_language = "en"
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        if obj.language_metadata:
+            match_summary = obj.language_metadata.get(user_language, {}).get("Match_summary", {})
+            if match_summary:
+                # Try match_location first, then match_venue
+                stadium = match_summary.get("match_location") or match_summary.get("match_venue") or match_summary.get("Stadium") or match_summary.get("Venue")
+                if stadium:
+                    return stadium
+        
+        return None
 
     def get_players(self, obj):
         """Get players from teams (home_team and away_team) - not filtered by session"""

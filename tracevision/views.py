@@ -1260,7 +1260,17 @@ class GetAvailableHighlightDatesView(APIView):
                         .filter(
                             clip_reels__isnull=False
                         )  # Ensure sessions have highlights
-                        .select_related("home_team", "away_team")
+                        .select_related("home_team", "away_team", "game")
+                        .prefetch_related(
+                            Prefetch(
+                                "highlights",
+                                queryset=TraceHighlight.objects.filter(
+                                    event_type="goal"
+                                ).select_related("player", "player__team"),
+                                to_attr="_prefetched_goal_highlights"
+                            ),
+                            "session_stats"
+                        )
                         .distinct()
                         .order_by("-match_date", "-id")
                     )
@@ -1286,7 +1296,17 @@ class GetAvailableHighlightDatesView(APIView):
                         models.Q(clip_reels__primary_player=player)
                         | models.Q(clip_reels__involved_players=player)
                     )
-                    .select_related("home_team", "away_team")
+                    .select_related("home_team", "away_team", "game")
+                    .prefetch_related(
+                        Prefetch(
+                            "highlights",
+                            queryset=TraceHighlight.objects.filter(
+                                event_type="goal"
+                            ).select_related("player", "player__team"),
+                            to_attr="_prefetched_goal_highlights"
+                        ),
+                        "session_stats"
+                    )
                     .distinct()
                     .order_by("-match_date", "-id")
                 )
@@ -1620,6 +1640,14 @@ class GenerateHighlightClipReelView(APIView):
         primary_player = clip_reel.primary_player
         player_team = primary_player.team
         player_team_id = player_team.id if player_team else None
+
+        logger.info(f"user_role: {user_role}")
+        logger.info(f"user_teams_coached_ids: {user_teams_coached_ids}")
+        logger.info(f"player_team_id: {player_team_id}")
+        logger.info(f"primary_player: {primary_player}")
+        logger.info(f"player_team: {player_team}")
+        logger.info(f"user: {user}")
+        logger.info(f"clip_reel: {clip_reel}")
 
         # Coach authorization: must be coach of the team that the primary player belongs to
         if user_role == "Coach":

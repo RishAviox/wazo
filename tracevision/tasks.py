@@ -177,7 +177,8 @@ def get_full_azure_blob_url(file_path: str) -> str:
             )
             return default_storage.url(file_path)
     except Exception as e:
-        logger.exception(f"Error generating Azure blob URL for {file_path}: {e}")
+        logger.exception(
+            f"Error generating Azure blob URL for {file_path}: {e}")
         return default_storage.url(file_path)
 
 
@@ -300,7 +301,8 @@ def upload_file_direct(blob_client, file_path, content_type, file_size):
         )
         return True
     except Exception as e:
-        logger.error(f"Direct upload failed: {e}", exc_info=True, stack_info=True)
+        logger.error(
+            f"Direct upload failed: {e}", exc_info=True, stack_info=True)
         return False
 
 
@@ -411,7 +413,8 @@ def upload_large_file_chunked(
             return False
 
     except Exception as e:
-        logger.error(f"Chunked upload failed: {e}", exc_info=True, stack_info=True)
+        logger.error(
+            f"Chunked upload failed: {e}", exc_info=True, stack_info=True)
         return False
 
 
@@ -425,7 +428,8 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
         session = TraceSession.objects.get(id=session_id)
 
         if session.blob_video_url:
-            logger.info(f"Video already downloaded for session {session.session_id}")
+            logger.info(
+                f"Video already downloaded for session {session.session_id}")
             return {
                 "success": True,
                 "blob_url": session.blob_video_url,
@@ -473,7 +477,8 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
                             f"Downloaded {total_size / (1024*1024):.1f} MB for session {session.session_id}"
                         )
 
-        logger.info(f"Download complete. Total size: {total_size / (1024*1024):.1f} MB")
+        logger.info(
+            f"Download complete. Total size: {total_size / (1024*1024):.1f} MB")
 
         # Upload to Azure Blob Storage using SDK with retry logic
         blob_service_client = None
@@ -533,7 +538,8 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
             try:
                 # Validate file exists and get size
                 if not os.path.exists(temp_file_path):
-                    raise FileNotFoundError(f"Video file not found: {temp_file_path}")
+                    raise FileNotFoundError(
+                        f"Video file not found: {temp_file_path}")
 
                 file_size = os.path.getsize(temp_file_path)
                 if file_size == 0:
@@ -646,7 +652,8 @@ def download_video_and_save_to_azure_blob(session_id, timeout=1200):
                                 logger.info("Chunked upload successful!")
                                 break
                         except Exception as chunked_error:
-                            logger.error(f"Chunked upload also failed: {chunked_error}")
+                            logger.error(
+                                f"Chunked upload also failed: {chunked_error}")
 
                     logger.error(
                         f"All upload methods failed: {e}",
@@ -729,7 +736,8 @@ def upload_result_data_to_azure_blob(session, result_data):
         )
 
         # Create proper file path structure for Azure blob storage
-        file_path = TraceVisionStoragePaths.get_session_result_path(session.session_id)
+        file_path = TraceVisionStoragePaths.get_session_result_path(
+            session.session_id)
 
         # Create ContentFile with the JSON data
         json_content = json.dumps(result_data, indent=2, ensure_ascii=False)
@@ -800,7 +808,8 @@ def parse_and_store_session_data(session, result_data):
             objects_data = result_data.get("objects", [])
             player_map = {}
 
-            logger.info(f"Processing {len(objects_data)} objects to get/create players")
+            logger.info(
+                f"Processing {len(objects_data)} objects to get/create players")
 
             for obj_data in objects_data:
                 object_id = obj_data.get("object_id")
@@ -884,7 +893,8 @@ def parse_and_store_session_data(session, result_data):
                     )
                 else:
                     # Create new player
-                    team_name = team.name if hasattr(team, "name") else str(team)
+                    team_name = team.name if hasattr(
+                        team, "name") else str(team)
                     logger.info(
                         f"Creating new player (object_id: {object_id}, team: {team_name}, jersey: {jersey_number})"
                     )
@@ -903,11 +913,13 @@ def parse_and_store_session_data(session, result_data):
 
                 player_map[object_id] = trace_player
 
-            logger.info(f"Processed {len(player_map)} players (existing + new)")
+            logger.info(
+                f"Processed {len(player_map)} players (existing + new)")
 
             # Step 2: Create TraceObject objects linked to players
             trace_objects = []
-            logger.info(f"Creating trace objects for {len(objects_data)} objects")
+            logger.info(
+                f"Creating trace objects for {len(objects_data)} objects")
 
             for obj_data in objects_data:
                 object_id = obj_data.get("object_id")
@@ -930,7 +942,8 @@ def parse_and_store_session_data(session, result_data):
 
             # Bulk create objects
             if trace_objects:
-                created_objects = TraceObject.objects.bulk_create(trace_objects)
+                created_objects = TraceObject.objects.bulk_create(
+                    trace_objects)
                 logger.info(f"Created {len(created_objects)} trace objects")
 
                 # Download tracking data for each object
@@ -1029,7 +1042,8 @@ def parse_and_store_session_data(session, result_data):
                 created_highlights = TraceHighlight.objects.bulk_create(
                     trace_highlights
                 )
-                logger.info(f"Created {len(created_highlights)} trace highlights")
+                logger.info(
+                    f"Created {len(created_highlights)} trace highlights")
 
                 # Create highlight-object relationships
                 for i, highlight_data in enumerate(filtered_highlights):
@@ -1055,7 +1069,8 @@ def parse_and_store_session_data(session, result_data):
                                 )
 
                 if highlight_objects_bulk:
-                    TraceHighlightObject.objects.bulk_create(highlight_objects_bulk)
+                    TraceHighlightObject.objects.bulk_create(
+                        highlight_objects_bulk)
                     logger.info(
                         f"Created {len(highlight_objects_bulk)} highlight-object relationships"
                     )
@@ -1070,6 +1085,62 @@ def parse_and_store_session_data(session, result_data):
             f"Error parsing session data for session {session.session_id}: {e}"
         )
         return False
+
+
+def link_excel_goal_highlights_to_trace_objects(session):
+    """
+    Link Excel goal highlights to TraceObjects after TraceVision service creates them.
+    This is needed because Excel goal highlights are created during upload (before TraceObjects exist),
+    so we need to link them once TraceObjects are created by parse_and_store_session_data.
+
+    Note: parse_and_store_session_data already handles:
+    - TracePlayers creation/linking
+    - TraceObjects creation with player links
+    - TraceHighlights creation with player links (for TraceVision highlights)
+    - TraceHighlightObject relationships (for TraceVision highlights)
+
+    This function only handles the missing link for Excel goal highlights.
+
+    Args:
+        session: TraceSession instance
+    """
+    try:
+        # Find Excel goal highlights that don't have TraceHighlightObject relationships
+        goal_highlights = TraceHighlight.objects.filter(
+            session=session,
+            event_type="goal",
+            source="excel_import"
+        ).select_related("player")
+
+        relationships_created = 0
+        for highlight in goal_highlights:
+            if highlight.player:
+                # Find TraceObject for this player (created by TraceVision service)
+                trace_object = TraceObject.objects.filter(
+                    session=session, player=highlight.player
+                ).first()
+
+                if trace_object:
+                    # Create TraceHighlightObject relationship if it doesn't exist
+                    if not TraceHighlightObject.objects.filter(
+                        highlight=highlight, trace_object=trace_object
+                    ).exists():
+                        TraceHighlightObject.objects.create(
+                            highlight=highlight,
+                            trace_object=trace_object,
+                            player=highlight.player,
+                        )
+                        relationships_created += 1
+
+        if relationships_created > 0:
+            logger.info(
+                f"Created {relationships_created} TraceHighlightObject relationships for Excel goal highlights in session {session.session_id}"
+            )
+
+    except Exception as e:
+        logger.exception(
+            f"Error linking Excel goal highlights to TraceObjects for session {session.session_id}: {e}"
+        )
 
 
 def create_silent_notification(session):
@@ -1165,7 +1236,8 @@ def process_trace_sessions_task(trace_session_id=None):
             sessions = TraceSession.objects.filter(id=trace_session_id)
 
         if not sessions.exists():
-            logger.info("All sessions are already processed or in final state.")
+            logger.info(
+                "All sessions are already processed or in final state.")
             return f"No sessions to process"
 
         logger.info(f"Found {sessions.count()} sessions to process")
@@ -1235,7 +1307,8 @@ def process_trace_sessions_task(trace_session_id=None):
                         )
 
                         # Fetch and save result data for both statuses (may contain error details for process_error)
-                        result_data = tracevision_service.get_session_result(session)
+                        result_data = tracevision_service.get_session_result(
+                            session)
                         if result_data:
                             # Upload result data to Azure blob instead of storing in database
                             upload_result = upload_result_data_to_azure_blob(
@@ -1270,6 +1343,16 @@ def process_trace_sessions_task(trace_session_id=None):
                                     session.save()
                                     create_silent_notification(session)
 
+                                    # Link Excel goal highlights to TraceObjects
+                                    # (parse_and_store_session_data already handles all other mappings)
+                                    try:
+                                        link_excel_goal_highlights_to_trace_objects(
+                                            session)
+                                    except Exception as e:
+                                        logger.exception(
+                                            f"Failed to link Excel goal highlights to TraceObjects for session {session.session_id}: {e}"
+                                        )
+
                                     # Enqueue player-to-user mapping task
                                     try:
                                         map_players_to_users_task.delay(
@@ -1281,19 +1364,6 @@ def process_trace_sessions_task(trace_session_id=None):
                                     except Exception as e:
                                         logger.exception(
                                             f"Failed to enqueue player mapping for session {session.session_id}: {e}"
-                                        )
-
-                                    # Enqueue Excel highlights processing FIRST (before other calculations)
-                                    try:
-                                        process_excel_match_highlights_task.delay(
-                                            session.session_id
-                                        )
-                                        logger.info(
-                                            f"Queued Excel highlights processing for session {session.session_id}"
-                                        )
-                                    except Exception as e:
-                                        logger.exception(
-                                            f"Failed to enqueue Excel highlights processing for session {session.session_id}: {e}"
                                         )
 
                                     # # Enqueue aggregates computation (idempotent)
@@ -1386,7 +1456,8 @@ def compute_aggregates_task(session_id, only_possession_segments=False):
 
         if only_possession_segments:
             result = agg.compute_possession_segments_only(session)
-            logger.info(f"Computed possession segments only for session {session_id}")
+            logger.info(
+                f"Computed possession segments only for session {session_id}")
         else:
             result = agg.compute_all(session)
             logger.info(f"Computed aggregates for session {session_id}")
@@ -1479,7 +1550,8 @@ def map_players_to_users_task(session_id=None, user_id=None, game_id=None):
             return {"success": False, "error": error_msg}
 
         if session_id:
-            logger.info(f"Starting player-to-user mapping for session: {session_id}")
+            logger.info(
+                f"Starting player-to-user mapping for session: {session_id}")
         elif user_id:
             logger.info(f"Starting player-to-user mapping for user: {user_id}")
         elif game_id:
@@ -1487,7 +1559,8 @@ def map_players_to_users_task(session_id=None, user_id=None, game_id=None):
 
         if not unmapped_players.exists():
             if session_id:
-                logger.info(f"No unmapped players found for session {session_id}")
+                logger.info(
+                    f"No unmapped players found for session {session_id}")
             elif user_id:
                 logger.info(f"No unmapped players found for user {user_id}")
             elif game_id:
@@ -1498,7 +1571,8 @@ def map_players_to_users_task(session_id=None, user_id=None, game_id=None):
                 "mapped_count": 0,
             }
 
-        logger.info(f"Found {unmapped_players.count()} unmapped players to process")
+        logger.info(
+            f"Found {unmapped_players.count()} unmapped players to process")
 
         mapped_count = 0
         mapping_details = []
@@ -1645,7 +1719,8 @@ def map_players_to_users_task(session_id=None, user_id=None, game_id=None):
                         )
 
             except Exception as e:
-                logger.exception(f"Error mapping player {player.object_id}: {e}")
+                logger.exception(
+                    f"Error mapping player {player.object_id}: {e}")
 
         logger.info(
             f"Successfully mapped {mapped_count}/{unmapped_players.count()} players to users"
@@ -1713,7 +1788,8 @@ def auto_map_user_to_player_task(user_phone_no):
 
         # Get the user
         try:
-            user = WajoUser.objects.select_related("team").get(phone_no=user_phone_no)
+            user = WajoUser.objects.select_related(
+                "team").get(phone_no=user_phone_no)
         except WajoUser.DoesNotExist:
             error_msg = f"User with phone_no '{user_phone_no}' not found"
             logger.error(error_msg)
@@ -1794,7 +1870,8 @@ def auto_map_user_to_player_task(user_phone_no):
                             else ""
                         )
                         user_first_name = (
-                            user.name.split()[0].lower() if user.name.split() else ""
+                            user.name.split()[0].lower(
+                            ) if user.name.split() else ""
                         )
 
                         # Check if first names match
@@ -2061,14 +2138,17 @@ def generate_overlay_highlights_task(
 
             try:
                 if session.blob_video_url:
-                    logger.info(f"Session video available: {session.blob_video_url}")
+                    logger.info(
+                        f"Session video available: {session.blob_video_url}")
                     # We'll extract segments per clip reel instead of downloading full video
                     session_video_url = session.blob_video_url
                 else:
-                    logger.error(f"No video URL available for session {session_key}")
+                    logger.error(
+                        f"No video URL available for session {session_key}")
                     # Mark all clip reels for this session as failed
                     for clip_reel in session_clip_reels:
-                        clip_reel.mark_generation_failed("No video URL available")
+                        clip_reel.mark_generation_failed(
+                            "No video URL available")
                         total_failed += 1
                         all_results.append(
                             {
@@ -2148,7 +2228,8 @@ def generate_overlay_highlights_task(
                         )
 
                         # Calculate video file size
-                        video_size_mb = os.path.getsize(temp_video_path) / (1024 * 1024)
+                        video_size_mb = os.path.getsize(
+                            temp_video_path) / (1024 * 1024)
 
                         # Mark as completed
                         clip_reel.mark_generation_completed(
@@ -2174,7 +2255,8 @@ def generate_overlay_highlights_task(
                             }
                         )
 
-                        logger.info(f"Successfully processed clip reel {clip_reel.id}")
+                        logger.info(
+                            f"Successfully processed clip reel {clip_reel.id}")
 
                     except Exception as e:
                         logger.exception(
@@ -2202,7 +2284,8 @@ def generate_overlay_highlights_task(
                 )
 
             except Exception as e:
-                logger.exception(f"Error processing session {session_key}: {e}")
+                logger.exception(
+                    f"Error processing session {session_key}: {e}")
                 # Mark all remaining clip reels for this session as failed
                 for clip_reel in session_clip_reels:
                     if clip_reel.generation_status == "generating":
@@ -2426,17 +2509,21 @@ def update_trace_session_multilingual_data(match_data, session_id):
 
         # --- Extract team names ---
         en_home = (
-            match_data.get("en", {}).get("Match_summary", {}).get("match_home_team")
+            match_data.get("en", {}).get(
+                "Match_summary", {}).get("match_home_team")
         )
         he_home = (
-            match_data.get("he", {}).get("Match_summary", {}).get("match_home_team")
+            match_data.get("he", {}).get(
+                "Match_summary", {}).get("match_home_team")
         )
 
         en_away = (
-            match_data.get("en", {}).get("Match_summary", {}).get("match_away_team")
+            match_data.get("en", {}).get(
+                "Match_summary", {}).get("match_away_team")
         )
         he_away = (
-            match_data.get("he", {}).get("Match_summary", {}).get("match_away_team")
+            match_data.get("he", {}).get(
+                "Match_summary", {}).get("match_away_team")
         )
 
         # --- Extract game names ---
@@ -2483,7 +2570,8 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
             logger.error(error_msg)
             return {"success": False, "error": error_msg}
 
-        logger.info(f"Starting Excel highlights processing for session: {session_id}")
+        logger.info(
+            f"Starting Excel highlights processing for session: {session_id}")
 
         # # Check if session is processed
         # if session.status != "processed":
@@ -2513,7 +2601,8 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
                 temp_files_to_cleanup.append(temp_excel_path)
             else:
                 # Use provided file path (for testing or direct file access)
-                logger.info(f"Using provided Excel file path: {excel_file_path}")
+                logger.info(
+                    f"Using provided Excel file path: {excel_file_path}")
 
             # Process the new Excel file with the new language extraction function
             try:
@@ -2524,14 +2613,16 @@ def process_excel_match_highlights_task(session_id, excel_file_path=None):
                 # match_data = os.path.join( os.path.dirname(__file__), "./data", "Gmae_Match_Detail Template_multilingual.json")
                 # with open(match_data, "r", encoding="utf-8") as f:
                 # match_data = json.load(f)
-                logger.info(f"Successfully parsed Excel file: {excel_file_path}")
+                logger.info(
+                    f"Successfully parsed Excel file: {excel_file_path}")
             except Exception as e:
                 error_msg = f"Failed to process Excel file: {str(e)}"
                 logger.error(error_msg, stack_info=True, exc_info=True)
                 return {"success": False, "error": error_msg}
 
             # Update TraceSession, Game, and Team multilingual data
-            logger.info(f"Updating multilingual data for session {session_id}...")
+            logger.info(
+                f"Updating multilingual data for session {session_id}...")
             try:
                 update_trace_session_multilingual_data(match_data, session.id)
                 logger.info("Successfully updated session multilingual data")
