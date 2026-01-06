@@ -1324,6 +1324,7 @@ class GetAvailableHighlightDatesView(APIView):
 
                 # Get all TracePlayers for these teams (NOT filtered by session)
                 # This ensures we get players even if they weren't created for this specific session
+                # Select related user to get profile picture for player_logo
                 all_players = TracePlayer.objects.filter(
                     team_id__in=team_ids
                 ).select_related("team", "user")

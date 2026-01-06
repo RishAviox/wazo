@@ -18,6 +18,14 @@ def auto_map_user_to_player_on_create_or_update(sender, instance, created, **kwa
     This runs the auto_map_user_to_player_task in the background.
     """
     try:
+        # Skip if phone_no is None (coaches/referees created from Excel don't have phone numbers)
+        if not instance.phone_no:
+            logger.debug(
+                f"User {instance.id} has no phone_no (likely Coach/Referee from Excel). "
+                f"Skipping auto-mapping."
+            )
+            return
+        
         # Only proceed if user has both jersey_number and team
         if instance.jersey_number and instance.team:
             logger.info(

@@ -1,6 +1,5 @@
 import uuid
 import logging
-import requests
 from django.db.models import Q
 from django.conf import settings
 from rest_framework import serializers
@@ -21,10 +20,16 @@ from tracevision.utils import (
 )
 from teams.models import Team
 from tracevision.models import TraceSession
-from tracevision.services import TraceVisionService
 from games.models import GameUserRole
 
 logger = logging.getLogger(__name__)
+
+# Import Celery task at module level to avoid import issues
+try:
+    from tracevision.tasks import process_excel_and_create_players_task
+except ImportError:
+    process_excel_and_create_players_task = None
+    logger.warning("Could not import process_excel_and_create_players_task")
 
 
 class TraceClipReelSerializer(serializers.ModelSerializer):
@@ -951,59 +956,59 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         api_key = settings.TRACEVISION_API_KEY
         graphql_url = settings.TRACEVISION_GRAPHQL_URL
 
-        session_payload = {
-            "query": """
-                mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
-                    createSession(token: $token, sessionData: $sessionData) {
-                        session { session_id }
-                        success
-                        error
-                    }
-                }
-            """,
-            "variables": {
-                "token": {"customer_id": customer_id, "token": api_key},
-                "sessionData": {
-                    "type": "soccer_game",
-                    "game_info": {
-                        "home_team": {
-                            "name": home_team_name,
-                            "score": home_score,
-                            "color": home_color,
-                        },
-                        "away_team": {
-                            "name": away_team_name,
-                            "score": away_score,
-                            "color": away_color,
-                        },
-                    },
-                    "capabilities": ["tracking", "highlights"],
-                },
-            },
-        }
+        # session_payload = {
+        #     "query": """
+        #         mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
+        #             createSession(token: $token, sessionData: $sessionData) {
+        #                 session { session_id }
+        #                 success
+        #                 error
+        #             }
+        #         }
+        #     """,
+        #     "variables": {
+        #         "token": {"customer_id": customer_id, "token": api_key},
+        #         "sessionData": {
+        #             "type": "soccer_game",
+        #             "game_info": {
+        #                 "home_team": {
+        #                     "name": home_team_name,
+        #                     "score": home_score,
+        #                     "color": home_color,
+        #                 },
+        #                 "away_team": {
+        #                     "name": away_team_name,
+        #                     "score": away_score,
+        #                     "color": away_color,
+        #                 },
+        #             },
+        #             "capabilities": ["tracking", "highlights"],
+        #         },
+        #     },
+        # }
 
-        session_response = requests.post(
-            graphql_url,
-            headers={"Content-Type": "application/json"},
-            json=session_payload,
-        )
-        session_json = session_response.json()
+        # session_response = requests.post(
+        #     graphql_url,
+        #     headers={"Content-Type": "application/json"},
+        #     json=session_payload,
+        # )
+        # session_json = session_response.json()
 
-        if session_response.status_code != 200 or not session_json.get("data", {}).get(
-            "createSession", {}
-        ).get("success"):
-            raise ValidationError(
-                {
-                    "error": "TraceVision session creation failed",
-                    "details": session_json,
-                }
-            )
+        # if session_response.status_code != 200 or not session_json.get("data", {}).get(
+        #     "createSession", {}
+        # ).get("success"):
+        #     raise ValidationError(
+        #         {
+        #             "error": "TraceVision session creation failed",
+        #             "details": session_json,
+        #         }
+        #     )
 
-        session_id = session_json["data"]["createSession"]["session"]["session_id"]
-        # session_id = "1234567890"
+        # session_id = session_json["data"]["createSession"]["session"]["session_id"]
+        session_id = "1234567890"
 
         # Check for duplicate by video_url BEFORE processing video
-        # video_url_for_db = "http://sfsfsfsf/sfs"
+        video_url_for_db = "http://sfsfsfsf/sfs"
         if video_link:
             video_url_for_db = video_link
             duplicate_session = check_duplicate_game(video_url=video_url_for_db)
@@ -1053,19 +1058,19 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                 )
 
         # Handle video processing
-        if video_link:
-            video_url_for_db = TraceVisionService.import_game_video(
-                session_id=session_id, video_link=video_link, start_time=start_time
-            )
-        else:
-            # Video file upload is not supported - this should be caught by validation
-            # but adding safety check here as well
-            raise ValidationError(
-                {
-                    "error": "Video file upload not supported",
-                    "message": "Video file upload is currently not supported. Please use video_link instead to provide a URL to your video.",
-                }
-            )
+        # if video_link:
+        #     video_url_for_db = TraceVisionService.import_game_video(
+        #         session_id=session_id, video_link=video_link, start_time=start_time
+        #     )
+        # else:
+        #     # Video file upload is not supported - this should be caught by validation
+        #     # but adding safety check here as well
+        #     raise ValidationError(
+        #         {
+        #             "error": "Video file upload not supported",
+        #             "message": "Video file upload is currently not supported. Please use video_link instead to provide a URL to your video.",
+        #         }
+        #     )
         # TODO: Implement video upload functionality later
 
         # Get or create canonical game
@@ -1142,15 +1147,20 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         GameUserRole.objects.get_or_create(game=canonical_game, user=user)
 
         # Trigger Excel processing task if Excel file is provided (runs before video download)
-        if basic_game_stats:
-            from tracevision.tasks import process_excel_and_create_players_task
-
-            process_excel_and_create_players_task.delay(session.id)
-            logger.info(f"Queued Excel processing task for session {session.id}")
+        # Check session.basic_game_stats after creation to ensure file was saved
+        if session.basic_game_stats and process_excel_and_create_players_task:
+            try:
+                process_excel_and_create_players_task.delay(session.id)
+                logger.info(f"Queued Excel processing task for session {session.id}")
+            except Exception as e:
+                logger.error(
+                    f"Failed to queue Excel processing task for session {session.id}: {e}",
+                    exc_info=True
+                )
 
         # Trigger video download task
-        from tracevision.tasks import download_video_and_save_to_azure_blob
-        download_video_and_save_to_azure_blob.delay(session.id)
+        # from tracevision.tasks import download_video_and_save_to_azure_blob
+        # download_video_and_save_to_azure_blob.delay(session.id)
 
 
         return session
@@ -1170,6 +1180,7 @@ class HighlightDatePlayerSerializer(serializers.ModelSerializer):
     player_jersey_number = serializers.IntegerField(
         source="jersey_number", read_only=True
     )
+    player_logo = serializers.SerializerMethodField()
 
     def get_player_name(self, obj):
         user_language = "en"
@@ -1178,6 +1189,15 @@ class HighlightDatePlayerSerializer(serializers.ModelSerializer):
                 getattr(self.context["request"].user, "selected_language", "en") or "en"
             )
         return get_localized_player_name(obj, user_language)
+
+    def get_player_logo(self, obj):
+        """Get player logo from user profile picture"""
+        if obj.user and obj.user.picture:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(obj.user.picture.url)
+            return obj.user.picture.url
+        return None
 
     player_position = serializers.CharField(source="position", read_only=True)
     side = serializers.SerializerMethodField()
@@ -1190,36 +1210,42 @@ class HighlightDatePlayerSerializer(serializers.ModelSerializer):
             "player_name",
             "player_jersey_number",
             "player_position",
+            "player_logo",
             "side",
             "team",
         ]
 
     def get_side(self, obj):
         """Determine if player is on home or away team, transformed by viewer perspective"""
-        # Get first session (or use context session if available)
-        session = None
-        if hasattr(self.context, "session"):
-            session = self.context.get("session")
-        elif obj.sessions.exists():
-            session = obj.sessions.first()
-
+        from tracevision.utils import get_viewer_team, determine_viewer_perspective, transform_side_by_perspective
+        
+        # Get session from context (passed from view)
+        session = self.context.get("session")
         if not session:
-            return None
+            # Fallback: get first session if available
+            if obj.sessions.exists():
+                session = obj.sessions.first()
+            else:
+                return None
 
+        # Determine side based on team match
         side = None
         if session.home_team and obj.team and session.home_team.id == obj.team.id:
             side = "home"
         elif session.away_team and obj.team and session.away_team.id == obj.team.id:
             side = "away"
+        
+        if not side:
+            return None
 
-        # Transform side based on viewer perspective
-        viewer_team = get_viewer_team(
-            self.context.get("request").user if self.context.get("request") else None
-        )
-        if viewer_team and side:
-            viewer_perspective = determine_viewer_perspective(viewer_team, session)
-            if viewer_perspective:
-                side = transform_side_by_perspective(side, viewer_perspective)
+        # Transform side based on viewer perspective (so players see their team correctly)
+        request = self.context.get("request")
+        if request and request.user:
+            viewer_team = get_viewer_team(request.user)
+            if viewer_team:
+                viewer_perspective = determine_viewer_perspective(viewer_team, session)
+                if viewer_perspective:
+                    side = transform_side_by_perspective(side, viewer_perspective)
 
         return side
 
@@ -1290,6 +1316,8 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
     score = serializers.SerializerMethodField()
     goal_scorers = serializers.SerializerMethodField()
     stadium = serializers.SerializerMethodField()
+    team_wise_game_info = serializers.SerializerMethodField()
+    team_wise_replacements = serializers.SerializerMethodField()
 
     class Meta:
         model = TraceSession
@@ -1314,6 +1342,8 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             "score",
             "goal_scorers",
             "stadium",
+            "team_wise_game_info",
+            "team_wise_replacements",
         ]
 
     def get_match_logo(self, obj):
@@ -1551,19 +1581,156 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
 
             if team_ids:
                 # Get all TracePlayers for these teams, regardless of session
+                # Select related user to get profile picture for player_logo
                 players = TracePlayer.objects.filter(
                     team_id__in=team_ids
-                ).select_related("team")
+                ).select_related("team", "user")
             else:
                 players = TracePlayer.objects.none()
 
         # Serialize all players (filtered by team, not by session)
         for player in players:
             # Pass context to serializer so it can access request and user language preference
-            serializer = HighlightDatePlayerSerializer(player, context=self.context)
+            # Also pass session so side can be determined correctly
+            context = dict(self.context)
+            context["session"] = obj
+            serializer = HighlightDatePlayerSerializer(player, context=context)
             players_list.append(serializer.data)
 
         return players_list
+
+    def get_team_wise_game_info(self, obj):
+        """Get team-wise game information (goals, first half goals, etc.)"""
+        from tracevision.models import TraceVisionSessionStats
+        
+        # Get user language preference
+        user_language = "en"
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        # Try to get from session_stats first (most accurate)
+        try:
+            if hasattr(obj, "session_stats") and obj.session_stats.exists():
+                session_stats = obj.session_stats.first()
+            else:
+                session_stats = TraceVisionSessionStats.objects.filter(session=obj).first()
+            
+            if session_stats:
+                home_stats = session_stats.home_team_stats or {}
+                away_stats = session_stats.away_team_stats or {}
+                
+                # Get starting_lineups and replacements from stats
+                home_starting_lineups = home_stats.get("starting_lineups", {})
+                away_starting_lineups = away_stats.get("starting_lineups", {})
+                home_replacements = home_stats.get("replacements", {})
+                away_replacements = away_stats.get("replacements", {})
+                
+                return {
+                    "home": {
+                        "total_goals": home_stats.get("total_goals", 0),
+                        "first_half_goals": home_stats.get("first_half_goals", 0),
+                        "second_half_goals": home_stats.get("second_half_goals", 0),
+                        "starting_lineups": home_starting_lineups.get(user_language, home_starting_lineups.get("en", {})),
+                    },
+                    "away": {
+                        "total_goals": away_stats.get("total_goals", 0),
+                        "first_half_goals": away_stats.get("first_half_goals", 0),
+                        "second_half_goals": away_stats.get("second_half_goals", 0),
+                        "starting_lineups": away_starting_lineups.get(user_language, away_starting_lineups.get("en", {})),
+                    }
+                }
+        except Exception as e:
+            logger.warning(f"Error getting team_wise_game_info from session_stats: {e}")
+        
+        # Fallback: try to get from game.game_info
+        try:
+            if obj.game and obj.game.game_info:
+                game_info = obj.game.game_info
+                if user_language in game_info:
+                    lang_info = game_info[user_language]
+                    return {
+                        "home": {
+                            "total_goals": lang_info.get("home", {}).get("total_score", 0),
+                            "first_half_goals": lang_info.get("home", {}).get("first_half_score", 0),
+                            "second_half_goals": lang_info.get("home", {}).get("second_half_score", 0),
+                            "starting_lineups": lang_info.get("home", {}).get("starting_lineups", {}),
+                        },
+                        "away": {
+                            "total_goals": lang_info.get("away", {}).get("total_score", 0),
+                            "first_half_goals": lang_info.get("away", {}).get("first_half_score", 0),
+                            "second_half_goals": lang_info.get("away", {}).get("second_half_score", 0),
+                            "starting_lineups": lang_info.get("away", {}).get("starting_lineups", {}),
+                        }
+                    }
+        except Exception as e:
+            logger.warning(f"Error getting team_wise_game_info from game_info: {e}")
+        
+        # Default fallback
+        return {
+            "home": {
+                "total_goals": obj.home_score or 0,
+                "first_half_goals": 0,
+                "second_half_goals": 0,
+                "starting_lineups": {},
+            },
+            "away": {
+                "total_goals": obj.away_score or 0,
+                "first_half_goals": 0,
+                "second_half_goals": 0,
+                "starting_lineups": {},
+            }
+        }
+
+    def get_team_wise_replacements(self, obj):
+        """Get team-wise replacements"""
+        from tracevision.models import TraceVisionSessionStats
+        
+        # Get user language preference
+        user_language = "en"
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        # Try to get from session_stats first
+        try:
+            if hasattr(obj, "session_stats") and obj.session_stats.exists():
+                session_stats = obj.session_stats.first()
+            else:
+                session_stats = TraceVisionSessionStats.objects.filter(session=obj).first()
+            
+            if session_stats:
+                home_stats = session_stats.home_team_stats or {}
+                away_stats = session_stats.away_team_stats or {}
+                
+                home_replacements = home_stats.get("replacements", {})
+                away_replacements = away_stats.get("replacements", {})
+                
+                return {
+                    "home": home_replacements.get(user_language, home_replacements.get("en", {})),
+                    "away": away_replacements.get(user_language, away_replacements.get("en", {})),
+                }
+        except Exception as e:
+            logger.warning(f"Error getting team_wise_replacements from session_stats: {e}")
+        
+        # Fallback: try to get from game.game_info
+        try:
+            if obj.game and obj.game.game_info:
+                game_info = obj.game.game_info
+                if user_language in game_info:
+                    lang_info = game_info[user_language]
+                    return {
+                        "home": lang_info.get("home", {}).get("replacements", {}),
+                        "away": lang_info.get("away", {}).get("replacements", {}),
+                    }
+        except Exception as e:
+            logger.warning(f"Error getting team_wise_replacements from game_info: {e}")
+        
+        # Default fallback
+        return {
+            "home": {},
+            "away": {},
+        }
 
 
 class PlayerDetailSerializer(serializers.ModelSerializer):
@@ -1645,9 +1812,9 @@ class MatchInfoSerializer(serializers.ModelSerializer):
                         "name": get_localized_team_name(obj.home_team, user_language),
                     }
                     if viewer_perspective == "home":
-                        team_data["label"] = "team"
+                        team_data["label"] = "home"
                     elif viewer_perspective == "away":
-                        team_data["label"] = "opponent"
+                        team_data["label"] = "away"
                     return team_data
 
             team_data = {
@@ -1673,9 +1840,9 @@ class MatchInfoSerializer(serializers.ModelSerializer):
                         "name": get_localized_team_name(obj.away_team, user_language),
                     }
                     if viewer_perspective == "away":
-                        team_data["label"] = "team"
+                        team_data["label"] = "away"
                     elif viewer_perspective == "home":
-                        team_data["label"] = "opponent"
+                        team_data["label"] = "home"
                     return team_data
 
             team_data = {

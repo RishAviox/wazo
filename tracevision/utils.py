@@ -2802,11 +2802,11 @@ def transform_side_by_perspective(side, viewer_perspective):
     perspective_lower = viewer_perspective.lower()
 
     if side_lower == perspective_lower:
-        return "team"
+        return "home"
     elif (side_lower == "home" and perspective_lower == "away") or (
         side_lower == "away" and perspective_lower == "home"
     ):
-        return "opponent"
+        return "away"
 
     return side
 
@@ -3606,7 +3606,7 @@ def process_excel_and_create_players(session_id):
                         f"Failed to create highlights: {str(e)}", exc_info=True
                     )
 
-                # Step 7: Update or create TraceVisionSessionStats with goal statistics
+                # Step 7: Update or create TraceVisionSessionStats with goal statistics, starting_lineups, and replacements
                 try:
                     session_stats, stats_created = (
                         TraceVisionSessionStats.objects.get_or_create(
@@ -3634,6 +3634,36 @@ def process_excel_and_create_players(session_id):
                         except TracePlayer.DoesNotExist:
                             continue
 
+                    # Extract starting_lineups and replacements from match_data for stats
+                    en_data = match_data.get("en", {})
+                    he_data = match_data.get("he", {})
+                    en_summary = en_data.get("Match_summary", {})
+                    he_summary = he_data.get("Match_summary", {})
+                    
+                    # Get team names (use English for stats, but we can include both languages)
+                    home_team_name_en = en_summary.get("match_home_team", "")
+                    away_team_name_en = en_summary.get("match_away_team", "")
+                    home_team_name_he = he_summary.get("match_home_team", "")
+                    away_team_name_he = he_summary.get("match_away_team", "")
+                    
+                    # Extract starting_lineups and replacements for home team
+                    starting_lineups_data = en_data.get("starting_lineups", {})
+                    replacements_data = en_data.get("replacements", {})
+                    home_starting_lineups = starting_lineups_data.get(home_team_name_en, {})
+                    home_replacements = replacements_data.get(home_team_name_en, {})
+                    
+                    # Extract starting_lineups and replacements for away team
+                    away_starting_lineups = starting_lineups_data.get(away_team_name_en, {})
+                    away_replacements = replacements_data.get(away_team_name_en, {})
+                    
+                    # Also include Hebrew data for completeness
+                    he_starting_lineups_data = he_data.get("starting_lineups", {})
+                    he_replacements_data = he_data.get("replacements", {})
+                    home_starting_lineups_he = he_starting_lineups_data.get(home_team_name_he, {})
+                    home_replacements_he = he_replacements_data.get(home_team_name_he, {})
+                    away_starting_lineups_he = he_starting_lineups_data.get(away_team_name_he, {})
+                    away_replacements_he = he_replacements_data.get(away_team_name_he, {})
+
                     # Update home team stats
                     home_stats = session_stats.home_team_stats or {}
                     home_stats.update(
@@ -3642,6 +3672,14 @@ def process_excel_and_create_players(session_id):
                             "first_half_goals": home_first_half_goals,
                             "second_half_goals": home_second_half_goals,
                             "player_goals": home_player_goals,
+                            "starting_lineups": {
+                                "en": home_starting_lineups,
+                                "he": home_starting_lineups_he
+                            },
+                            "replacements": {
+                                "en": home_replacements,
+                                "he": home_replacements_he
+                            }
                         }
                     )
                     session_stats.home_team_stats = home_stats
@@ -3654,6 +3692,14 @@ def process_excel_and_create_players(session_id):
                             "first_half_goals": away_first_half_goals,
                             "second_half_goals": away_second_half_goals,
                             "player_goals": away_player_goals,
+                            "starting_lineups": {
+                                "en": away_starting_lineups,
+                                "he": away_starting_lineups_he
+                            },
+                            "replacements": {
+                                "en": away_replacements,
+                                "he": away_replacements_he
+                            }
                         }
                     )
                     session_stats.away_team_stats = away_stats
@@ -3668,6 +3714,187 @@ def process_excel_and_create_players(session_id):
                 except Exception as e:
                     logger.warning(
                         f"Failed to update goal statistics: {str(e)}", exc_info=True
+                    )
+
+                # Step 8: Update Game model with game_info (scores, lineups, replacements, coaches, referees)
+                try:
+                    game = session.game
+                    if game:
+                        from games.models import Game
+                        
+                        # Build goals array with player details
+                        def build_goals_array(normalized_data, team_side, language="en"):
+                            """Build goals array for a specific team in specified language."""
+                            goals_array = []
+                            for player_data in normalized_data.get("players", []):
+                                if player_data.get("team_side") != team_side:
+                                    continue
+                                
+                                player_goals_list = player_data.get("goals", [])
+                                jersey_number = player_data.get("jersey_number")
+                                player_name = player_data.get("name", {}).get(language, "")
+                                # Fallback to other language if current language name is empty
+                                if not player_name:
+                                    other_lang = "he" if language == "en" else "en"
+                                    player_name = player_data.get("name", {}).get(other_lang, "")
+                                
+                                for goal in player_goals_list:
+                                    try:
+                                        minute_str = str(goal.get("minute", "0")).replace("'", "").replace("min", "").strip()
+                                        minute = int(minute_str) if minute_str.isdigit() else 0
+                                        half = 1 if minute <= 45 else 2
+                                        
+                                        goals_array.append({
+                                            "player_name": player_name,
+                                            "jersey": jersey_number,
+                                            "half": half,
+                                            "goaltime": minute_str
+                                        })
+                                    except (ValueError, TypeError):
+                                        continue
+                            
+                            # Sort goals by goaltime
+                            goals_array.sort(key=lambda x: int(x.get("goaltime", "0")) if x.get("goaltime", "0").isdigit() else 0)
+                            return goals_array
+                        
+                        # Build game_info structure
+                        game_info = {
+                            "en": {"home": {}, "away": {}},
+                            "he": {"home": {}, "away": {}}
+                        }
+                        
+                        en_data = match_data.get("en", {})
+                        he_data = match_data.get("he", {})
+                        
+                        # Get team names from match_data
+                        en_summary = en_data.get("Match_summary", {})
+                        he_summary = he_data.get("Match_summary", {})
+                        home_team_name_en = en_summary.get("match_home_team", "")
+                        away_team_name_en = en_summary.get("match_away_team", "")
+                        home_team_name_he = he_summary.get("match_home_team", "")
+                        away_team_name_he = he_summary.get("match_away_team", "")
+                        
+                        # Process for each language
+                        for lang in ["en", "he"]:
+                            lang_data = en_data if lang == "en" else he_data
+                            
+                            lang_summary = en_summary if lang == "en" else he_summary
+                            
+                            # Get team names for this language
+                            home_name = home_team_name_en if lang == "en" else home_team_name_he
+                            away_name = away_team_name_en if lang == "en" else away_team_name_he
+                            
+                            # Extract starting_lineups with all details (name, role, goals, video_goal, sub_off_minute, cards)
+                            starting_lineups_data = lang_data.get("starting_lineups", {})
+                            home_starting_lineups = starting_lineups_data.get(home_name, {})
+                            away_starting_lineups = starting_lineups_data.get(away_name, {})
+                            
+                            # Extract replacements with all details (name, role, goals, replacer_minute)
+                            replacements_data = lang_data.get("replacements", {})
+                            home_replacements = replacements_data.get(home_name, {})
+                            away_replacements = replacements_data.get(away_name, {})
+                            
+                            # Extract coaches
+                            coaches_data = lang_data.get("coaches", {})
+                            home_coaches = coaches_data.get(home_name, [])
+                            away_coaches = coaches_data.get(away_name, [])
+                            
+                            # Build home goals array with language-specific player names
+                            home_goals_array = build_goals_array(normalized_data, "home", language=lang)
+                            
+                            # Log for debugging
+                            logger.debug(
+                                f"Storing game_info for {lang} - home: {len(home_starting_lineups)} starting_lineups, "
+                                f"{len(home_replacements)} replacements, {len(home_coaches)} coaches"
+                            )
+                            
+                            game_info[lang]["home"] = {
+                                "total_score": home_goals,
+                                "first_half_score": home_first_half_goals,
+                                "second_half_score": home_second_half_goals,
+                                "goals": home_goals_array,
+                                "starting_lineups": home_starting_lineups,  # Full structure with all player details
+                                "replacements": home_replacements,  # Full structure with all replacement details
+                                "coaches": home_coaches
+                            }
+                            
+                            # Build away goals array with language-specific player names
+                            away_goals_array = build_goals_array(normalized_data, "away", language=lang)
+                            
+                            # Log for debugging
+                            logger.debug(
+                                f"Storing game_info for {lang} - away: {len(away_starting_lineups)} starting_lineups, "
+                                f"{len(away_replacements)} replacements, {len(away_coaches)} coaches"
+                            )
+                            
+                            game_info[lang]["away"] = {
+                                "total_score": away_goals,
+                                "first_half_score": away_first_half_goals,
+                                "second_half_score": away_second_half_goals,
+                                "goals": away_goals_array,
+                                "starting_lineups": away_starting_lineups,  # Full structure with all player details
+                                "replacements": away_replacements,  # Full structure with all replacement details
+                                "coaches": away_coaches
+                            }
+                            
+                            # Add referees (shared, not per team) - add to both home and away for consistency
+                            referees = lang_data.get("referees", [])
+                            game_info[lang]["home"]["referees"] = referees
+                            game_info[lang]["away"]["referees"] = referees
+                        
+                        # Validate and update game with game_info
+                        # Ensure starting_lineups and replacements are properly structured
+                        home_lineup_count = 0
+                        away_lineup_count = 0
+                        home_replacement_count = 0
+                        away_replacement_count = 0
+                        
+                        for lang in ["en", "he"]:
+                            for team_side in ["home", "away"]:
+                                team_info = game_info[lang][team_side]
+                                
+                                # Verify starting_lineups structure (should be dict with jersey numbers as keys)
+                                if not isinstance(team_info.get("starting_lineups"), dict):
+                                    logger.warning(
+                                        f"Starting lineups for {lang}/{team_side} is not a dict, converting to empty dict"
+                                    )
+                                    team_info["starting_lineups"] = {}
+                                else:
+                                    # Count for logging (only count once per language, use English)
+                                    if lang == "en":
+                                        if team_side == "home":
+                                            home_lineup_count = len(team_info["starting_lineups"])
+                                        else:
+                                            away_lineup_count = len(team_info["starting_lineups"])
+                                
+                                # Verify replacements structure (should be dict with jersey numbers as keys)
+                                if not isinstance(team_info.get("replacements"), dict):
+                                    logger.warning(
+                                        f"Replacements for {lang}/{team_side} is not a dict, converting to empty dict"
+                                    )
+                                    team_info["replacements"] = {}
+                                else:
+                                    # Count for logging (only count once per language, use English)
+                                    if lang == "en":
+                                        if team_side == "home":
+                                            home_replacement_count = len(team_info["replacements"])
+                                        else:
+                                            away_replacement_count = len(team_info["replacements"])
+                        
+                        # Update game with game_info
+                        game.game_info = game_info
+                        game.save(update_fields=["game_info"])
+                        logger.info(
+                            f"Updated game_info for game {game.id} with scores, lineups "
+                            f"({home_lineup_count} home, {away_lineup_count} away), "
+                            f"replacements ({home_replacement_count} home, {away_replacement_count} away), "
+                            f"coaches, and referees"
+                        )
+                    else:
+                        logger.warning(f"Session {session_id} has no associated game, skipping game_info update")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to update game_info: {str(e)}", exc_info=True
                     )
 
                 logger.info(

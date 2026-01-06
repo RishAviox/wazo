@@ -178,12 +178,12 @@ def get_player_rating():
 def get_strengths_and_weakness():
     return [
       {
-        "team": "Our Team",
+        "team": "Home Team",
         "strengths": "Dominated possession, effective pressing.",
         "weaknesses": "Turnovers in the midfield; gaps in transitions."
       },
       {
-        "team": "Opponent",
+        "team": "Home Team",
         "strengths": "Quick counters; aerial strength.",
         "weaknesses": "Struggled under high pressing pressure."
       }

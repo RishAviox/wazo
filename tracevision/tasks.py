@@ -1687,14 +1687,10 @@ def map_players_to_users_task(session_id=None, user_id=None, game_id=None):
                         continue
 
                 # Strategy 3: If session has only one user, map all unmapped players to that user
-                # Only applies when we have a single session (session_id or game_id mode)
-                # Note: Outer condition already ensures player.user is None, so no need for additional checks
                 if session and session.user and not player.user:
                     # Check if this is a single-player session
                     total_players = session.players.count()
                     if total_players == 1:
-                        # One TracePlayer can only be mapped to one WajoUser
-                        # Since we already checked not player.user, we can safely map
                         player.user = session.user
                         player.save()
                         mapped_count += 1
@@ -1786,7 +1782,16 @@ def auto_map_user_to_player_task(user_phone_no):
 
         logger.info(f"Starting auto-mapping for user: {user_phone_no}")
 
-        # Get the user
+        # Skip if phone_no is None (coaches/referees created from Excel don't have phone numbers)
+        if not user_phone_no:
+            logger.info("Skipping auto-mapping: phone_no is None (likely a Coach or Referee created from Excel)")
+            return {
+                "success": True,
+                "message": "Skipped: phone_no is None (Coach/Referee)",
+                "mapped_count": 0,
+            }
+
+        # Get the user - handle case where multiple users might have same phone_no
         try:
             user = WajoUser.objects.select_related(
                 "team").get(phone_no=user_phone_no)

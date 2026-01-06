@@ -38,6 +38,14 @@ class Game(WajoModel):
         help_text="Multilingual match data with 'en' and 'he' sections containing match summary, lineups, replacements, bench, coaches, and referees",
     )
 
+    # Detailed game information with scores, lineups, replacements, coaches, referees
+    game_info = models.JSONField(
+        default=dict,
+        blank=True,
+        null=True,
+        help_text="Detailed game information in multilingual format. Structure: {'en': {'home': {...}, 'away': {...}}, 'he': {'home': {...}, 'away': {...}}}. Each team contains: total_score, first_half_score, second_half_score, goals (array with player_name, jersey, half, goaltime), starting_lineups, replacements, coaches, referees",
+    )
+
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
 
@@ -207,6 +215,3 @@ class GameMetaData(WajoModel):
     class Meta:
         verbose_name = "Game Meta Data JSON"
         verbose_name_plural = "Game Meta Data JSON"
-
-    def __str__(self):
-        return self.game.name
