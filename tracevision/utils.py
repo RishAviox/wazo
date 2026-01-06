@@ -865,13 +865,14 @@ def _create_clip_reels_for_highlight(
             video_seconds = parse_time_to_seconds(highlight.video_time)
             if video_seconds is not None and video_seconds > 0:
                 video_time_ms = video_seconds * 1000
-                # Add 40 seconds (40000ms) buffer before the event
-                buffer_ms = 40000
-                start_ms = max(0, video_time_ms - buffer_ms)  # Ensure non-negative
+                # Start 30 seconds before the goal
+                buffer_before_ms = 30000
+                start_ms = max(0, video_time_ms - buffer_before_ms)  # Ensure non-negative
 
-                # Duration includes the original duration plus 40 seconds after
-                # Total: 40s before + original duration + 40s after
-                duration_ms = highlight.duration + (2 * buffer_ms)
+                # Duration: 30s before + 40s after = 70s total, capped at 80s (1m 20s)
+                duration_after_ms = 40000
+                max_duration_ms = 80000  # 1 minute 20 seconds
+                duration_ms = buffer_before_ms + duration_after_ms
 
                 logger.debug(
                     f"Using video_time {highlight.video_time} for clip reel: "
@@ -954,6 +955,10 @@ def _create_clip_reels_for_highlight(
                 continue
 
         # Create new clip reel
+        # start_ms: 30 seconds before the goal time
+        # duration_ms: 70 seconds total (30s before + 40s after the goal)
+        # end_ms: start_ms + duration_ms (40 seconds after the goal time)
+        end_ms = start_ms + duration_ms
         defaults = {
             "session": session,
             "event_id": highlight.highlight_id,
@@ -962,7 +967,7 @@ def _create_clip_reels_for_highlight(
             "start_ms": start_ms,
             "duration_ms": duration_ms,
             "start_clock": aggregation_service._ms_to_clock(start_ms),
-            "end_clock": aggregation_service._ms_to_clock(start_ms + duration_ms),
+            "end_clock": aggregation_service._ms_to_clock(end_ms),
             "primary_player": primary_player,
             "label": f"{event_type.title()} - {team_side.title()}",
             "description": f"{event_type.title()} event for {team_side} team",
@@ -3155,7 +3160,6 @@ def extract_video_segment_from_azure(
 
         if reencode_for_cfr:
             # Re-encode to ensure constant frame rate and accurate timestamps
-            # This prevents timing drift issues when matching frames to tracking data
             logger.info(f"Re-encoding to constant frame rate for accurate timing...")
             fps = get_video_fps(blob_url)
 
@@ -3680,12 +3684,11 @@ def process_excel_and_create_players(session_id):
 
         finally:
             # Clean up temp file
-            pass
-            # try:
-            #     if os.path.exists(excel_file_path):
-            #         os.unlink(excel_file_path)
-            # except Exception as e:
-            #     logger.warning(f"Failed to delete temp file {excel_file_path}: {e}")
+            try:
+                if os.path.exists(excel_file_path):
+                    os.unlink(excel_file_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete temp file {excel_file_path}: {e}")
 
         return {
             "success": True,

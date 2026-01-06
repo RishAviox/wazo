@@ -1,13 +1,12 @@
-from django.db.models.base import ValidationError
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from django.conf import settings
-
 import jwt
-import re
+from django.conf import settings
+from rest_framework import status
+from rest_framework.views import APIView
+from django.db.models.base import ValidationError
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from jwt.exceptions import ExpiredSignatureError, DecodeError, InvalidTokenError
+
 
 from .models import WajoUser, WajoUserDevice, UserRequest
 from .utils import (
@@ -15,11 +14,9 @@ from .utils import (
     validate_otp,
     generate_access_token,
     generate_refresh_token,
-    find_user_by_phone,
     get_country_from_phone,
 )
 from .serializer import UserRequestSerializer, WajoUserSerializer
-
 from onboarding.models import OnboardingStep
 
 
