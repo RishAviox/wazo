@@ -1,5 +1,6 @@
 import uuid
 import logging
+import requests
 from django.db.models import Q
 from django.conf import settings
 from rest_framework import serializers
@@ -21,6 +22,7 @@ from tracevision.utils import (
 from teams.models import Team
 from tracevision.models import TraceSession
 from games.models import GameUserRole
+from tracevision.services import TraceVisionService
 
 logger = logging.getLogger(__name__)
 
@@ -956,56 +958,56 @@ class TraceVisionProcessSerializer(serializers.Serializer):
         api_key = settings.TRACEVISION_API_KEY
         graphql_url = settings.TRACEVISION_GRAPHQL_URL
 
-        # session_payload = {
-        #     "query": """
-        #         mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
-        #             createSession(token: $token, sessionData: $sessionData) {
-        #                 session { session_id }
-        #                 success
-        #                 error
-        #             }
-        #         }
-        #     """,
-        #     "variables": {
-        #         "token": {"customer_id": customer_id, "token": api_key},
-        #         "sessionData": {
-        #             "type": "soccer_game",
-        #             "game_info": {
-        #                 "home_team": {
-        #                     "name": home_team_name,
-        #                     "score": home_score,
-        #                     "color": home_color,
-        #                 },
-        #                 "away_team": {
-        #                     "name": away_team_name,
-        #                     "score": away_score,
-        #                     "color": away_color,
-        #                 },
-        #             },
-        #             "capabilities": ["tracking", "highlights"],
-        #         },
-        #     },
-        # }
+        session_payload = {
+            "query": """
+                mutation ($token: CustomerToken!, $sessionData: SessionCreateInput!) {
+                    createSession(token: $token, sessionData: $sessionData) {
+                        session { session_id }
+                        success
+                        error
+                    }
+                }
+            """,
+            "variables": {
+                "token": {"customer_id": customer_id, "token": api_key},
+                "sessionData": {
+                    "type": "soccer_game",
+                    "game_info": {
+                        "home_team": {
+                            "name": home_team_name,
+                            "score": home_score,
+                            "color": home_color,
+                        },
+                        "away_team": {
+                            "name": away_team_name,
+                            "score": away_score,
+                            "color": away_color,
+                        },
+                    },
+                    "capabilities": ["tracking", "highlights"],
+                },
+            },
+        }
 
-        # session_response = requests.post(
-        #     graphql_url,
-        #     headers={"Content-Type": "application/json"},
-        #     json=session_payload,
-        # )
-        # session_json = session_response.json()
+        session_response = requests.post(
+            graphql_url,
+            headers={"Content-Type": "application/json"},
+            json=session_payload,
+        )
+        session_json = session_response.json()
 
-        # if session_response.status_code != 200 or not session_json.get("data", {}).get(
-        #     "createSession", {}
-        # ).get("success"):
-        #     raise ValidationError(
-        #         {
-        #             "error": "TraceVision session creation failed",
-        #             "details": session_json,
-        #         }
-        #     )
+        if session_response.status_code != 200 or not session_json.get("data", {}).get(
+            "createSession", {}
+        ).get("success"):
+            raise ValidationError(
+                {
+                    "error": "TraceVision session creation failed",
+                    "details": session_json,
+                }
+            )
 
-        # session_id = session_json["data"]["createSession"]["session"]["session_id"]
-        session_id = "1234567890"
+        session_id = session_json["data"]["createSession"]["session"]["session_id"]
+        # session_id = "1234567890"
 
         # Check for duplicate by video_url BEFORE processing video
         video_url_for_db = "http://sfsfsfsf/sfs"
@@ -1058,19 +1060,19 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                 )
 
         # Handle video processing
-        # if video_link:
-        #     video_url_for_db = TraceVisionService.import_game_video(
-        #         session_id=session_id, video_link=video_link, start_time=start_time
-        #     )
-        # else:
-        #     # Video file upload is not supported - this should be caught by validation
-        #     # but adding safety check here as well
-        #     raise ValidationError(
-        #         {
-        #             "error": "Video file upload not supported",
-        #             "message": "Video file upload is currently not supported. Please use video_link instead to provide a URL to your video.",
-        #         }
-        #     )
+        if video_link:
+            video_url_for_db = TraceVisionService.import_game_video(
+                session_id=session_id, video_link=video_link, start_time=start_time
+            )
+        else:
+            # Video file upload is not supported - this should be caught by validation
+            # but adding safety check here as well
+            raise ValidationError(
+                {
+                    "error": "Video file upload not supported",
+                    "message": "Video file upload is currently not supported. Please use video_link instead to provide a URL to your video.",
+                }
+            )
         # TODO: Implement video upload functionality later
 
         # Get or create canonical game
@@ -1268,56 +1270,19 @@ class HighlightDatePlayerSerializer(serializers.ModelSerializer):
         }
 
 
-class HighlightDateTeamSerializer(serializers.Serializer):
-    """Serializer for team info in highlight dates response"""
-
-    id = serializers.CharField(allow_null=True)
-    name = serializers.CharField(allow_null=True)
-    logo = serializers.SerializerMethodField()
-
-    def get_logo(self, instance):
-        """Get team logo URL"""
-        if instance is None:
-            return None
-        if instance.logo:
-            request = self.context.get("request")
-            if request:
-                return request.build_absolute_uri(instance.logo.url)
-            return instance.logo.url
-        return None
-
-    def to_representation(self, instance):
-        """Handle None team instances"""
-        if instance is None:
-            return {"id": None, "name": None, "logo": None}
-        user_language = "en"
-        if self.context.get("request") and hasattr(self.context["request"], "user"):
-            user_language = (
-                getattr(self.context["request"].user, "selected_language", "en") or "en"
-            )
-        return {
-            "id": instance.id,
-            "name": get_localized_team_name(instance, user_language),
-            "logo": self.get_logo(instance),
-        }
-
-
 class HighlightDateSessionSerializer(serializers.ModelSerializer):
     """Serializer for session info in highlight dates response"""
 
     id = serializers.IntegerField(read_only=True)
     session_id = serializers.CharField(read_only=True)
     match_date = serializers.DateField(format="%Y-%m-%d", read_only=True)
-    home_team = HighlightDateTeamSerializer(read_only=True)
-    away_team = HighlightDateTeamSerializer(read_only=True)
-    players = serializers.SerializerMethodField()
+    home_team = serializers.SerializerMethodField()
+    away_team = serializers.SerializerMethodField()
     match_logo = serializers.SerializerMethodField()
     match_status = serializers.SerializerMethodField()
     score = serializers.SerializerMethodField()
-    goal_scorers = serializers.SerializerMethodField()
     stadium = serializers.SerializerMethodField()
-    team_wise_game_info = serializers.SerializerMethodField()
-    team_wise_replacements = serializers.SerializerMethodField()
+    referees = serializers.SerializerMethodField()
 
     class Meta:
         model = TraceSession
@@ -1335,15 +1300,12 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             "first_half_end_time",
             "second_half_start_time",
             "match_end_time",
-            "players",
             "video_url",
             "match_logo",
             "match_status",
             "score",
-            "goal_scorers",
             "stadium",
-            "team_wise_game_info",
-            "team_wise_replacements",
+            "referees",
         ]
 
     def get_match_logo(self, obj):
@@ -1416,134 +1378,6 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             }
         return None
 
-    def get_goal_scorers(self, obj):
-        """Get goal scorers grouped by team with half information"""
-        from tracevision.models import TraceVisionSessionStats
-        
-        # Get user language preference
-        user_language = "en"
-        request = self.context.get("request")
-        if request and hasattr(request, "user"):
-            user_language = getattr(request.user, "selected_language", "en") or "en"
-        
-        # Use prefetched highlights if available, otherwise query
-        if hasattr(obj, "_prefetched_goal_highlights"):
-            goal_highlights = obj._prefetched_goal_highlights
-        else:
-            # Get all goal highlights for this session
-            goal_highlights = TraceHighlight.objects.filter(
-                session=obj,
-                event_type="goal"
-            ).select_related("player", "player__team").order_by("half", "match_time")
-        
-        # Structure: {team_side: [goals], goal_counts: {home: {first_half: X, second_half: Y}, away: {...}}}
-        home_goals = []
-        away_goals = []
-        home_first_half_count = 0
-        home_second_half_count = 0
-        away_first_half_count = 0
-        away_second_half_count = 0
-        
-        for highlight in goal_highlights:
-            if not highlight.player:
-                continue
-            
-            # Get player name in user's language
-            player_name = get_localized_name(highlight.player, user_language, "name")
-            if not player_name:
-                player_name = highlight.player.name or f"Player {highlight.player.jersey_number}"
-            
-            # Get goal minute
-            goal_minute = highlight.match_time or highlight.event_metadata.get("minute", "")
-            
-            # Determine team side
-            team_side = None
-            if highlight.player.team == obj.home_team:
-                team_side = "home"
-            elif highlight.player.team == obj.away_team:
-                team_side = "away"
-            else:
-                # Try to get from tags or event_metadata
-                if "home" in (highlight.tags or []):
-                    team_side = "home"
-                elif "away" in (highlight.tags or []):
-                    team_side = "away"
-                elif highlight.event_metadata:
-                    team_side = highlight.event_metadata.get("team", "").lower()
-            
-            if not team_side:
-                continue
-            
-            # Determine half
-            half = highlight.half or 1
-            if highlight.match_time:
-                try:
-                    # Parse match_time (format: "MM:SS" or "MM")
-                    minute_str = highlight.match_time.split(":")[0] if ":" in highlight.match_time else highlight.match_time
-                    minute = int(minute_str.replace("'", "").replace("min", "").strip())
-                    half = 1 if minute <= 45 else 2
-                except (ValueError, AttributeError):
-                    pass
-            
-            goal_data = {
-                "player_name": player_name,
-                "jersey_number": highlight.player.jersey_number,
-                "minute": goal_minute,
-                "half": half,
-            }
-            
-            if team_side == "home":
-                home_goals.append(goal_data)
-                if half == 1:
-                    home_first_half_count += 1
-                else:
-                    home_second_half_count += 1
-            else:
-                away_goals.append(goal_data)
-                if half == 1:
-                    away_first_half_count += 1
-                else:
-                    away_second_half_count += 1
-        
-        # Also check TraceVisionSessionStats for goal counts (more accurate)
-        # Use prefetched session_stats if available
-        try:
-            if hasattr(obj, "session_stats") and obj.session_stats.exists():
-                session_stats = obj.session_stats.first()
-            else:
-                from tracevision.models import TraceVisionSessionStats
-                session_stats = TraceVisionSessionStats.objects.filter(session=obj).first()
-            
-            if session_stats:
-                home_stats = session_stats.home_team_stats or {}
-                away_stats = session_stats.away_team_stats or {}
-                
-                if home_stats.get("first_half_goals") is not None:
-                    home_first_half_count = home_stats.get("first_half_goals", 0)
-                    home_second_half_count = home_stats.get("second_half_goals", 0)
-                
-                if away_stats.get("first_half_goals") is not None:
-                    away_first_half_count = away_stats.get("first_half_goals", 0)
-                    away_second_half_count = away_stats.get("second_half_goals", 0)
-        except Exception:
-            pass
-        
-        return {
-            "home": home_goals,
-            "away": away_goals,
-            "goal_counts": {
-                "home": {
-                    "first_half": home_first_half_count,
-                    "second_half": home_second_half_count,
-                    "total": home_first_half_count + home_second_half_count,
-                },
-                "away": {
-                    "first_half": away_first_half_count,
-                    "second_half": away_second_half_count,
-                    "total": away_first_half_count + away_second_half_count,
-                },
-            },
-        }
 
     def get_stadium(self, obj):
         """Get stadium/venue from language_metadata"""
@@ -1562,46 +1396,176 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
         
         return None
 
-    def get_players(self, obj):
-        """Get players from teams (home_team and away_team) - not filtered by session"""
-        players_list = []
-
-        # Use prefetched players if available (from view optimization)
-        if hasattr(obj, "_prefetched_players"):
-            players = obj._prefetched_players
-        else:
-            # Fallback: get all players from teams (not filtered by session)
-            from tracevision.models import TracePlayer
-
-            team_ids = []
-            if obj.home_team:
-                team_ids.append(obj.home_team.id)
-            if obj.away_team:
-                team_ids.append(obj.away_team.id)
-
-            if team_ids:
-                # Get all TracePlayers for these teams, regardless of session
-                # Select related user to get profile picture for player_logo
-                players = TracePlayer.objects.filter(
-                    team_id__in=team_ids
-                ).select_related("team", "user")
-            else:
-                players = TracePlayer.objects.none()
-
-        # Serialize all players (filtered by team, not by session)
-        for player in players:
-            # Pass context to serializer so it can access request and user language preference
-            # Also pass session so side can be determined correctly
-            context = dict(self.context)
-            context["session"] = obj
-            serializer = HighlightDatePlayerSerializer(player, context=context)
-            players_list.append(serializer.data)
-
-        return players_list
-
-    def get_team_wise_game_info(self, obj):
-        """Get team-wise game information (goals, first half goals, etc.)"""
-        from tracevision.models import TraceVisionSessionStats
+    def _transform_lineups_to_list(self, lineups_dict, team_side, obj, team, players_lookup=None):
+        """Transform starting_lineups from dict (keyed by jersey) to list format with player+jersey_number and profile info"""
+        from tracevision.models import TracePlayer
+        from django.core.exceptions import ObjectDoesNotExist
+        
+        if not lineups_dict or not isinstance(lineups_dict, dict):
+            return []
+        
+        lineup_list = []
+        request = self.context.get("request")
+        
+        # Optimize: Use provided players_lookup or fetch if not provided
+        if players_lookup is None:
+            players_lookup = {}
+            if team:
+                try:
+                    # Get all players for this team with their users prefetched
+                    team_players = TracePlayer.objects.filter(
+                        team=team
+                    ).select_related("user").only(
+                        "id", "jersey_number", "user__picture"
+                    )
+                    
+                    # Create lookup dictionary: jersey_number -> player
+                    for player in team_players:
+                        players_lookup[player.jersey_number] = player
+                except Exception as e:
+                    logger.warning(f"Error fetching players for team {team.id if team else 'None'}: {e}")
+        
+        for jersey_number, player_data in lineups_dict.items():
+            if not isinstance(player_data, dict):
+                continue
+            
+            # Ensure goals and video_goal are lists
+            goals = player_data.get("goals", [])
+            if not isinstance(goals, list):
+                goals = [goals] if goals else []
+            
+            video_goal = player_data.get("video_goal", [])
+            if not isinstance(video_goal, list):
+                video_goal = [video_goal] if video_goal else []
+            
+            player_name = player_data.get("name", "")
+            try:
+                jersey_num = int(jersey_number) if str(jersey_number).isdigit() else jersey_number
+            except (ValueError, TypeError):
+                jersey_num = jersey_number
+            
+            # Look up player from prefetched data
+            player_id = None
+            player_logo = None
+            
+            if jersey_num in players_lookup:
+                trace_player = players_lookup[jersey_num]
+                player_id = trace_player.id
+                
+                # Get profile picture from user
+                if trace_player.user and trace_player.user.picture:
+                    try:
+                        picture_url = trace_player.user.picture.url
+                        if picture_url and not str(picture_url).endswith("null"):
+                            if request:
+                                player_logo = request.build_absolute_uri(picture_url)
+                            else:
+                                player_logo = picture_url
+                    except (ValueError, AttributeError, ObjectDoesNotExist) as e:
+                        logger.debug(f"Error getting picture URL for player {player_id}: {e}")
+                        player_logo = None
+            
+            lineup_item = {
+                "player": player_name,
+                "player_id": player_id,
+                "jersey_number": jersey_num,
+                "role": player_data.get("role", ""),
+                "cards": player_data.get("cards", 0),
+                "goals": goals,
+                "video_goal": video_goal,
+                "sub_off_minute": player_data.get("sub_off_minute", 0),
+                "logo": player_logo,
+            }
+            lineup_list.append(lineup_item)
+        
+        return lineup_list
+    
+    def _transform_replacements_to_list(self, replacements_dict, team_side, obj, team, players_lookup=None):
+        """Transform replacements from dict (keyed by jersey) to list format with player+jersey_number and profile info"""
+        from tracevision.models import TracePlayer
+        from django.core.exceptions import ObjectDoesNotExist
+        
+        if not replacements_dict or not isinstance(replacements_dict, dict):
+            return []
+        
+        replacement_list = []
+        request = self.context.get("request")
+        
+        # Optimize: Use provided players_lookup or fetch if not provided
+        if players_lookup is None:
+            players_lookup = {}
+            if team:
+                try:
+                    # Get all players for this team with their users prefetched
+                    team_players = TracePlayer.objects.filter(
+                        team=team
+                    ).select_related("user").only(
+                        "id", "jersey_number", "user__picture"
+                    )
+                    
+                    # Create lookup dictionary: jersey_number -> player
+                    for player in team_players:
+                        players_lookup[player.jersey_number] = player
+                except Exception as e:
+                    logger.warning(f"Error fetching players for team {team.id if team else 'None'}: {e}")
+        
+        for jersey_number, player_data in replacements_dict.items():
+            if not isinstance(player_data, dict):
+                continue
+            
+            # Ensure goals and video_goal are lists
+            goals = player_data.get("goals", [])
+            if not isinstance(goals, list):
+                goals = [goals] if goals else []
+            
+            video_goal = player_data.get("video_goal", [])
+            if not isinstance(video_goal, list):
+                video_goal = [video_goal] if video_goal else []
+            
+            player_name = player_data.get("name", "")
+            try:
+                jersey_num = int(jersey_number) if str(jersey_number).isdigit() else jersey_number
+            except (ValueError, TypeError):
+                jersey_num = jersey_number
+            
+            # Look up player from prefetched data
+            player_id = None
+            player_logo = None
+            
+            if jersey_num in players_lookup:
+                trace_player = players_lookup[jersey_num]
+                player_id = trace_player.id
+                
+                # Get profile picture from user
+                if trace_player.user and trace_player.user.picture:
+                    try:
+                        picture_url = trace_player.user.picture.url
+                        if picture_url and not str(picture_url).endswith("null"):
+                            if request:
+                                player_logo = request.build_absolute_uri(picture_url)
+                            else:
+                                player_logo = picture_url
+                    except (ValueError, AttributeError, ObjectDoesNotExist) as e:
+                        logger.debug(f"Error getting picture URL for player {player_id}: {e}")
+                        player_logo = None
+            
+            replacement_item = {
+                "player": player_name,
+                "player_id": player_id,
+                "jersey_number": jersey_num,
+                "role": player_data.get("role", ""),
+                "goals": goals,
+                "video_goal": video_goal,
+                "replacer_minute": player_data.get("replacer_minute", 0),
+                "logo": player_logo,
+            }
+            replacement_list.append(replacement_item)
+        
+        return replacement_list
+    
+    def _get_team_goals_data(self, obj, team_side):
+        """Get goal data for a specific team side (home or away)"""
+        from tracevision.models import TraceVisionSessionStats, TraceHighlight
         
         # Get user language preference
         user_language = "en"
@@ -1609,7 +1573,60 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
         if request and hasattr(request, "user"):
             user_language = getattr(request.user, "selected_language", "en") or "en"
         
-        # Try to get from session_stats first (most accurate)
+        # Get goal highlights
+        if hasattr(obj, "_prefetched_goal_highlights"):
+            goal_highlights = obj._prefetched_goal_highlights
+        else:
+            goal_highlights = TraceHighlight.objects.filter(
+                session=obj,
+                event_type="goal"
+            ).select_related("player", "player__team").order_by("half", "match_time")
+        
+        team_goals = []
+        for highlight in goal_highlights:
+            if not highlight.player:
+                continue
+            
+            # Determine if this goal belongs to the requested team
+            is_home_goal = highlight.player.team == obj.home_team
+            is_away_goal = highlight.player.team == obj.away_team
+            
+            if team_side == "home" and not is_home_goal:
+                continue
+            if team_side == "away" and not is_away_goal:
+                continue
+            
+            # Get player name in user's language
+            player_name = get_localized_name(highlight.player, user_language, "name")
+            if not player_name:
+                player_name = highlight.player.name or f"Player {highlight.player.jersey_number}"
+            
+            # Get goal minute
+            goal_minute = highlight.match_time or highlight.event_metadata.get("minute", "")
+            
+            # Determine half
+            half = highlight.half or 1
+            if highlight.match_time:
+                try:
+                    minute_str = highlight.match_time.split(":")[0] if ":" in highlight.match_time else highlight.match_time
+                    minute = int(minute_str.replace("'", "").replace("min", "").strip())
+                    half = 1 if minute <= 45 else 2
+                except (ValueError, AttributeError):
+                    pass
+            
+            goal_data = {
+                "player_name": player_name,
+                "jersey_number": highlight.player.jersey_number,
+                "minute": goal_minute,
+                "half": half,
+            }
+            team_goals.append(goal_data)
+        
+        # Get goal counts from session_stats
+        first_half_count = 0
+        second_half_count = 0
+        total_count = len(team_goals)
+        
         try:
             if hasattr(obj, "session_stats") and obj.session_stats.exists():
                 session_stats = obj.session_stats.first()
@@ -1617,73 +1634,273 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
                 session_stats = TraceVisionSessionStats.objects.filter(session=obj).first()
             
             if session_stats:
-                home_stats = session_stats.home_team_stats or {}
-                away_stats = session_stats.away_team_stats or {}
-                
-                # Get starting_lineups and replacements from stats
-                home_starting_lineups = home_stats.get("starting_lineups", {})
-                away_starting_lineups = away_stats.get("starting_lineups", {})
-                home_replacements = home_stats.get("replacements", {})
-                away_replacements = away_stats.get("replacements", {})
-                
-                return {
-                    "home": {
-                        "total_goals": home_stats.get("total_goals", 0),
-                        "first_half_goals": home_stats.get("first_half_goals", 0),
-                        "second_half_goals": home_stats.get("second_half_goals", 0),
-                        "starting_lineups": home_starting_lineups.get(user_language, home_starting_lineups.get("en", {})),
-                    },
-                    "away": {
-                        "total_goals": away_stats.get("total_goals", 0),
-                        "first_half_goals": away_stats.get("first_half_goals", 0),
-                        "second_half_goals": away_stats.get("second_half_goals", 0),
-                        "starting_lineups": away_starting_lineups.get(user_language, away_starting_lineups.get("en", {})),
-                    }
-                }
-        except Exception as e:
-            logger.warning(f"Error getting team_wise_game_info from session_stats: {e}")
+                if team_side == "home":
+                    home_stats = session_stats.home_team_stats or {}
+                    if home_stats.get("first_half_goals") is not None:
+                        first_half_count = home_stats.get("first_half_goals", 0)
+                        second_half_count = home_stats.get("second_half_goals", 0)
+                        total_count = first_half_count + second_half_count
+                else:
+                    away_stats = session_stats.away_team_stats or {}
+                    if away_stats.get("first_half_goals") is not None:
+                        first_half_count = away_stats.get("first_half_goals", 0)
+                        second_half_count = away_stats.get("second_half_goals", 0)
+                        total_count = first_half_count + second_half_count
+        except Exception:
+            pass
         
-        # Fallback: try to get from game.game_info
-        try:
-            if obj.game and obj.game.game_info:
-                game_info = obj.game.game_info
-                if user_language in game_info:
-                    lang_info = game_info[user_language]
-                    return {
-                        "home": {
-                            "total_goals": lang_info.get("home", {}).get("total_score", 0),
-                            "first_half_goals": lang_info.get("home", {}).get("first_half_score", 0),
-                            "second_half_goals": lang_info.get("home", {}).get("second_half_score", 0),
-                            "starting_lineups": lang_info.get("home", {}).get("starting_lineups", {}),
-                        },
-                        "away": {
-                            "total_goals": lang_info.get("away", {}).get("total_score", 0),
-                            "first_half_goals": lang_info.get("away", {}).get("first_half_score", 0),
-                            "second_half_goals": lang_info.get("away", {}).get("second_half_score", 0),
-                            "starting_lineups": lang_info.get("away", {}).get("starting_lineups", {}),
-                        }
-                    }
-        except Exception as e:
-            logger.warning(f"Error getting team_wise_game_info from game_info: {e}")
-        
-        # Default fallback
         return {
-            "home": {
-                "total_goals": obj.home_score or 0,
-                "first_half_goals": 0,
-                "second_half_goals": 0,
-                "starting_lineups": {},
-            },
-            "away": {
-                "total_goals": obj.away_score or 0,
-                "first_half_goals": 0,
-                "second_half_goals": 0,
-                "starting_lineups": {},
+            "goals": team_goals,
+            "goal_counts": {
+                "first_half": first_half_count,
+                "second_half": second_half_count,
+                "total": total_count,
             }
         }
-
-    def get_team_wise_replacements(self, obj):
-        """Get team-wise replacements"""
+    
+    def _get_team_coaches(self, obj, team, team_side, user_language):
+        """Get coaches for a team from multiple sources with user_id and profile picture"""
+        from accounts.models import WajoUser
+        
+        coaches_list = []
+        request = self.context.get("request")
+        
+        # First, try to get from team.coach ManyToManyField (has user objects)
+        if team and hasattr(team, "coach"):
+            for coach_user in team.coach.all():
+                # Get profile picture URL
+                coach_logo = None
+                if coach_user.picture:
+                    try:
+                        picture_url = coach_user.picture.url
+                        if picture_url and not str(picture_url).endswith("null"):
+                            if request:
+                                coach_logo = request.build_absolute_uri(picture_url)
+                            else:
+                                coach_logo = picture_url
+                        else:
+                            coach_logo = None
+                    except (ValueError, AttributeError):
+                        coach_logo = None
+                else:
+                    # No profile picture
+                    coach_logo = None
+                
+                coaches_list.append({
+                    "user_id": str(coach_user.id),
+                    "name": coach_user.name or "",
+                    "role": coach_user.role or "Coach",
+                    "logo": coach_logo,
+                })
+        
+        # If no coaches from team relationship, try game_info and language_metadata
+        # Try to match with user objects by name
+        if not coaches_list:
+            coaches_from_data = []
+            
+            # Try game_info first
+            try:
+                if obj.game and obj.game.game_info:
+                    game_info = obj.game.game_info
+                    if user_language in game_info:
+                        lang_info = game_info[user_language]
+                        team_info = lang_info.get(team_side, {})
+                        coaches_from_info = team_info.get("coaches", [])
+                        if isinstance(coaches_from_info, list):
+                            coaches_from_data = coaches_from_info
+            except Exception as e:
+                logger.warning(f"Error getting coaches from game_info: {e}")
+            
+            # Fallback: try language_metadata
+            if not coaches_from_data:
+                try:
+                    if obj.language_metadata:
+                        lang_data = obj.language_metadata.get(user_language, {})
+                        coaches_dict = lang_data.get("coaches", {})
+                        if isinstance(coaches_dict, dict):
+                            # Coaches are keyed by team name
+                            team_name = get_localized_team_name(team, user_language) if team else None
+                            if team_name and team_name in coaches_dict:
+                                coaches_from_data = coaches_dict[team_name]
+                            # Also try with English name as fallback
+                            elif team:
+                                team_name_en = get_localized_team_name(team, "en")
+                                if team_name_en and team_name_en in coaches_dict:
+                                    coaches_from_data = coaches_dict[team_name_en]
+                except Exception as e:
+                    logger.warning(f"Error getting coaches from language_metadata: {e}")
+            
+            # Optimize: Batch lookup coaches by name to avoid N+1 queries
+            coach_names = []
+            for coach_data in coaches_from_data:
+                coach_name = coach_data.get("name", "") if isinstance(coach_data, dict) else str(coach_data)
+                if coach_name:
+                    coach_names.append(coach_name)
+            
+            # Fetch all matching coaches in a single query
+            coaches_lookup = {}
+            if coach_names:
+                try:
+                    matching_coaches = WajoUser.objects.filter(
+                        name__in=coach_names,
+                        role="Coach"
+                    ).only("id", "name", "picture")
+                    
+                    for coach_user in matching_coaches:
+                        coaches_lookup[coach_user.name] = coach_user
+                except Exception as e:
+                    logger.warning(f"Error batch fetching coaches: {e}")
+            
+            # Process coaches from data
+            for coach_data in coaches_from_data:
+                coach_name = coach_data.get("name", "") if isinstance(coach_data, dict) else str(coach_data)
+                coach_role = coach_data.get("role", "Coach") if isinstance(coach_data, dict) else "Coach"
+                
+                # Look up coach from prefetched data
+                coach_user = coaches_lookup.get(coach_name) if coach_name else None
+                
+                # Get profile picture
+                coach_logo = None
+                if coach_user and coach_user.picture:
+                    try:
+                        picture_url = coach_user.picture.url
+                        if picture_url and not str(picture_url).endswith("null"):
+                            if request:
+                                coach_logo = request.build_absolute_uri(picture_url)
+                            else:
+                                coach_logo = picture_url
+                    except (ValueError, AttributeError) as e:
+                        logger.debug(f"Error getting picture URL for coach {coach_user.id}: {e}")
+                        coach_logo = None
+                
+                coaches_list.append({
+                    "user_id": str(coach_user.id) if coach_user else None,
+                    "name": coach_name,
+                    "role": coach_role,
+                    "logo": coach_logo,
+                })
+        
+        return coaches_list if coaches_list else []
+    
+    def _get_game_referees(self, obj, user_language):
+        """Get referees for a game from multiple sources with user_id and profile picture"""
+        from accounts.models import WajoUser
+        
+        referees_list = []
+        request = self.context.get("request")
+        
+        # First, try to get from game.referees ManyToManyField (has user objects)
+        if obj.game and hasattr(obj.game, "referees"):
+            for referee_user in obj.game.referees.all():
+                # Get profile picture URL
+                referee_logo = None
+                if referee_user.picture:
+                    try:
+                        picture_url = referee_user.picture.url
+                        if picture_url and not str(picture_url).endswith("null"):
+                            if request:
+                                referee_logo = request.build_absolute_uri(picture_url)
+                            else:
+                                referee_logo = picture_url
+                        else:
+                            referee_logo = None
+                    except (ValueError, AttributeError):
+                        referee_logo = None
+                else:
+                    # No profile picture
+                    referee_logo = None
+                
+                referees_list.append({
+                    "user_id": str(referee_user.id),
+                    "name": referee_user.name or "",
+                    "position": referee_user.role or "Referee",
+                    "logo": referee_logo,
+                })
+        
+        # If no referees from game relationship, try game_info and language_metadata
+        # Try to match with user objects by name
+        if not referees_list:
+            referees_from_data = []
+            
+            # Try game_info first
+            try:
+                if obj.game and obj.game.game_info:
+                    game_info = obj.game.game_info
+                    if user_language in game_info:
+                        lang_info = game_info[user_language]
+                        # Referees are shared, so get from either home or away
+                        team_info = lang_info.get("home", {}) or lang_info.get("away", {})
+                        referees_from_info = team_info.get("referees", [])
+                        if isinstance(referees_from_info, list):
+                            referees_from_data = referees_from_info
+            except Exception as e:
+                logger.warning(f"Error getting referees from game_info: {e}")
+            
+            # Fallback: try language_metadata
+            if not referees_from_data:
+                try:
+                    if obj.language_metadata:
+                        lang_data = obj.language_metadata.get(user_language, {})
+                        referees_from_metadata = lang_data.get("referees", [])
+                        if isinstance(referees_from_metadata, list):
+                            referees_from_data = referees_from_metadata
+                except Exception as e:
+                    logger.warning(f"Error getting referees from language_metadata: {e}")
+            
+            # Optimize: Batch lookup referees by name to avoid N+1 queries
+            referee_names = []
+            for referee_data in referees_from_data:
+                referee_name = referee_data.get("name", "") if isinstance(referee_data, dict) else str(referee_data)
+                if referee_name:
+                    referee_names.append(referee_name)
+            
+            # Fetch all matching referees in a single query
+            referees_lookup = {}
+            if referee_names:
+                try:
+                    matching_referees = WajoUser.objects.filter(
+                        name__in=referee_names,
+                        role="Referee"
+                    ).only("id", "name", "picture")
+                    
+                    for referee_user in matching_referees:
+                        referees_lookup[referee_user.name] = referee_user
+                except Exception as e:
+                    logger.warning(f"Error batch fetching referees: {e}")
+            
+            # Process referees from data
+            for referee_data in referees_from_data:
+                referee_name = referee_data.get("name", "") if isinstance(referee_data, dict) else str(referee_data)
+                referee_position = referee_data.get("position", "Referee") if isinstance(referee_data, dict) else "Referee"
+                
+                # Look up referee from prefetched data
+                referee_user = referees_lookup.get(referee_name) if referee_name else None
+                
+                # Get profile picture
+                referee_logo = None
+                if referee_user and referee_user.picture:
+                    try:
+                        picture_url = referee_user.picture.url
+                        if picture_url and not str(picture_url).endswith("null"):
+                            if request:
+                                referee_logo = request.build_absolute_uri(picture_url)
+                            else:
+                                referee_logo = picture_url
+                    except (ValueError, AttributeError) as e:
+                        logger.debug(f"Error getting picture URL for referee {referee_user.id}: {e}")
+                        referee_logo = None
+                
+                referees_list.append({
+                    "user_id": str(referee_user.id) if referee_user else None,
+                    "name": referee_name,
+                    "position": referee_position,
+                    "logo": referee_logo,
+                })
+        
+        return referees_list if referees_list else []
+    
+    def _get_team_data(self, obj, team_side):
+        """Get complete team data including goals, starting_lineups, replacements, coaches, and referees"""
         from tracevision.models import TraceVisionSessionStats
         
         # Get user language preference
@@ -1692,7 +1909,41 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
         if request and hasattr(request, "user"):
             user_language = getattr(request.user, "selected_language", "en") or "en"
         
-        # Try to get from session_stats first
+        # Get team instance
+        team = obj.home_team if team_side == "home" else obj.away_team
+        if not team:
+            return {
+                "id": None,
+                "name": None,
+                "logo": None,
+                "total_goals": 0,
+                "first_half_goals": 0,
+                "second_half_goals": 0,
+                "goals": [],
+                "goal_counts": {"first_half": 0, "second_half": 0, "total": 0},
+                "starting_lineups": [],
+                "replacements": [],
+                "coaches": [],
+            }
+        
+        # Get team basic info
+        team_logo = None
+        if team.logo:
+            if request:
+                team_logo = request.build_absolute_uri(team.logo.url)
+            else:
+                team_logo = team.logo.url
+        
+        # Get goals data
+        goals_data = self._get_team_goals_data(obj, team_side)
+        
+        # Get starting_lineups and replacements from session_stats
+        starting_lineups_dict = {}
+        replacements_dict = {}
+        total_goals = 0
+        first_half_goals = 0
+        second_half_goals = 0
+        
         try:
             if hasattr(obj, "session_stats") and obj.session_stats.exists():
                 session_stats = obj.session_stats.first()
@@ -1700,37 +1951,116 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
                 session_stats = TraceVisionSessionStats.objects.filter(session=obj).first()
             
             if session_stats:
-                home_stats = session_stats.home_team_stats or {}
-                away_stats = session_stats.away_team_stats or {}
+                if team_side == "home":
+                    team_stats = session_stats.home_team_stats or {}
+                else:
+                    team_stats = session_stats.away_team_stats or {}
                 
-                home_replacements = home_stats.get("replacements", {})
-                away_replacements = away_stats.get("replacements", {})
+                total_goals = team_stats.get("total_goals", 0)
+                first_half_goals = team_stats.get("first_half_goals", 0)
+                second_half_goals = team_stats.get("second_half_goals", 0)
                 
-                return {
-                    "home": home_replacements.get(user_language, home_replacements.get("en", {})),
-                    "away": away_replacements.get(user_language, away_replacements.get("en", {})),
-                }
+                # Get starting_lineups and replacements
+                starting_lineups_all = team_stats.get("starting_lineups", {})
+                replacements_all = team_stats.get("replacements", {})
+                
+                starting_lineups_dict = starting_lineups_all.get(user_language, starting_lineups_all.get("en", {}))
+                replacements_dict = replacements_all.get(user_language, replacements_all.get("en", {}))
+        except (AttributeError, KeyError, TypeError, ValueError) as e:
+            logger.warning(f"Error getting team data from session_stats: {e}", exc_info=True)
         except Exception as e:
-            logger.warning(f"Error getting team_wise_replacements from session_stats: {e}")
+            logger.error(f"Unexpected error getting team data from session_stats: {e}", exc_info=True)
         
         # Fallback: try to get from game.game_info
-        try:
-            if obj.game and obj.game.game_info:
-                game_info = obj.game.game_info
-                if user_language in game_info:
-                    lang_info = game_info[user_language]
-                    return {
-                        "home": lang_info.get("home", {}).get("replacements", {}),
-                        "away": lang_info.get("away", {}).get("replacements", {}),
-                    }
-        except Exception as e:
-            logger.warning(f"Error getting team_wise_replacements from game_info: {e}")
+        if not starting_lineups_dict and not replacements_dict:
+            try:
+                if obj.game and obj.game.game_info:
+                    game_info = obj.game.game_info
+                    if user_language in game_info:
+                        lang_info = game_info[user_language]
+                        team_info = lang_info.get(team_side, {})
+                        starting_lineups_dict = team_info.get("starting_lineups", {})
+                        replacements_dict = team_info.get("replacements", {})
+                        total_goals = team_info.get("total_score", 0)
+                        first_half_goals = team_info.get("first_half_score", 0)
+                        second_half_goals = team_info.get("second_half_score", 0)
+            except (AttributeError, KeyError, TypeError, ValueError) as e:
+                logger.warning(f"Error getting team data from game_info: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"Unexpected error getting team data from game_info: {e}", exc_info=True)
         
-        # Default fallback
+        # Use goal counts from stats if available (more accurate), otherwise use counts from goals_data
+        if total_goals == 0 and first_half_goals == 0 and second_half_goals == 0:
+            # Stats don't have goal counts, use counts from goals_data
+            first_half_goals = goals_data["goal_counts"]["first_half"]
+            second_half_goals = goals_data["goal_counts"]["second_half"]
+            total_goals = goals_data["goal_counts"]["total"]
+        
+        # Optimize: Prefetch all players for the team once to share between lineups and replacements
+        from tracevision.models import TracePlayer
+        players_lookup = {}
+        if team:
+            try:
+                team_players = TracePlayer.objects.filter(
+                    team=team
+                ).select_related("user").only(
+                    "id", "jersey_number", "user__picture"
+                )
+                for player in team_players:
+                    players_lookup[player.jersey_number] = player
+            except (AttributeError, ValueError, TypeError) as e:
+                logger.warning(f"Error prefetching players for team {team.id if team else 'None'}: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"Unexpected error prefetching players for team {team.id if team else 'None'}: {e}", exc_info=True)
+        
+        # Transform lineups and replacements to list format with player profile info
+        # Pass players_lookup to avoid duplicate queries
+        starting_lineups_list = self._transform_lineups_to_list(
+            starting_lineups_dict, team_side, obj, team, players_lookup
+        )
+        replacements_list = self._transform_replacements_to_list(
+            replacements_dict, team_side, obj, team, players_lookup
+        )
+        
+        # Get coaches (referees are at game level, not team level)
+        coaches_list = self._get_team_coaches(obj, team, team_side, user_language)
+        
         return {
-            "home": {},
-            "away": {},
+            "id": team.id,
+            "name": get_localized_team_name(team, user_language),
+            "logo": team_logo,
+            "total_goals": total_goals,
+            "first_half_goals": first_half_goals,
+            "second_half_goals": second_half_goals,
+            "goals": goals_data["goals"],
+            "goal_counts": {
+                "first_half": first_half_goals,
+                "second_half": second_half_goals,
+                "total": total_goals,
+            },
+            "starting_lineups": starting_lineups_list,
+            "replacements": replacements_list,
+            "coaches": coaches_list,
         }
+    
+    def get_home_team(self, obj):
+        """Get home team data with goals, starting_lineups, and replacements"""
+        return self._get_team_data(obj, "home")
+    
+    def get_away_team(self, obj):
+        """Get away team data with goals, starting_lineups, and replacements"""
+        return self._get_team_data(obj, "away")
+    
+    def get_referees(self, obj):
+        """Get referees for the game (at game level, not team level)"""
+        # Get user language preference
+        user_language = "en"
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        return self._get_game_referees(obj, user_language)
+
 
 
 class PlayerDetailSerializer(serializers.ModelSerializer):

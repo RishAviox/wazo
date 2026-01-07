@@ -1311,58 +1311,6 @@ class GetAvailableHighlightDatesView(APIView):
                     .order_by("-match_date", "-id")
                 )
 
-            try:
-
-                # Prefetch all players for teams in these sessions
-                # Get unique team IDs from sessions
-                team_ids = set()
-                for session in sessions_with_highlights:
-                    if session.home_team:
-                        team_ids.add(session.home_team.id)
-                    if session.away_team:
-                        team_ids.add(session.away_team.id)
-
-                # Get all TracePlayers for these teams (NOT filtered by session)
-                # This ensures we get players even if they weren't created for this specific session
-                # Select related user to get profile picture for player_logo
-                all_players = TracePlayer.objects.filter(
-                    team_id__in=team_ids
-                ).select_related("team", "user")
-
-                # Create a mapping of team_id -> players for quick lookup
-                players_by_team = {}
-                for player_obj in all_players:
-                    team_id = player_obj.team_id
-                    if team_id not in players_by_team:
-                        players_by_team[team_id] = []
-                    players_by_team[team_id].append(player_obj)
-
-                # Attach prefetched players to sessions based on teams
-                # Get players from home_team and away_team for each session
-                for session in sessions_with_highlights:
-                    session._prefetched_players = []
-                    if session.home_team and session.home_team.id in players_by_team:
-                        session._prefetched_players.extend(
-                            players_by_team[session.home_team.id]
-                        )
-                    if session.away_team and session.away_team.id in players_by_team:
-                        session._prefetched_players.extend(
-                            players_by_team[session.away_team.id]
-                        )
-
-            except Exception as db_error:
-                logger.exception(
-                    f"Database error while fetching sessions: {str(db_error)}"
-                )
-                return Response(
-                    {
-                        "success": False,
-                        "message": "Something went wrong",
-                        "data": {},
-                        "error": "Unable to retrieve session data. Please try again later.",
-                    },
-                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
 
             # Group sessions by date
             sessions_by_date = {}
