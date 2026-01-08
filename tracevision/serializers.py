@@ -1325,53 +1325,122 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
         return None
 
     def get_match_status(self, obj):
-        """Determine match status: Scheduled, Live, or Ended"""
+        """Determine match status: Scheduled, Live, or Ended with localized value"""
         from django.utils import timezone
         from datetime import datetime, date, time as dt_time
         
+        # Get user language preference
+        user_language = "en"
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        # Status translations
+        status_translations = {
+            "Scheduled": {
+                "en": "Scheduled",
+                "ar": "مجدول",
+                "he": "מתוכנן",
+                "es": "Programado",
+                "fr": "Programmé",
+                "de": "Geplant",
+                "it": "Programmato",
+                "pt": "Agendado",
+            },
+            "Live": {
+                "en": "Live",
+                "ar": "مباشر",
+                "he": "חי",
+                "es": "En vivo",
+                "fr": "En direct",
+                "de": "Live",
+                "it": "In diretta",
+                "pt": "Ao vivo",
+            },
+            "Ended": {
+                "en": "Ended",
+                "ar": "انتهى",
+                "he": "הסתיים",
+                "es": "Finalizado",
+                "fr": "Terminé",
+                "de": "Beendet",
+                "it": "Terminato",
+                "pt": "Finalizado",
+            }
+        }
+        
+        # Determine status
+        status_key = "Scheduled"
+        status_code = 1
+        
         if not obj.match_date:
-            return "Scheduled"
-        
-        today = timezone.now().date()
-        match_date = obj.match_date
-        
-        # If match date is in the future, it's Scheduled
-        if match_date > today:
-            return "Scheduled"
-        
-        # If match date is today, check if it's live based on match_start_time and match_end_time
-        if match_date == today:
-            if obj.match_start_time and obj.match_end_time:
-                try:
-                    # Parse match times
-                    start_time = datetime.strptime(obj.match_start_time, "%H:%M:%S").time()
-                    end_time = datetime.strptime(obj.match_end_time, "%H:%M:%S").time()
-                    current_time = timezone.now().time()
-                    
-                    # Check if current time is between start and end
-                    if start_time <= current_time <= end_time:
-                        return "Live"
-                except (ValueError, AttributeError):
-                    pass
+            status_key = "Scheduled"
+            status_code = 1
+        else:
+            today = timezone.now().date()
+            match_date = obj.match_date
             
-            # If status is processed, it's likely ended
-            if obj.status == "processed":
-                return "Ended"
+            # If match date is in the future, it's Scheduled
+            if match_date > today:
+                status_key = "Scheduled"
+                status_code = 1
             
-            # Default to Live if today and no clear end time
-            return "Live"
+            # If match date is today, check if it's live based on match_start_time and match_end_time
+            elif match_date == today:
+                if obj.match_start_time and obj.match_end_time:
+                    try:
+                        # Parse match times
+                        start_time = datetime.strptime(obj.match_start_time, "%H:%M:%S").time()
+                        end_time = datetime.strptime(obj.match_end_time, "%H:%M:%S").time()
+                        current_time = timezone.now().time()
+                        
+                        # Check if current time is between start and end
+                        if start_time <= current_time <= end_time:
+                            status_key = "Live"
+                            status_code = 2
+                        else:
+                            status_key = "Ended"
+                            status_code = 3
+                    except (ValueError, AttributeError):
+                        # If status is processed, it's likely ended
+                        if obj.status == "processed":
+                            status_key = "Ended"
+                            status_code = 3
+                        else:
+                            # Default to Live if today and no clear end time
+                            status_key = "Live"
+                            status_code = 2
+                else:
+                    # If status is processed, it's likely ended
+                    if obj.status == "processed":
+                        status_key = "Ended"
+                        status_code = 3
+                    else:
+                        # Default to Live if today and no clear end time
+                        status_key = "Live"
+                        status_code = 2
+            
+            # If match date is in the past, it's Ended
+            elif match_date < today:
+                status_key = "Ended"
+                status_code = 3
         
-        # If match date is in the past, it's Ended
-        if match_date < today:
-            return "Ended"
+        # Get localized value, fallback to English if language not supported
+        localized_value = status_translations[status_key].get(
+            user_language, 
+            status_translations[status_key]["en"]
+        )
         
-        # Default to Scheduled
-        return "Scheduled"
+        return {
+            "status": status_code,
+            "value": localized_value
+        }
 
     def get_score(self, obj):
         """Get match score when match is Ended"""
         match_status = self.get_match_status(obj)
-        if match_status == "Ended":
+        # Check if status is 3 (Ended)
+        if match_status.get("status") == 3:
             return {
                 "home": obj.home_score if obj.home_score is not None else 0,
                 "away": obj.away_score if obj.away_score is not None else 0,
