@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
     TraceVisionProcessesList,
     TraceVisionProcessDetail,
@@ -14,7 +15,16 @@ from .views import (
     MapUserToPlayerView,
     DeleteErroredTraceSessionView,
     GetPlayerByTokenView,
+    TraceClipReelViewSet,
+    TraceClipReelCommentViewSet,
+    TraceClipReelNoteViewSet,
 )
+
+# Create router for ViewSets
+router = DefaultRouter()
+router.register(r"clip-reels", TraceClipReelViewSet, basename="clipreel")
+router.register(r"comments", TraceClipReelCommentViewSet, basename="comment")
+router.register(r"notes", TraceClipReelNoteViewSet, basename="note")
 
 urlpatterns = [
     path(
@@ -82,4 +92,6 @@ urlpatterns = [
         GetPlayerByTokenView.as_view(),
         name="get-player-by-token",
     ),
+    # Include router URLs for ClipReel comment system
+    path("", include(router.urls)),
 ]

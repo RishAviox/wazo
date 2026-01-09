@@ -10,6 +10,9 @@ from rest_framework import serializers
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from django.shortcuts import get_object_or_404
 
 from teams.models import Team
 from tracevision.models import (
@@ -21,6 +24,11 @@ from tracevision.models import (
     TracePossessionStats,
     TraceHighlight,
     PlayerUserMapping,
+    TraceClipReelShare,
+    TraceClipReelComment,
+    TraceClipReelCommentLike,
+    TraceClipReelNote,
+    TraceClipReelNoteShare,
 )
 from tracevision.tasks import (
     generate_overlay_highlights_task,
@@ -39,6 +47,13 @@ from tracevision.serializers import (
     PossessionPlayerMetricsSerializer,
     GenerateHighlightClipReelSerializer,
     MapUserToPlayerSerializer,
+    TraceClipReelShareSerializer,
+    TraceClipReelCommentSerializer,
+    TraceClipReelCommentEditSerializer,
+    TraceClipReelCommentLikeSerializer,
+    TraceClipReelNoteSerializer,
+    TraceClipReelNoteShareSerializer,
+    TraceClipReelCaptionSerializer,
 )
 from tracevision.services import TraceVisionService
 from games.models import GameUserRole, Game
@@ -2209,4 +2224,606 @@ class DeleteErroredTraceSessionView(APIView):
             return Response(
                 {"error": "Internal server error", "details": str(e)},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+# ============================================================================
+# TraceClipReel Comment System ViewSets
+# ============================================================================
+
+
+class TraceClipReelViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for TraceClipReel operations including sharing and caption management.
+    """
+
+    queryset = TraceClipReel.objects.all()
+    serializer_class = HighlightClipReelSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination
+
+    @action(detail=True, methods=["post"], url_path="share")
+    def share_reel(self, request, pk=None):
+        """
+        Share clip reel with another user.
+        POST /api/tracevision/clip-reels/{id}/share/
+        """
+        from tracevision.permissions import IsClipReelOwner
+
+        clip_reel = self.get_object()
+
+        # Check if user is owner or has permission to share
+        permission = IsClipReelOwner()
+        if not permission.has_object_permission(request, self, clip_reel):
+            return Response(
+                {"error": "Only the reel owner can share it."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        # Add clip_reel and highlight to data
+        data = request.data.copy()
+        data["clip_reel_id"] = clip_reel.id
+        data["highlight_id"] = clip_reel.highlight.id if clip_reel.highlight else None
+
+        serializer = TraceClipReelShareSerializer(data=data, context={"request": request})
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Reel shared successfully", "data": serializer.data},
+                status=http_status.HTTP_201_CREATED,
+            )
+
+        return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["get"], url_path="shares")
+    def list_shares(self, request, pk=None):
+        """
+        List all shares for this clip reel.
+        GET /api/tracevision/clip-reels/{id}/shares/
+        """
+        from tracevision.permissions import IsClipReelOwner
+
+        clip_reel = self.get_object()
+
+        # Only owner can see who reel is shared with
+        permission = IsClipReelOwner()
+        if not permission.has_object_permission(request, self, clip_reel):
+            return Response(
+                {"error": "Only the reel owner can view shares."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        shares = TraceClipReelShare.objects.filter(clip_reel=clip_reel, is_active=True)
+        serializer = TraceClipReelShareSerializer(shares, many=True, context={"request": request})
+
+        return Response({"shares": serializer.data}, status=http_status.HTTP_200_OK)
+
+    @action(detail=True, methods=["delete"], url_path="shares/(?P<share_id>[^/.]+)")
+    def revoke_share(self, request, pk=None, share_id=None):
+        """
+        Revoke share access (set is_active=False).
+        DELETE /api/tracevision/clip-reels/{id}/shares/{share_id}/
+        """
+        from tracevision.permissions import IsClipReelOwner
+
+        clip_reel = self.get_object()
+
+        # Only owner can revoke shares
+        permission = IsClipReelOwner()
+        if not permission.has_object_permission(request, self, clip_reel):
+            return Response(
+                {"error": "Only the reel owner can revoke shares."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            share = TraceClipReelShare.objects.get(id=share_id, clip_reel=clip_reel)
+            share.is_active = False
+            share.save()
+
+            return Response(
+                {"message": "Share revoked successfully"},
+                status=http_status.HTTP_200_OK,
+            )
+        except TraceClipReelShare.DoesNotExist:
+            return Response(
+                {"error": "Share not found"},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+    @action(detail=False, methods=["get"], url_path="shared-with-me")
+    def shared_with_me(self, request):
+        """
+        List all clip reels shared with current user.
+        GET /api/tracevision/clip-reels/shared-with-me/
+        """
+        shares = TraceClipReelShare.objects.filter(
+            shared_with=request.user, is_active=True
+        ).select_related("clip_reel")
+
+        clip_reels = [share.clip_reel for share in shares]
+        serializer = HighlightClipReelSerializer(clip_reels, many=True, context={"request": request})
+
+        return Response({"clip_reels": serializer.data}, status=http_status.HTTP_200_OK)
+
+    @action(detail=True, methods=["patch"], url_path="caption")
+    def update_caption(self, request, pk=None):
+        """
+        Add or update caption for clip reel.
+        PATCH /api/tracevision/clip-reels/{id}/caption/
+        """
+        clip_reel = self.get_object()
+
+        serializer = TraceClipReelCaptionSerializer(
+            clip_reel, data=request.data, partial=True, context={"request": request}
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Caption updated successfully", "data": serializer.data},
+                status=http_status.HTTP_200_OK,
+            )
+
+        return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"], url_path="comments")
+    def add_comment(self, request, pk=None):
+        """
+        Add a comment to clip reel.
+        POST /api/tracevision/clip-reels/{id}/comments/
+        """
+        from tracevision.permissions import CanCommentOnClipReel
+
+        clip_reel = self.get_object()
+
+        # Check if user can comment
+        permission = CanCommentOnClipReel()
+        if not permission.has_object_permission(request, self, clip_reel):
+            return Response(
+                {"error": "You don't have permission to comment on this reel."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        data = request.data.copy()
+        data["clip_reel_id"] = clip_reel.id
+        data["highlight_id"] = clip_reel.highlight.id if clip_reel.highlight else None
+
+        serializer = TraceClipReelCommentSerializer(data=data, context={"request": request})
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Comment added successfully", "data": serializer.data},
+                status=http_status.HTTP_201_CREATED,
+            )
+
+        return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["get"], url_path="comments")
+    def list_comments(self, request, pk=None):
+        """
+        List comments on clip reel (filtered by visibility).
+        GET /api/tracevision/clip-reels/{id}/comments/
+        """
+        from tracevision.permissions import HasClipReelAccess
+
+        clip_reel = self.get_object()
+
+        # Check if user has access to reel
+        permission = HasClipReelAccess()
+        if not permission.has_object_permission(request, self, clip_reel):
+            return Response(
+                {"error": "You don't have access to this reel."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        # Filter comments based on visibility
+        comments = TraceClipReelComment.objects.filter(
+            clip_reel=clip_reel, is_deleted=False, parent_comment__isnull=True
+        )
+
+        # Filter by visibility
+        user = request.user
+        is_owner = clip_reel.primary_player and clip_reel.primary_player.user == user
+
+        if not is_owner:
+            # Non-owners only see public comments
+            comments = comments.filter(visibility="public")
+
+        serializer = TraceClipReelCommentSerializer(
+            comments, many=True, context={"request": request}
+        )
+
+        return Response({"comments": serializer.data}, status=http_status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="notes")
+    def add_note(self, request, pk=None):
+        """
+        Add a private note to clip reel.
+        POST /api/tracevision/clip-reels/{id}/notes/
+        """
+        from tracevision.permissions import IsPlayerOrCoach
+
+        clip_reel = self.get_object()
+
+        # Check if user is Player or Coach
+        permission = IsPlayerOrCoach()
+        if not permission.has_permission(request, self):
+            return Response(
+                {"error": "Only Players and Coaches can create notes."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        data = request.data.copy()
+        data["clip_reel_id"] = clip_reel.id
+        data["highlight_id"] = clip_reel.highlight.id if clip_reel.highlight else None
+
+        serializer = TraceClipReelNoteSerializer(data=data, context={"request": request})
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Note created successfully", "data": serializer.data},
+                status=http_status.HTTP_201_CREATED,
+            )
+
+        return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["get"], url_path="notes")
+    def list_notes(self, request, pk=None):
+        """
+        List notes on clip reel (only accessible ones).
+        GET /api/tracevision/clip-reels/{id}/notes/
+        """
+        clip_reel = self.get_object()
+        user = request.user
+
+        # Get all notes for this reel
+        notes = TraceClipReelNote.objects.filter(clip_reel=clip_reel, is_deleted=False)
+
+        # Filter notes based on can_view permission
+        accessible_notes = [note for note in notes if note.can_view(user)]
+
+        serializer = TraceClipReelNoteSerializer(
+            accessible_notes, many=True, context={"request": request}
+        )
+
+        return Response({"notes": serializer.data}, status=http_status.HTTP_200_OK)
+
+
+class TraceClipReelCommentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing comments (edit, delete, like, reply).
+    """
+
+    queryset = TraceClipReelComment.objects.filter(is_deleted=False)
+    serializer_class = TraceClipReelCommentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        """Use different serializer for update"""
+        if self.action == "update" or self.action == "partial_update":
+            return TraceClipReelCommentEditSerializer
+        return TraceClipReelCommentSerializer
+
+    def partial_update(self, request, *args, **kwargs):
+        """
+        Edit comment (PATCH).
+        PATCH /api/tracevision/comments/{id}/
+        """
+        from tracevision.permissions import IsCommentAuthor
+
+        comment = self.get_object()
+
+        # Only author can edit
+        permission = IsCommentAuthor()
+        if not permission.has_object_permission(request, self, comment):
+            return Response(
+                {"error": "Only the comment author can edit it."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = self.get_serializer(comment, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {
+                    "message": "Comment updated successfully",
+                    "data": TraceClipReelCommentSerializer(
+                        comment, context={"request": request}
+                    ).data,
+                },
+                status=http_status.HTTP_200_OK,
+            )
+
+        return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Soft delete comment.
+        DELETE /api/tracevision/comments/{id}/
+        """
+        from tracevision.permissions import IsCommentAuthor
+
+        comment = self.get_object()
+
+        # Only author can delete
+        permission = IsCommentAuthor()
+        if not permission.has_object_permission(request, self, comment):
+            return Response(
+                {"error": "Only the comment author can delete it."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        comment.soft_delete()
+
+        return Response(
+            {"message": "Comment deleted successfully"},
+            status=http_status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="like")
+    def like_comment(self, request, pk=None):
+        """
+        Like a comment.
+        POST /api/tracevision/comments/{id}/like/
+        """
+        comment = self.get_object()
+
+        # Check if user can view comment
+        if not comment.can_view(request.user):
+            return Response(
+                {"error": "You don't have access to this comment."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        # Check if already liked
+        if TraceClipReelCommentLike.objects.filter(
+            comment=comment, user=request.user
+        ).exists():
+            return Response(
+                {"error": "You have already liked this comment."},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        like = TraceClipReelCommentLike.objects.create(
+            comment=comment, user=request.user
+        )
+
+        return Response(
+            {
+                "message": "Comment liked successfully",
+                "likes_count": comment.likes_count,
+            },
+            status=http_status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["delete"], url_path="like")
+    def unlike_comment(self, request, pk=None):
+        """
+        Unlike a comment.
+        DELETE /api/tracevision/comments/{id}/like/
+        """
+        comment = self.get_object()
+
+        try:
+            like = TraceClipReelCommentLike.objects.get(
+                comment=comment, user=request.user
+            )
+            like.delete()
+
+            return Response(
+                {
+                    "message": "Comment unliked successfully",
+                    "likes_count": comment.likes_count,
+                },
+                status=http_status.HTTP_200_OK,
+            )
+        except TraceClipReelCommentLike.DoesNotExist:
+            return Response(
+                {"error": "You haven't liked this comment."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+    @action(detail=True, methods=["post"], url_path="reply")
+    def add_reply(self, request, pk=None):
+        """
+        Add a reply to a comment.
+        POST /api/tracevision/comments/{id}/reply/
+        """
+        parent_comment = self.get_object()
+
+        # Check if user can view parent comment
+        if not parent_comment.can_view(request.user):
+            return Response(
+                {"error": "You don't have access to this comment."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        # Check if user can comment on the reel
+        from tracevision.permissions import CanCommentOnClipReel
+
+        permission = CanCommentOnClipReel()
+        if not permission.has_object_permission(
+            request, self, parent_comment.clip_reel
+        ):
+            return Response(
+                {"error": "You don't have permission to comment on this reel."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        data = request.data.copy()
+        data["clip_reel_id"] = parent_comment.clip_reel.id
+        data["highlight_id"] = parent_comment.highlight.id
+        data["parent_comment"] = parent_comment.id
+
+        serializer = TraceClipReelCommentSerializer(data=data, context={"request": request})
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Reply added successfully", "data": serializer.data},
+                status=http_status.HTTP_201_CREATED,
+            )
+
+        return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["get"], url_path="replies")
+    def list_replies(self, request, pk=None):
+        """
+        List replies to a comment.
+        GET /api/tracevision/comments/{id}/replies/
+        """
+        parent_comment = self.get_object()
+
+        # Check if user can view parent comment
+        if not parent_comment.can_view(request.user):
+            return Response(
+                {"error": "You don't have access to this comment."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        replies = TraceClipReelComment.objects.filter(
+            parent_comment=parent_comment, is_deleted=False
+        )
+
+        serializer = TraceClipReelCommentSerializer(
+            replies, many=True, context={"request": request}
+        )
+
+        return Response({"replies": serializer.data}, status=http_status.HTTP_200_OK)
+
+
+class TraceClipReelNoteViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing notes (edit, delete, share).
+    """
+
+    queryset = TraceClipReelNote.objects.filter(is_deleted=False)
+    serializer_class = TraceClipReelNoteSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Filter notes to only those accessible by current user"""
+        user = self.request.user
+        notes = TraceClipReelNote.objects.filter(is_deleted=False)
+
+        # Filter to only notes the user can view
+        accessible_notes = [note for note in notes if note.can_view(user)]
+
+        # Return queryset with accessible note IDs
+        return TraceClipReelNote.objects.filter(
+            id__in=[note.id for note in accessible_notes]
+        )
+
+    def partial_update(self, request, *args, **kwargs):
+        """
+        Edit note (PATCH).
+        PATCH /api/tracevision/notes/{id}/
+        """
+        from tracevision.permissions import IsNoteAuthor
+
+        note = self.get_object()
+
+        # Only author can edit
+        permission = IsNoteAuthor()
+        if not permission.has_object_permission(request, self, note):
+            return Response(
+                {"error": "Only the note author can edit it."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = self.get_serializer(note, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Note updated successfully", "data": serializer.data},
+                status=http_status.HTTP_200_OK,
+            )
+
+        return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Soft delete note.
+        DELETE /api/tracevision/notes/{id}/
+        """
+        from tracevision.permissions import IsNoteAuthor
+
+        note = self.get_object()
+
+        # Only author can delete
+        permission = IsNoteAuthor()
+        if not permission.has_object_permission(request, self, note):
+            return Response(
+                {"error": "Only the note author can delete it."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        note.soft_delete()
+
+        return Response(
+            {"message": "Note deleted successfully"},
+            status=http_status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="share")
+    def share_note(self, request, pk=None):
+        """
+        Share note with user or group.
+        POST /api/tracevision/notes/{id}/share/
+        """
+        note = self.get_object()
+
+        data = request.data.copy()
+        data["note"] = note.id
+
+        serializer = TraceClipReelNoteShareSerializer(
+            data=data, context={"request": request}
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Note shared successfully", "data": serializer.data},
+                status=http_status.HTTP_201_CREATED,
+            )
+
+        return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["delete"], url_path="shares/(?P<share_id>[^/.]+)")
+    def revoke_share(self, request, pk=None, share_id=None):
+        """
+        Revoke note share.
+        DELETE /api/tracevision/notes/{id}/shares/{share_id}/
+        """
+        from tracevision.permissions import IsNoteAuthor
+
+        note = self.get_object()
+
+        # Only author can revoke shares
+        permission = IsNoteAuthor()
+        if not permission.has_object_permission(request, self, note):
+            return Response(
+                {"error": "Only the note author can revoke shares."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            share = TraceClipReelNoteShare.objects.get(id=share_id, note=note)
+            share.is_active = False
+            share.save()
+
+            return Response(
+                {"message": "Note share revoked successfully"},
+                status=http_status.HTTP_200_OK,
+            )
+        except TraceClipReelNoteShare.DoesNotExist:
+            return Response(
+                {"error": "Share not found"},
+                status=http_status.HTTP_404_NOT_FOUND,
             )

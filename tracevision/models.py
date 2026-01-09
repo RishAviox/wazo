@@ -1033,6 +1033,11 @@ class TraceClipReel(models.Model):
     # Legacy field for backward compatibility
     video_stream = models.URLField(blank=True, help_text="Legacy video stream URL")
 
+    # Caption field for reel owner's description
+    caption = models.TextField(
+        blank=True, null=True, help_text="Reel owner's caption/description"
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1430,3 +1435,502 @@ class PlayerUserMapping(models.Model):
             f" by {self.mapped_by.phone_no}" if self.mapped_by else " (automatic)"
         )
         return f"{self.trace_player.name} -> {self.wajo_user.phone_no} ({source_str}{mapped_by_str})"
+
+
+class TraceClipReelShare(models.Model):
+    """
+    Track permission-based reel sharing (who can access which reel).
+    Enables controlled sharing of clip reels with other users.
+    """
+
+    id = models.AutoField(primary_key=True)
+    clip_reel = models.ForeignKey(
+        TraceClipReel,
+        on_delete=models.CASCADE,
+        related_name="shares",
+        help_text="The reel being shared",
+    )
+    highlight = models.ForeignKey(
+        TraceHighlight,
+        on_delete=models.CASCADE,
+        related_name="reel_shares",
+        help_text="Source highlight for tracking",
+    )
+    shared_by = models.ForeignKey(
+        WajoUser,
+        on_delete=models.CASCADE,
+        related_name="reels_shared",
+        help_text="User who shared the reel",
+    )
+    shared_with = models.ForeignKey(
+        WajoUser,
+        on_delete=models.CASCADE,
+        related_name="reels_received",
+        help_text="User who received access to the reel",
+    )
+    can_comment = models.BooleanField(
+        default=True, help_text="Whether recipient can comment on this reel"
+    )
+    shared_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(
+        default=True, help_text="Whether the share is active (for revoking access)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Clip Reel Share"
+        verbose_name_plural = "Clip Reel Shares"
+        unique_together = [["clip_reel", "shared_with"]]
+        indexes = [
+            models.Index(fields=["clip_reel", "shared_with"]),
+            models.Index(fields=["shared_by"]),
+            models.Index(fields=["is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.clip_reel.id} shared by {self.shared_by.phone_no} with {self.shared_with.phone_no}"
+
+
+class TraceClipReelComment(models.Model):
+    """
+    Public/private comments on clip reels with threaded reply support.
+    Supports mentions, likes, and edit tracking (YouTube/Instagram style).
+    """
+
+    VISIBILITY_CHOICES = [
+        ("public", "Public"),
+        ("private", "Private to Owner"),
+    ]
+
+    id = models.AutoField(primary_key=True)
+    clip_reel = models.ForeignKey(
+        TraceClipReel,
+        on_delete=models.CASCADE,
+        related_name="comments",
+        help_text="The reel this comment is on",
+    )
+    highlight = models.ForeignKey(
+        TraceHighlight,
+        on_delete=models.CASCADE,
+        related_name="clip_comments",
+        help_text="Source highlight for tracking",
+    )
+    author = models.ForeignKey(
+        WajoUser,
+        on_delete=models.CASCADE,
+        related_name="clip_comments",
+        help_text="User who wrote the comment",
+    )
+    content = models.TextField(help_text="Comment text content")
+    visibility = models.CharField(
+        max_length=10,
+        choices=VISIBILITY_CHOICES,
+        default="public",
+        help_text="Public: visible to all with reel access. Private: visible only to reel owner",
+    )
+    parent_comment = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="replies",
+        help_text="Parent comment for threaded replies",
+    )
+    mentions = models.JSONField(
+        default=list,
+        help_text='Mentioned users: [{"user_id": "uuid", "username": "name"}]',
+    )
+    is_edited = models.BooleanField(default=False, help_text="Whether comment was edited")
+    is_deleted = models.BooleanField(
+        default=False, help_text="Soft delete flag"
+    )
+    deleted_at = models.DateTimeField(
+        null=True, blank=True, help_text="When comment was deleted"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Clip Reel Comment"
+        verbose_name_plural = "Clip Reel Comments"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["clip_reel", "created_at"]),
+            models.Index(fields=["author"]),
+            models.Index(fields=["highlight"]),
+            models.Index(fields=["parent_comment"]),
+            models.Index(fields=["visibility", "is_deleted"]),
+        ]
+
+    def __str__(self):
+        author_name = self.author.name or self.author.phone_no
+        return f"Comment by {author_name} on reel {self.clip_reel.id}"
+
+    @property
+    def likes_count(self):
+        """Count of likes on this comment"""
+        return self.likes.count()
+
+    @property
+    def replies_count(self):
+        """Count of replies to this comment"""
+        return self.replies.filter(is_deleted=False).count()
+
+    def can_view(self, user):
+        """
+        Check if a user can view this comment.
+        
+        Args:
+            user: WajoUser instance
+            
+        Returns:
+            bool: True if user can view the comment
+        """
+        # Deleted comments not visible
+        if self.is_deleted:
+            return False
+
+        # Author can always see their own comments
+        if self.author == user:
+            return True
+
+        # Public comments: check if user has access to the reel
+        if self.visibility == "public":
+            # Check if user is reel owner
+            if self.clip_reel.primary_player and self.clip_reel.primary_player.user == user:
+                return True
+            # Check if reel is shared with user
+            return TraceClipReelShare.objects.filter(
+                clip_reel=self.clip_reel, shared_with=user, is_active=True
+            ).exists()
+
+        # Private comments: only visible to author and reel owner
+        if self.visibility == "private":
+            if self.clip_reel.primary_player and self.clip_reel.primary_player.user == user:
+                return True
+
+        return False
+
+    def soft_delete(self):
+        """Soft delete the comment by setting flags"""
+        from django.utils import timezone
+
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save(update_fields=["is_deleted", "deleted_at"])
+
+
+class TraceClipReelCommentLike(models.Model):
+    """
+    Track likes/reactions on comments.
+    One user can like a comment once.
+    """
+
+    id = models.AutoField(primary_key=True)
+    comment = models.ForeignKey(
+        TraceClipReelComment,
+        on_delete=models.CASCADE,
+        related_name="likes",
+        help_text="The comment being liked",
+    )
+    user = models.ForeignKey(
+        WajoUser,
+        on_delete=models.CASCADE,
+        related_name="comment_likes",
+        help_text="User who liked the comment",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Comment Like"
+        verbose_name_plural = "Comment Likes"
+        unique_together = [["comment", "user"]]
+        indexes = [
+            models.Index(fields=["comment", "created_at"]),
+            models.Index(fields=["user"]),
+        ]
+
+    def __str__(self):
+        user_name = self.user.name or self.user.phone_no
+        return f"{user_name} liked comment {self.comment.id}"
+
+
+class TraceClipReelCommentEditHistory(models.Model):
+    """
+    Track comment edit history.
+    Stores previous content each time a comment is edited.
+    """
+
+    id = models.AutoField(primary_key=True)
+    comment = models.ForeignKey(
+        TraceClipReelComment,
+        on_delete=models.CASCADE,
+        related_name="edit_history",
+        help_text="The comment that was edited",
+    )
+    previous_content = models.TextField(help_text="Content before the edit")
+    edited_by = models.ForeignKey(
+        WajoUser,
+        on_delete=models.CASCADE,
+        help_text="User who made the edit (usually the author)",
+    )
+    edited_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Comment Edit History"
+        verbose_name_plural = "Comment Edit Histories"
+        ordering = ["-edited_at"]
+        indexes = [
+            models.Index(fields=["comment", "edited_at"]),
+        ]
+
+    def __str__(self):
+        return f"Edit of comment {self.comment.id} at {self.edited_at}"
+
+
+class TraceClipReelNote(models.Model):
+    """
+    Private notes on clip reels for users and coaches.
+    Notes are private by default and can be shared with specific users or groups.
+    """
+
+    id = models.AutoField(primary_key=True)
+    clip_reel = models.ForeignKey(
+        TraceClipReel,
+        on_delete=models.CASCADE,
+        related_name="notes",
+        help_text="The reel this note is about",
+    )
+    highlight = models.ForeignKey(
+        TraceHighlight,
+        on_delete=models.CASCADE,
+        related_name="clip_notes",
+        help_text="Source highlight for tracking",
+    )
+    author = models.ForeignKey(
+        WajoUser,
+        on_delete=models.CASCADE,
+        related_name="clip_notes",
+        help_text="User who wrote the note (must be Player or Coach)",
+    )
+    content = models.TextField(help_text="Note content")
+    is_deleted = models.BooleanField(default=False, help_text="Soft delete flag")
+    deleted_at = models.DateTimeField(
+        null=True, blank=True, help_text="When note was deleted"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Clip Reel Note"
+        verbose_name_plural = "Clip Reel Notes"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["clip_reel", "author"]),
+            models.Index(fields=["highlight"]),
+            models.Index(fields=["is_deleted"]),
+        ]
+
+    def __str__(self):
+        author_name = self.author.name or self.author.phone_no
+        return f"Note by {author_name} on reel {self.clip_reel.id}"
+
+    def clean(self):
+        """Validate that author is a Player or Coach"""
+        from django.core.exceptions import ValidationError
+
+        if self.author and self.author.role not in ["Player", "Coach"]:
+            raise ValidationError(
+                "Only Players and Coaches can create notes on clip reels."
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def can_view(self, user):
+        """
+        Check if a user can view this note.
+        
+        Args:
+            user: WajoUser instance
+            
+        Returns:
+            bool: True if user can view the note
+        """
+        # Deleted notes not visible
+        if self.is_deleted:
+            return False
+
+        # Author can always see their own notes
+        if self.author == user:
+            return True
+
+        # Check if note is explicitly shared with user
+        if TraceClipReelNoteShare.objects.filter(
+            note=self, shared_with_user=user, is_active=True
+        ).exists():
+            return True
+
+        # Check group shares
+        # If shared with team coaches and user is a team coach
+        if TraceClipReelNoteShare.objects.filter(
+            note=self, shared_with_group="team_coaches", is_active=True
+        ).exists():
+            # Check if user is a coach of the author's team
+            if user.role == "Coach" and self.author.team:
+                if user in self.author.team.coach.all():
+                    return True
+
+        # If shared with player's coach
+        if TraceClipReelNoteShare.objects.filter(
+            note=self, shared_with_group="player_coach", is_active=True
+        ).exists():
+            # Check if user is the player's assigned coach
+            if self.author.coach.filter(id=user.id).exists():
+                return True
+
+        return False
+
+    def share_with_user(self, user, shared_by):
+        """
+        Share this note with a specific user.
+        
+        Args:
+            user: WajoUser to share with
+            shared_by: WajoUser who is sharing
+            
+        Returns:
+            TraceClipReelNoteShare: The created share instance
+        """
+        share, created = TraceClipReelNoteShare.objects.get_or_create(
+            note=self,
+            shared_with_user=user,
+            defaults={"shared_by": shared_by, "is_active": True},
+        )
+        if not created and not share.is_active:
+            # Reactivate if it was previously deactivated
+            share.is_active = True
+            share.save(update_fields=["is_active"])
+        return share
+
+    def share_with_group(self, group_type, shared_by):
+        """
+        Share this note with a group (team coaches or player's coach).
+        
+        Args:
+            group_type: 'team_coaches' or 'player_coach'
+            shared_by: WajoUser who is sharing
+            
+        Returns:
+            TraceClipReelNoteShare: The created share instance
+        """
+        if group_type not in ["team_coaches", "player_coach"]:
+            raise ValueError("group_type must be 'team_coaches' or 'player_coach'")
+
+        share, created = TraceClipReelNoteShare.objects.get_or_create(
+            note=self,
+            shared_with_group=group_type,
+            defaults={"shared_by": shared_by, "is_active": True},
+        )
+        if not created and not share.is_active:
+            # Reactivate if it was previously deactivated
+            share.is_active = True
+            share.save(update_fields=["is_active"])
+        return share
+
+    def soft_delete(self):
+        """Soft delete the note by setting flags"""
+        from django.utils import timezone
+
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save(update_fields=["is_deleted", "deleted_at"])
+
+
+class TraceClipReelNoteShare(models.Model):
+    """
+    Track note sharing with individual users or groups.
+    Supports both individual sharing and group sharing (team coaches, player's coach).
+    """
+
+    GROUP_CHOICES = [
+        ("team_coaches", "All Team Coaches"),
+        ("player_coach", "Player's Coach"),
+    ]
+
+    id = models.AutoField(primary_key=True)
+    note = models.ForeignKey(
+        TraceClipReelNote,
+        on_delete=models.CASCADE,
+        related_name="shares",
+        help_text="The note being shared",
+    )
+    shared_by = models.ForeignKey(
+        WajoUser,
+        on_delete=models.CASCADE,
+        related_name="note_shares_made",
+        help_text="User who shared the note",
+    )
+    shared_with_user = models.ForeignKey(
+        WajoUser,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="note_shares_received",
+        help_text="Specific user to share with (for individual sharing)",
+    )
+    shared_with_group = models.CharField(
+        max_length=20,
+        choices=GROUP_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Group to share with (for group sharing)",
+    )
+    shared_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(
+        default=True, help_text="Whether the share is active (for revoking access)"
+    )
+
+    class Meta:
+        verbose_name = "Note Share"
+        verbose_name_plural = "Note Shares"
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(shared_with_user__isnull=False, shared_with_group__isnull=True)
+                    | models.Q(shared_with_user__isnull=True, shared_with_group__isnull=False)
+                ),
+                name="note_share_user_or_group",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["note", "shared_with_user"]),
+            models.Index(fields=["note", "shared_with_group"]),
+            models.Index(fields=["shared_by"]),
+        ]
+
+    def __str__(self):
+        if self.shared_with_user:
+            target = f"user {self.shared_with_user.phone_no}"
+        else:
+            target = f"group {self.shared_with_group}"
+        return f"Note {self.note.id} shared with {target}"
+
+    def clean(self):
+        """Validate that either user OR group is set, not both and not neither"""
+        from django.core.exceptions import ValidationError
+
+        if self.shared_with_user and self.shared_with_group:
+            raise ValidationError(
+                "Cannot share with both a specific user and a group. Choose one."
+            )
+        if not self.shared_with_user and not self.shared_with_group:
+            raise ValidationError(
+                "Must specify either a user or a group to share with."
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)

@@ -7,7 +7,18 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 
-from tracevision.models import TraceSession, TraceClipReel, TracePlayer, TraceHighlight
+from tracevision.models import (
+    TraceSession,
+    TraceClipReel,
+    TracePlayer,
+    TraceHighlight,
+    TraceClipReelShare,
+    TraceClipReelComment,
+    TraceClipReelCommentLike,
+    TraceClipReelCommentEditHistory,
+    TraceClipReelNote,
+    TraceClipReelNoteShare,
+)
 from tracevision.utils import (
     get_hex_from_color_name,
     get_viewer_team,
@@ -2637,4 +2648,379 @@ class MapUserToPlayerSerializer(serializers.Serializer):
                     f"Unexpected fields: {', '.join(sorted(extra_fields))}. "
                     f"Allowed fields are: {', '.join(sorted(allowed_fields))}"
                 )
+        return attrs
+
+
+# ============================================================================
+# TraceClipReel Comment System Serializers
+# ============================================================================
+
+
+class WajoUserBasicSerializer(serializers.Serializer):
+    """
+    Basic user information for nested serialization.
+    Used in comments and notes to display author details.
+    """
+
+    id = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    phone_no = serializers.CharField(read_only=True)
+    role = serializers.CharField(read_only=True)
+    picture = serializers.ImageField(read_only=True)
+    jersey_number = serializers.IntegerField(read_only=True)
+
+
+class TraceClipReelShareSerializer(serializers.ModelSerializer):
+    """
+    Serializer for sharing clip reels with other users.
+    Validates permissions and prevents self-sharing.
+    """
+
+    shared_by = WajoUserBasicSerializer(read_only=True)
+    shared_with_user = WajoUserBasicSerializer(source="shared_with", read_only=True)
+    clip_reel_id = serializers.IntegerField(write_only=True)
+    highlight_id = serializers.IntegerField(write_only=True)
+    shared_with_id = serializers.UUIDField(write_only=True, source="shared_with")
+
+    class Meta:
+        model = TraceClipReelShare
+        fields = [
+            "id",
+            "clip_reel",
+            "clip_reel_id",
+            "highlight",
+            "highlight_id",
+            "shared_by",
+            "shared_with",
+            "shared_with_id",
+            "shared_with_user",
+            "can_comment",
+            "shared_at",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "shared_by", "shared_at", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        """Validate that user can share and not sharing with self"""
+        user = self.context["request"].user
+        shared_with = attrs.get("shared_with")
+
+        # Can't share with self
+        if user == shared_with:
+            raise ValidationError("Cannot share clip reel with yourself.")
+
+        # Check if user is owner or has permission to share
+        clip_reel = attrs.get("clip_reel")
+        if clip_reel:
+            is_owner = (
+                clip_reel.primary_player and clip_reel.primary_player.user == user
+            )
+            if not is_owner:
+                # Check if user has the reel shared with them (could allow resharing)
+                has_access = TraceClipReelShare.objects.filter(
+                    clip_reel=clip_reel, shared_with=user, is_active=True
+                ).exists()
+                if not has_access:
+                    raise ValidationError(
+                        "You don't have permission to share this clip reel."
+                    )
+
+        return attrs
+
+    def create(self, validated_data):
+        """Set shared_by to current user"""
+        validated_data["shared_by"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class TraceClipReelCommentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for clip reel comments.
+    Supports public/private visibility, mentions, and threaded replies.
+    """
+
+    author = WajoUserBasicSerializer(read_only=True)
+    likes_count = serializers.IntegerField(read_only=True)
+    replies_count = serializers.IntegerField(read_only=True)
+    is_liked = serializers.SerializerMethodField()
+    clip_reel_id = serializers.IntegerField(write_only=True, required=False)
+    highlight_id = serializers.IntegerField(write_only=True, required=False)
+
+    class Meta:
+        model = TraceClipReelComment
+        fields = [
+            "id",
+            "clip_reel",
+            "clip_reel_id",
+            "highlight",
+            "highlight_id",
+            "author",
+            "content",
+            "visibility",
+            "parent_comment",
+            "mentions",
+            "is_edited",
+            "is_deleted",
+            "likes_count",
+            "replies_count",
+            "is_liked",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "author",
+            "is_edited",
+            "is_deleted",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_is_liked(self, obj):
+        """Check if current user has liked this comment"""
+        user = self.context["request"].user
+        return TraceClipReelCommentLike.objects.filter(
+            comment=obj, user=user
+        ).exists()
+
+    def validate(self, attrs):
+        """Validate comment access and mentions"""
+        user = self.context["request"].user
+        clip_reel = attrs.get("clip_reel")
+
+        # Check if user has access to clip reel
+        if clip_reel:
+            is_owner = (
+                clip_reel.primary_player and clip_reel.primary_player.user == user
+            )
+            has_share = TraceClipReelShare.objects.filter(
+                clip_reel=clip_reel, shared_with=user, is_active=True
+            ).exists()
+
+            if not is_owner and not has_share:
+                raise ValidationError("You don't have access to this clip reel.")
+
+            # Check can_comment permission
+            if not is_owner:
+                share = TraceClipReelShare.objects.filter(
+                    clip_reel=clip_reel, shared_with=user, is_active=True
+                ).first()
+                if not share or not share.can_comment:
+                    raise ValidationError(
+                        "You don't have permission to comment on this clip reel."
+                    )
+
+        # Validate mentions if provided
+        mentions = attrs.get("mentions", [])
+        if mentions:
+            from accounts.models import WajoUser
+
+            for mention in mentions:
+                user_id = mention.get("user_id")
+                if user_id:
+                    try:
+                        WajoUser.objects.get(id=user_id)
+                    except WajoUser.DoesNotExist:
+                        raise ValidationError(
+                            f"Mentioned user with id {user_id} does not exist."
+                        )
+
+        return attrs
+
+    def create(self, validated_data):
+        """Set author to current user"""
+        validated_data["author"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class TraceClipReelCommentEditSerializer(serializers.ModelSerializer):
+    """
+    Serializer for editing existing comments.
+    Creates edit history and sets is_edited flag.
+    """
+
+    class Meta:
+        model = TraceClipReelComment
+        fields = ["content", "mentions"]
+
+    def update(self, instance, validated_data):
+        """Update comment and create edit history"""
+        # Save previous content to edit history
+        TraceClipReelCommentEditHistory.objects.create(
+            comment=instance,
+            previous_content=instance.content,
+            edited_by=self.context["request"].user,
+        )
+
+        # Update comment
+        instance.content = validated_data.get("content", instance.content)
+        instance.mentions = validated_data.get("mentions", instance.mentions)
+        instance.is_edited = True
+        instance.save()
+
+        return instance
+
+
+class TraceClipReelCommentLikeSerializer(serializers.ModelSerializer):
+    """
+    Serializer for comment likes.
+    Validates that user has access to the comment.
+    """
+
+    user = WajoUserBasicSerializer(read_only=True)
+
+    class Meta:
+        model = TraceClipReelCommentLike
+        fields = ["id", "comment", "user", "created_at"]
+        read_only_fields = ["id", "user", "created_at"]
+
+    def validate(self, attrs):
+        """Validate that user can view the comment"""
+        user = self.context["request"].user
+        comment = attrs.get("comment")
+
+        if comment and not comment.can_view(user):
+            raise ValidationError("You don't have access to this comment.")
+
+        return attrs
+
+    def create(self, validated_data):
+        """Set user to current user"""
+        validated_data["user"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class TraceClipReelNoteSerializer(serializers.ModelSerializer):
+    """
+    Serializer for private notes on clip reels.
+    Only for Players and Coaches.
+    """
+
+    author = WajoUserBasicSerializer(read_only=True)
+    is_shared = serializers.SerializerMethodField()
+    shared_with_count = serializers.SerializerMethodField()
+    clip_reel_id = serializers.IntegerField(write_only=True, required=False)
+    highlight_id = serializers.IntegerField(write_only=True, required=False)
+
+    class Meta:
+        model = TraceClipReelNote
+        fields = [
+            "id",
+            "clip_reel",
+            "clip_reel_id",
+            "highlight",
+            "highlight_id",
+            "author",
+            "content",
+            "is_deleted",
+            "is_shared",
+            "shared_with_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "author", "is_deleted", "created_at", "updated_at"]
+
+    def get_is_shared(self, obj):
+        """Check if note has any active shares"""
+        return obj.shares.filter(is_active=True).exists()
+
+    def get_shared_with_count(self, obj):
+        """Count how many users/groups note is shared with"""
+        return obj.shares.filter(is_active=True).count()
+
+    def validate(self, attrs):
+        """Validate that author is Player or Coach"""
+        user = self.context["request"].user
+
+        if user.role not in ["Player", "Coach"]:
+            raise ValidationError("Only Players and Coaches can create notes.")
+
+        return attrs
+
+    def create(self, validated_data):
+        """Set author to current user"""
+        validated_data["author"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class TraceClipReelNoteShareSerializer(serializers.ModelSerializer):
+    """
+    Serializer for sharing notes with users or groups.
+    Validates either user OR group is specified.
+    """
+
+    shared_by = WajoUserBasicSerializer(read_only=True)
+    shared_with_user_details = WajoUserBasicSerializer(
+        source="shared_with_user", read_only=True
+    )
+    shared_with_user_id = serializers.UUIDField(
+        write_only=True, required=False, source="shared_with_user"
+    )
+
+    class Meta:
+        model = TraceClipReelNoteShare
+        fields = [
+            "id",
+            "note",
+            "shared_by",
+            "shared_with_user",
+            "shared_with_user_id",
+            "shared_with_user_details",
+            "shared_with_group",
+            "shared_at",
+            "is_active",
+        ]
+        read_only_fields = ["id", "shared_by", "shared_at"]
+
+    def validate(self, attrs):
+        """Validate that either user OR group is specified"""
+        shared_with_user = attrs.get("shared_with_user")
+        shared_with_group = attrs.get("shared_with_group")
+
+        if shared_with_user and shared_with_group:
+            raise ValidationError(
+                "Cannot share with both a user and a group. Choose one."
+            )
+
+        if not shared_with_user and not shared_with_group:
+            raise ValidationError("Must specify either a user or a group to share with.")
+
+        # Validate that user has permission to share (must be note author)
+        note = attrs.get("note")
+        user = self.context["request"].user
+        if note and note.author != user:
+            raise ValidationError("Only the note author can share it.")
+
+        return attrs
+
+    def create(self, validated_data):
+        """Set shared_by to current user"""
+        validated_data["shared_by"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class TraceClipReelCaptionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating clip reel caption.
+    Only owner can update caption.
+    """
+
+    class Meta:
+        model = TraceClipReel
+        fields = ["caption"]
+
+    def validate(self, attrs):
+        """Validate that user is the owner"""
+        user = self.context["request"].user
+        clip_reel = self.instance
+
+        if clip_reel:
+            is_owner = (
+                clip_reel.primary_player and clip_reel.primary_player.user == user
+            )
+            if not is_owner:
+                raise ValidationError("Only the owner can update the caption.")
+
         return attrs
