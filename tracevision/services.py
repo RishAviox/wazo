@@ -74,7 +74,7 @@ def save_possession_calculation_results(
                     continue
 
                 try:
-                    player = session.trace_players.get(
+                    player = session.players.get(
                         jersey_number=jersey_number, team=team
                     )
                 except TracePlayer.DoesNotExist:
@@ -1126,7 +1126,7 @@ class TraceVisionAggregationService:
     def _calculate_player_metrics_from_possessions(self, possessions, session):
         """Calculate player-level possession metrics from grouped possessions"""
         # Get all players in the session
-        players = session.trace_players.all()
+        players = session.players.all()
         player_metrics = {}
 
         # Group possessions by team for percentage calculations
@@ -1372,7 +1372,7 @@ class TraceVisionAggregationService:
         player_metrics = {}
 
         # Get all players in the session
-        players = session.trace_players.all()
+        players = session.players.all()
 
         for player in players:
             team_side = "home" if "home" in player.team_name.lower() else "away"
