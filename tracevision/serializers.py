@@ -1283,6 +1283,7 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
     score = serializers.SerializerMethodField()
     stadium = serializers.SerializerMethodField()
     referees = serializers.SerializerMethodField()
+    timeline = serializers.SerializerMethodField()
 
     class Meta:
         model = TraceSession
@@ -1306,6 +1307,7 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             "score",
             "stadium",
             "referees",
+            "timeline",
         ]
 
     def get_match_logo(self, obj):
@@ -2129,6 +2131,187 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             user_language = getattr(request.user, "selected_language", "en") or "en"
         
         return self._get_game_referees(obj, user_language)
+    
+    def get_timeline(self, obj):
+        """
+        Get game timeline grouped by minute with separate home/away events.
+        Returns timeline in format:
+        [
+            {
+                "minute": 24,
+                "home": [event1, event2],
+                "away": [event3, event4]
+            }
+        ]
+        """
+        from tracevision.models import TracePlayer, TraceVisionSessionStats
+        
+        # Get user language preference
+        user_language = "en"
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        timeline_events = []
+        
+        # First, try to get timeline from game_info
+        try:
+            if obj.game and obj.game.game_info:
+                game_info = obj.game.game_info
+                timeline_data = game_info.get("timeline", [])
+                if timeline_data:
+                    timeline_events = timeline_data
+        except (AttributeError, KeyError, TypeError) as e:
+            logger.warning(f"Error getting timeline from game_info: {e}")
+        
+        # Fallback: try to get from session_stats
+        if not timeline_events:
+            try:
+                if hasattr(obj, "session_stats") and obj.session_stats.exists():
+                    session_stats = obj.session_stats.first()
+                else:
+                    session_stats = TraceVisionSessionStats.objects.filter(session=obj).first()
+                
+                if session_stats and session_stats.tactical_analysis:
+                    timeline_data = session_stats.tactical_analysis.get("game_timeline", [])
+                    if timeline_data:
+                        timeline_events = timeline_data
+            except (AttributeError, KeyError, TypeError) as e:
+                logger.warning(f"Error getting timeline from session_stats: {e}")
+        
+        if not timeline_events:
+            return []
+        
+        # Build player lookup for both teams to enrich timeline with player IDs
+        players_lookup = {}  # {(team_side, jersey_number): player_id}
+        
+        try:
+            # Fetch all players for both teams
+            for team_side, team in [("home", obj.home_team), ("away", obj.away_team)]:
+                if team:
+                    team_players = TracePlayer.objects.filter(
+                        team=team
+                    ).select_related("user").only("id", "jersey_number", "user__picture")
+                    
+                    for player in team_players:
+                        players_lookup[(team_side, player.jersey_number)] = {
+                            "player_id": player.id,
+                            "player": player,
+                        }
+        except Exception as e:
+            logger.warning(f"Error building player lookup for timeline: {e}")
+        
+        # Enrich timeline events with player IDs and profile pictures
+        enriched_timeline = []
+        for event in timeline_events:
+            try:
+                # Create a copy of the event to avoid modifying original
+                enriched_event = event.copy()
+                
+                team_side = event.get("team_side", "home")
+                jersey_number = event.get("player_jersey_number")
+                
+                # Helper function to get player logo
+                def get_player_logo(player_info):
+                    if not player_info:
+                        return None
+                    trace_player = player_info["player"]
+                    if trace_player.user and trace_player.user.picture:
+                        try:
+                            picture_url = trace_player.user.picture.url
+                            if picture_url and not str(picture_url).endswith("null"):
+                                if request:
+                                    return request.build_absolute_uri(picture_url)
+                                else:
+                                    return picture_url
+                        except (ValueError, AttributeError):
+                            pass
+                    return None
+                
+                # Look up player ID and logo
+                player_info = players_lookup.get((team_side, jersey_number))
+                if player_info:
+                    enriched_event["id"] = player_info["player_id"]
+                    enriched_event["logo"] = get_player_logo(player_info)
+                else:
+                    # Player not found, set to None
+                    enriched_event["id"] = None
+                    enriched_event["logo"] = None
+                
+                # Use language-specific player name if available
+                if "language" in event and user_language in event["language"]:
+                    enriched_event["name"] = event["language"][user_language]
+                
+                # Remove the language object from response to avoid confusion
+                if "language" in enriched_event:
+                    del enriched_event["language"]
+                
+                # Rename keys to remove "player_" prefix
+                if "player_name" in enriched_event:
+                    del enriched_event["player_name"]
+                if "player_id" in enriched_event:
+                    del enriched_event["player_id"]
+                if "player_jersey_number" in enriched_event:
+                    enriched_event["jersey_number"] = enriched_event.pop("player_jersey_number")
+                if "player_team_name" in enriched_event:
+                    enriched_event["team_name"] = enriched_event.pop("player_team_name")
+                
+                # Handle replaced_by and replaced_player references
+                if "replaced_by" in event and enriched_event.get("replaced_by"):
+                    replaced_jersey = event["replaced_by"].get("jersey_number")
+                    replaced_info = players_lookup.get((team_side, replaced_jersey))
+                    if replaced_info:
+                        enriched_event["replaced_by"]["id"] = replaced_info["player_id"]
+                        enriched_event["replaced_by"]["logo"] = get_player_logo(replaced_info)
+                    else:
+                        enriched_event["replaced_by"]["id"] = None
+                        enriched_event["replaced_by"]["logo"] = None
+                    
+                    # Remove player_id if exists
+                    if "player_id" in enriched_event["replaced_by"]:
+                        del enriched_event["replaced_by"]["player_id"]
+                
+                if "replaced_player" in event and enriched_event.get("replaced_player"):
+                    replaced_jersey = event["replaced_player"].get("jersey_number")
+                    replaced_info = players_lookup.get((team_side, replaced_jersey))
+                    if replaced_info:
+                        enriched_event["replaced_player"]["id"] = replaced_info["player_id"]
+                        enriched_event["replaced_player"]["logo"] = get_player_logo(replaced_info)
+                    else:
+                        enriched_event["replaced_player"]["id"] = None
+                        enriched_event["replaced_player"]["logo"] = None
+                    
+                    # Remove player_id if exists
+                    if "player_id" in enriched_event["replaced_player"]:
+                        del enriched_event["replaced_player"]["player_id"]
+                
+                enriched_timeline.append(enriched_event)
+            except Exception as e:
+                logger.warning(f"Error enriching timeline event: {e}")
+                # Keep original event if enrichment fails
+                enriched_timeline.append(event)
+        
+        # Group events by minute with separate home/away arrays
+        grouped_timeline = {}
+        for event in enriched_timeline:
+            minute = event.get("minute", 0)
+            team_side = event.get("team_side", "home")
+            
+            # Initialize minute group if not exists
+            if minute not in grouped_timeline:
+                grouped_timeline[minute] = {
+                    "minute": minute,
+                    "home": [],
+                    "away": []
+                }
+            
+            # Add event to appropriate team array
+            grouped_timeline[minute][team_side].append(event)
+        
+        # Convert to sorted list by minute
+        timeline_list = sorted(grouped_timeline.values(), key=lambda x: x["minute"])
+        
+        return timeline_list
 
 
 

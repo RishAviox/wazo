@@ -26,6 +26,7 @@ from tracevision.tasks import (
     generate_overlay_highlights_task,
     process_trace_sessions_task,
     compute_aggregates_task,
+    reprocess_game_timeline_task,
 )
 from tracevision.serializers import (
     TraceVisionProcessesSerializer,
@@ -481,11 +482,12 @@ class TraceVisionPlayerStatsView(APIView):
                 "process_sessions",
                 "generate_overlays",
                 "recalculate_possession",
+                "reprocess_timeline",
             ]:
                 return Response(
                     {
                         "error": "Invalid task type",
-                        "details": "task_type must be 'process_sessions', 'generate_overlays', or 'recalculate_possession'",
+                        "details": "task_type must be 'process_sessions', 'generate_overlays', 'recalculate_possession', or 'reprocess_timeline'",
                     },
                     status=http_status.HTTP_400_BAD_REQUEST,
                 )
@@ -517,6 +519,12 @@ class TraceVisionPlayerStatsView(APIView):
                 message = "Overlay highlights generation started"
                 logger.info(
                     f"Queued overlay highlights generation for session {session.session_id}"
+                )
+            elif task_type == "reprocess_timeline":
+                task = reprocess_game_timeline_task.delay(session.id)
+                message = "Game timeline reprocessing started"
+                logger.info(
+                    f"Queued game timeline reprocessing for session {session.session_id}"
                 )
             else:  # recalculate_possession
                 task = compute_aggregates_task.delay(
