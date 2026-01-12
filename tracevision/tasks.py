@@ -1221,6 +1221,42 @@ def process_excel_and_create_players_task(session_id):
 
 
 @shared_task
+def reprocess_game_timeline_task(session_id):
+    """
+    Celery task to reprocess and update only the game timeline from Excel data.
+    This is a lightweight operation that preserves all other game_info data.
+    
+    Args:
+        session_id (int): TraceSession ID
+        
+    Returns:
+        dict: Task result with success status and timeline event count
+    """
+    from tracevision.utils import reprocess_game_timeline_only
+    
+    try:
+        logger.info(f"Starting timeline reprocessing task for session {session_id}")
+        result = reprocess_game_timeline_only(session_id)
+        
+        if result.get("success"):
+            logger.info(
+                f"Timeline reprocessing task completed for session {session_id}: "
+                f"{result.get('timeline_events', 0)} events generated"
+            )
+        else:
+            logger.warning(
+                f"Timeline reprocessing task failed for session {session_id}: "
+                f"{result.get('error', 'Unknown error')}"
+            )
+        
+        return result
+    except Exception as e:
+        error_msg = f"Error in timeline reprocessing task for session {session_id}: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {"success": False, "error": error_msg}
+
+
+@shared_task
 def process_trace_sessions_task(trace_session_id=None):
     """
     Celery task to process all TraceSession objects and update their status from TraceVision API.
