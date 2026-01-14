@@ -2241,6 +2241,11 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
                 # Use language-specific player name if available
                 if "language" in event and user_language in event["language"]:
                     enriched_event["name"] = event["language"][user_language]
+                elif player_info and player_info.get("player"):
+                    # Fallback: get localized name from player object
+                    player_name = get_localized_name(player_info["player"], user_language, "name")
+                    if player_name:
+                        enriched_event["name"] = player_name
                 
                 # Remove the language object from response to avoid confusion
                 if "language" in enriched_event:
@@ -2256,6 +2261,13 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
                 if "player_team_name" in enriched_event:
                     enriched_event["team_name"] = enriched_event.pop("player_team_name")
                 
+                # Localize team_name
+                team = obj.home_team if team_side == "home" else obj.away_team
+                if team:
+                    localized_team_name = get_localized_team_name(team, user_language)
+                    if localized_team_name:
+                        enriched_event["team_name"] = localized_team_name
+                
                 # Handle replaced_by and replaced_player references
                 if "replaced_by" in event and enriched_event.get("replaced_by"):
                     replaced_jersey = event["replaced_by"].get("jersey_number")
@@ -2263,6 +2275,11 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
                     if replaced_info:
                         enriched_event["replaced_by"]["id"] = replaced_info["player_id"]
                         enriched_event["replaced_by"]["logo"] = get_player_logo(replaced_info)
+                        # Localize player name in replaced_by
+                        if replaced_info.get("player"):
+                            localized_name = get_localized_name(replaced_info["player"], user_language, "name")
+                            if localized_name:
+                                enriched_event["replaced_by"]["name"] = localized_name
                     else:
                         enriched_event["replaced_by"]["id"] = None
                         enriched_event["replaced_by"]["logo"] = None
@@ -2277,6 +2294,11 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
                     if replaced_info:
                         enriched_event["replaced_player"]["id"] = replaced_info["player_id"]
                         enriched_event["replaced_player"]["logo"] = get_player_logo(replaced_info)
+                        # Localize player name in replaced_player
+                        if replaced_info.get("player"):
+                            localized_name = get_localized_name(replaced_info["player"], user_language, "name")
+                            if localized_name:
+                                enriched_event["replaced_player"]["name"] = localized_name
                     else:
                         enriched_event["replaced_player"]["id"] = None
                         enriched_event["replaced_player"]["logo"] = None
