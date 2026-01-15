@@ -4242,7 +4242,6 @@ def process_excel_and_create_players(session_id):
                     logger.info(
                         f"Updated goal statistics in TraceVisionSessionStats for session {session_id}"
                     )
-
                 except Exception as e:
                     logger.warning(
                         f"Failed to update goal statistics: {str(e)}", exc_info=True

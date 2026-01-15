@@ -2182,6 +2182,45 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
         if not timeline_events:
             return []
         
+        # Prefetch all goal highlights for this session with clip reels
+        from tracevision.models import TraceHighlight, TraceClipReel
+        from django.db.models import Prefetch
+        
+        goal_highlights = {}
+        try:
+            highlights_queryset = (
+                TraceHighlight.objects.filter(
+                    session=obj,
+                    event_type="goal"
+                )
+                .select_related("player__team", "session__home_team", "session__away_team")
+                .prefetch_related(
+                    Prefetch(
+                        "clip_reels",
+                        queryset=TraceClipReel.objects.select_related(
+                            "primary_player", "primary_player__team"
+                        ).order_by("-is_default", "ratio", "id"),
+                    )
+                )
+            )
+            
+            # Build lookup: {(player_id, minute): highlight}
+            for highlight in highlights_queryset:
+                if highlight.player and highlight.match_time:
+                    # Extract minute from match_time (format: "MM:00" or "MM:SS")
+                    try:
+                        minute_str = highlight.match_time.split(":")[0] if ":" in highlight.match_time else str(highlight.match_time)
+                        minute = int(minute_str.replace("'", "").replace("min", "").strip())
+                        key = (highlight.player.id, minute)
+                        goal_highlights[key] = highlight
+                    except (ValueError, AttributeError):
+                        # If we can't parse minute, try to match by player only
+                        key = (highlight.player.id, None)
+                        if key not in goal_highlights:
+                            goal_highlights[key] = highlight
+        except Exception as e:
+            logger.warning(f"Error prefetching goal highlights for timeline: {e}")
+        
         # Build player lookup for both teams to enrich timeline with player IDs
         players_lookup = {}  # {(team_side, jersey_number): player_id}
         
@@ -2267,6 +2306,32 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
                     localized_team_name = get_localized_team_name(team, user_language)
                     if localized_team_name:
                         enriched_event["team_name"] = localized_team_name
+                
+                # For goal events, include TraceHighlight and TraceClipReel data as a nested object
+                if event.get("event_type") == "goal" and player_info:
+                    try:
+                        event_minute = event.get("minute", 0)
+                        player_id = player_info.get("player_id")
+                        
+                        # Try to find matching highlight by (player_id, minute)
+                        highlight = goal_highlights.get((player_id, event_minute))
+                        
+                        # Fallback: try to match by player_id only if minute match fails
+                        if not highlight:
+                            highlight = goal_highlights.get((player_id, None))
+                        
+                        if highlight:
+                            # Serialize the highlight using HighlightClipReelSerializer
+                            highlight_serializer = HighlightClipReelSerializer(
+                                highlight,
+                                context={"request": request}
+                            )
+                            highlight_data = highlight_serializer.data
+                            
+                            # Add highlight data as a nested object instead of merging
+                            enriched_event["highlight"] = highlight_data
+                    except Exception as e:
+                        logger.warning(f"Error adding highlight data to goal event: {e}")
                 
                 # Handle replaced_by and replaced_player references
                 if "replaced_by" in event and enriched_event.get("replaced_by"):
