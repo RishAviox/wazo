@@ -4083,13 +4083,46 @@ def process_excel_and_create_players(session_id):
                         session, normalized_data
                     )
                     highlights_created = highlight_result.get("highlights_created", 0)
+                    clip_reels_created = highlight_result.get("clip_reels_created", 0)
+                    errors = highlight_result.get("errors", [])
+                    
+                    if errors:
+                        logger.warning(
+                            f"Some highlights failed to create: {errors}"
+                        )
+                    
                     logger.info(
-                        f"Created {highlights_created} highlights from Excel data"
+                        f"Created {highlights_created} highlights and {clip_reels_created} clip reels from Excel data"
                     )
+                    
+                    # Verification: Check if we should have created highlights but didn't
+                    total_goals = sum(
+                        len(player_data.get("goals", []))
+                        for player_data in normalized_data.get("players", [])
+                    )
+                    total_cards = sum(
+                        1 for player_data in normalized_data.get("players", [])
+                        if player_data.get("cards", 0) > 0
+                    )
+                    expected_highlights = total_goals + total_cards
+                    
+                    if expected_highlights > 0 and highlights_created == 0:
+                        logger.warning(
+                            f"Expected to create {expected_highlights} highlights (goals: {total_goals}, cards: {total_cards}) "
+                            f"but created 0. This may indicate an issue with highlight creation."
+                        )
+                    elif highlights_created < expected_highlights:
+                        logger.info(
+                            f"Created {highlights_created} highlights out of {expected_highlights} expected "
+                            f"(some may already exist or failed to create)"
+                        )
+                        
                 except Exception as e:
-                    logger.warning(
+                    logger.error(
                         f"Failed to create highlights: {str(e)}", exc_info=True
                     )
+                    # Don't fail the entire task, but log the error prominently
+                    # Highlights can be created later via the API endpoint if needed
 
                 # Step 7: Generate game timeline
                 game_timeline = []

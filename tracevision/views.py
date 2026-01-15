@@ -36,6 +36,7 @@ from tracevision.tasks import (
     process_trace_sessions_task,
     compute_aggregates_task,
     reprocess_game_timeline_task,
+    process_excel_match_highlights_task,
 )
 from tracevision.serializers import (
     TraceVisionProcessesSerializer,
@@ -474,10 +475,11 @@ class TraceVisionPlayerStatsView(APIView):
 
     def post(self, request, pk):
         """
-        Trigger player stats calculation for a session, generate overlay highlights, or recalculate possession segments
+        Trigger player stats calculation for a session, generate overlay highlights, recalculate possession segments,
+        or create Excel highlights
 
         Query Parameters:
-        - task_type: 'process_sessions' (default), 'generate_overlays', or 'recalculate_possession'
+        - task_type: 'process_sessions' (default), 'generate_overlays', 'recalculate_possession', 'reprocess_timeline', or 'reprocess_excel_highlights'
         """
         try:
             # Get games where user has GameUserRole
@@ -505,11 +507,12 @@ class TraceVisionPlayerStatsView(APIView):
                 "generate_overlays",
                 "recalculate_possession",
                 "reprocess_timeline",
+                "reprocess_excel_highlights",
             ]:
                 return Response(
                     {
                         "error": "Invalid task type",
-                        "details": "task_type must be 'process_sessions', 'generate_overlays', 'recalculate_possession', or 'reprocess_timeline'",
+                        "details": "task_type must be 'process_sessions', 'generate_overlays', 'recalculate_possession', 'reprocess_timeline', or 'reprocess_excel_highlights'",
                     },
                     status=http_status.HTTP_400_BAD_REQUEST,
                 )
@@ -523,6 +526,16 @@ class TraceVisionPlayerStatsView(APIView):
                     {
                         "error": "Session is not processed yet",
                         "details": f"Current status: {session.status}. Wait for processing to complete.",
+                    },
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Check if session has Excel file (required for reprocess_excel_highlights task)
+            if task_type == "reprocess_excel_highlights" and not session.basic_game_stats:
+                return Response(
+                    {
+                        "error": "Excel file not found",
+                        "details": "Session does not have a basic_game_stats Excel file. Please upload an Excel file first.",
                     },
                     status=http_status.HTTP_400_BAD_REQUEST,
                 )
@@ -547,6 +560,14 @@ class TraceVisionPlayerStatsView(APIView):
                 message = "Game timeline reprocessing started"
                 logger.info(
                     f"Queued game timeline reprocessing for session {session.session_id}"
+                )
+            elif task_type == "reprocess_excel_highlights":
+                task = process_excel_match_highlights_task.delay(
+                    session.session_id
+                )
+                message = "Excel highlights creation started"
+                logger.info(
+                    f"Queued Excel highlights creation for session {session.session_id}"
                 )
             else:  # recalculate_possession
                 task = compute_aggregates_task.delay(
