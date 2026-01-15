@@ -1161,8 +1161,8 @@ class TraceVisionProcessSerializer(serializers.Serializer):
                 )
 
         # Trigger video download task
-        # from tracevision.tasks import download_video_and_save_to_azure_blob
-        # download_video_and_save_to_azure_blob.delay(session.id)
+        from tracevision.tasks import download_video_and_save_to_azure_blob
+        download_video_and_save_to_azure_blob.delay(session.id)
 
 
         return session
