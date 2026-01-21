@@ -12,7 +12,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from django.shortcuts import get_object_or_404
+from tracevision.permissions import HasClipReelAccess
+
 
 from teams.models import Team
 from tracevision.models import (
@@ -54,6 +55,7 @@ from tracevision.serializers import (
     TraceClipReelNoteSerializer,
     TraceClipReelNoteShareSerializer,
     TraceClipReelCaptionSerializer,
+    BulkHighlightShareSerializer,
 )
 from tracevision.services import TraceVisionService
 from games.models import GameUserRole, Game
@@ -70,6 +72,11 @@ logger = logging.getLogger()
 CUSTOMER_ID = int(settings.TRACEVISION_CUSTOMER_ID)
 API_KEY = settings.TRACEVISION_API_KEY
 GRAPHQL_URL = settings.TRACEVISION_GRAPHQL_URL
+
+permission_classes = [IsAuthenticated, HasClipReelAccess]
+
+
+
 
 
 class HighlightPagination(PageNumberPagination):
@@ -2227,6 +2234,171 @@ class DeleteErroredTraceSessionView(APIView):
             )
 
 
+
+class HighlightNotesView(APIView):
+    """
+    Combined POST/GET endpoint for highlight notes.
+    POST: Create a new note on a clip reel within a highlight
+    GET: List all notes visible to the requesting user for a specific highlight
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, highlight_id):
+        """
+        Create a new note on a highlight.
+        
+        Request body:
+        {
+            "content": str,
+            "share_with_coach_id": uuid (optional),
+            "share_with_team_coaches": bool (optional)
+        }
+        """
+        from tracevision.serializers import TraceClipReelNoteSerializer
+        from django.shortcuts import get_object_or_404
+        
+        # Validate user is Player or Coach
+        if request.user.role not in ["Player", "Coach"]:
+            return Response(
+                {"error": "Only Players and Coaches can create notes."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+        
+        # Get highlight
+        highlight = get_object_or_404(TraceHighlight, id=highlight_id)
+        # NOTE or TODO: Take the clip reel id for the higlight and if not provided then use the first clip reel of the highlight
+        
+        # Get the first clip reel for this highlight
+        clip_reel = TraceClipReel.objects.filter(highlight=highlight).first()
+        if not clip_reel:
+            return Response(
+                {"error": "No clip reel found for this highlight."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+        
+        # Prepare data for serializer
+        data = {
+            "clip_reel_id": clip_reel.id,
+            "highlight_id": highlight_id,
+            "content": request.data.get("content"),
+        }
+        
+        # Create note
+        serializer = TraceClipReelNoteSerializer(data=data, context={"request": request})
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+        
+        note = serializer.save()
+        
+        # Handle sharing if requested
+        share_with_coach_id = request.data.get("share_with_coach_id")
+        share_with_team_coaches = request.data.get("share_with_team_coaches", False)
+        
+        shares_created = []
+        
+        if share_with_coach_id:
+            # Share with specific coach
+            from accounts.models import WajoUser
+            try:
+                coach = WajoUser.objects.get(id=share_with_coach_id, role="Coach")
+                
+                # Validate that coach belongs to player's team or is assigned to player
+                author = request.user
+                is_valid_coach = False
+                
+                # Check if coach is part of the author's team
+                if author.team:
+                    team_coaches = author.team.coach.all()
+                    if coach in team_coaches:
+                        is_valid_coach = True
+                
+                # Check if coach is assigned to the player
+                if not is_valid_coach and hasattr(author, 'coach'):
+                    if author.coach.filter(id=coach.id).exists():
+                        is_valid_coach = True
+                
+                if not is_valid_coach:
+                    return Response(
+                        {
+                            "error": "You can only share notes with coaches from your team or coaches assigned to you.",
+                            "note": serializer.data,
+                        },
+                        status=http_status.HTTP_400_BAD_REQUEST,
+                    )
+                
+                # Coach is valid, create share
+                share = note.share_with_user(coach, request.user)
+                shares_created.append({
+                    "id": str(share.id),
+                    "shared_with_user": str(coach.id),
+                    "shared_with_user_name": coach.name or coach.phone_no,
+                })
+            except WajoUser.DoesNotExist:
+                # Note created but sharing failed
+                return Response(
+                    {
+                        "message": "Note created but coach not found for sharing.",
+                        "note": serializer.data,
+                    },
+                    status=http_status.HTTP_201_CREATED,
+                )
+        
+        if share_with_team_coaches:
+            # Share with all team coaches
+            share = note.share_with_group("team_coaches", request.user)
+            shares_created.append({
+                "id": str(share.id),
+                "shared_with_group": "team_coaches",
+            })
+        
+        # Return created note with shares
+        response_data = {
+            "message": "Note created successfully",
+            "note": serializer.data,
+        }
+        
+        if shares_created:
+            response_data["shares"] = shares_created
+        
+        return Response(response_data, status=http_status.HTTP_201_CREATED)
+    
+    def get(self, request, highlight_id):
+        """
+        List all notes visible to the requesting user for this highlight.
+        Returns notes authored by user or shared with user.
+        """
+        from tracevision.serializers import TraceClipReelNoteSerializer
+        from django.shortcuts import get_object_or_404
+        
+        # Get highlight
+        highlight = get_object_or_404(TraceHighlight, id=highlight_id)
+        
+        # Get all notes for clip reels in this highlight
+        notes = TraceClipReelNote.objects.filter(
+            highlight=highlight,
+            is_deleted=False
+        ).select_related("author", "clip_reel")
+        
+        # Filter notes based on can_view permission
+        accessible_notes = [note for note in notes if note.can_view(request.user)]
+        
+        serializer = TraceClipReelNoteSerializer(
+            accessible_notes,
+            many=True,
+            context={"request": request}
+        )
+        
+        return Response(
+            {
+                "count": len(accessible_notes),
+                "results": serializer.data
+            },
+            status=http_status.HTTP_200_OK,
+        )
+
+
 # ============================================================================
 # TraceClipReel Comment System ViewSets
 # ============================================================================
@@ -2246,35 +2418,28 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
     def share_reel(self, request, pk=None):
         """
         Share clip reel with another user.
-        POST /api/tracevision/clip-reels/{id}/share/
         """
-        from tracevision.permissions import IsClipReelOwner
-
         clip_reel = self.get_object()
 
-        # Check if user is owner or has permission to share
-        permission = IsClipReelOwner()
-        if not permission.has_object_permission(request, self, clip_reel):
-            return Response(
-                {"error": "Only the reel owner can share it."},
-                status=http_status.HTTP_403_FORBIDDEN,
-            )
-
-        # Add clip_reel and highlight to data
         data = request.data.copy()
         data["clip_reel_id"] = clip_reel.id
         data["highlight_id"] = clip_reel.highlight.id if clip_reel.highlight else None
 
-        serializer = TraceClipReelShareSerializer(data=data, context={"request": request})
+        serializer = TraceClipReelShareSerializer(
+            data=data,
+            context={"request": request},
+        )
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                {"message": "Reel shared successfully", "data": serializer.data},
-                status=http_status.HTTP_201_CREATED,
-            )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
 
-        return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "message": "Reel shared successfully",
+                "data": serializer.data,
+            },
+            status=http_status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["get"], url_path="shares")
     def list_shares(self, request, pk=None):
@@ -2334,18 +2499,51 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="shared-with-me")
     def shared_with_me(self, request):
-        """
-        List all clip reels shared with current user.
-        GET /api/tracevision/clip-reels/shared-with-me/
-        """
-        shares = TraceClipReelShare.objects.filter(
-            shared_with=request.user, is_active=True
-        ).select_related("clip_reel")
+        shares = (
+            TraceClipReelShare.objects
+            .filter(shared_with=request.user, is_active=True)
+            .select_related("clip_reel")
+        )
 
         clip_reels = [share.clip_reel for share in shares]
-        serializer = HighlightClipReelSerializer(clip_reels, many=True, context={"request": request})
 
-        return Response({"clip_reels": serializer.data}, status=http_status.HTTP_200_OK)
+        serializer = HighlightClipReelSerializer(
+            clip_reels,
+            many=True,
+            context={"request": request},
+        )
+
+        return Response(
+            {"clip_reels": serializer.data},
+            status=http_status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["get"], url_path="shared-by-me")
+    def shared_by_me(self, request):
+        """
+        List all clip reels shared by the current user.
+        Returns shares with recipient details (player_id, name, role).
+        
+        GET /api/vision/clip-reels/shared-by-me/
+        """
+        shares = (
+            TraceClipReelShare.objects
+            .filter(shared_by=request.user, is_active=True)
+            .select_related("clip_reel", "shared_with", "highlight")
+            .order_by("-shared_at")
+        )
+        
+        serializer = TraceClipReelShareSerializer(
+            shares,
+            many=True,
+            context={"request": request},
+        )
+        
+        return Response(
+            {"shares": serializer.data},
+            status=http_status.HTTP_200_OK,
+        )
+
 
     @action(detail=True, methods=["patch"], url_path="caption")
     def update_caption(self, request, pk=None):
@@ -2368,75 +2566,74 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=["post"], url_path="comments")
-    def add_comment(self, request, pk=None):
+    @action(detail=True, methods=["get", "post"], url_path="comments")
+    def comments(self, request, pk=None):
         """
-        Add a comment to clip reel.
-        POST /api/tracevision/clip-reels/{id}/comments/
+        Handle comments on clip reel.
+        GET /api/vision/clip-reels/{id}/comments/ - List comments
+        POST /api/vision/clip-reels/{id}/comments/ - Add comment
         """
-        from tracevision.permissions import CanCommentOnClipReel
-
         clip_reel = self.get_object()
 
-        # Check if user can comment
-        permission = CanCommentOnClipReel()
-        if not permission.has_object_permission(request, self, clip_reel):
-            return Response(
-                {"error": "You don't have permission to comment on this reel."},
-                status=http_status.HTTP_403_FORBIDDEN,
+        if request.method == "GET":
+            # List comments (filtered by visibility)
+            from tracevision.permissions import HasClipReelAccess
+
+            # Check if user has access to reel
+            permission = HasClipReelAccess()
+            if not permission.has_object_permission(request, self, clip_reel):
+                return Response(
+                    {"error": "You don't have access to this reel."},
+                    status=http_status.HTTP_403_FORBIDDEN,
+                )
+
+            # Filter comments based on visibility
+            comments = TraceClipReelComment.objects.filter(
+                clip_reel=clip_reel, is_deleted=False, parent_comment__isnull=True
             )
 
-        data = request.data.copy()
-        data["clip_reel_id"] = clip_reel.id
-        data["highlight_id"] = clip_reel.highlight.id if clip_reel.highlight else None
+            # Filter by visibility
+            user = request.user
+            is_owner = clip_reel.primary_player and clip_reel.primary_player.user == user
 
-        serializer = TraceClipReelCommentSerializer(data=data, context={"request": request})
+            if not is_owner:
+                # Non-owners only see public comments and their own private comments
+                comments = comments.filter(
+                    Q(visibility="public") | Q(author=user)
+                )
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                {"message": "Comment added successfully", "data": serializer.data},
-                status=http_status.HTTP_201_CREATED,
+            serializer = TraceClipReelCommentSerializer(
+                comments, many=True, context={"request": request}
             )
 
-        return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+            return Response({"comments": serializer.data}, status=http_status.HTTP_200_OK)
 
-    @action(detail=True, methods=["get"], url_path="comments")
-    def list_comments(self, request, pk=None):
-        """
-        List comments on clip reel (filtered by visibility).
-        GET /api/tracevision/clip-reels/{id}/comments/
-        """
-        from tracevision.permissions import HasClipReelAccess
+        elif request.method == "POST":
+            # Add a comment
+            from tracevision.permissions import CanCommentOnClipReel
 
-        clip_reel = self.get_object()
+            # Check if user can comment
+            permission = CanCommentOnClipReel()
+            if not permission.has_object_permission(request, self, clip_reel):
+                return Response(
+                    {"error": "You don't have permission to comment on this reel."},
+                    status=http_status.HTTP_403_FORBIDDEN,
+                )
 
-        # Check if user has access to reel
-        permission = HasClipReelAccess()
-        if not permission.has_object_permission(request, self, clip_reel):
-            return Response(
-                {"error": "You don't have access to this reel."},
-                status=http_status.HTTP_403_FORBIDDEN,
-            )
+            data = request.data.copy()
+            data["clip_reel_id"] = clip_reel.id
+            data["highlight_id"] = clip_reel.highlight.id if clip_reel.highlight else None
 
-        # Filter comments based on visibility
-        comments = TraceClipReelComment.objects.filter(
-            clip_reel=clip_reel, is_deleted=False, parent_comment__isnull=True
-        )
+            serializer = TraceClipReelCommentSerializer(data=data, context={"request": request})
 
-        # Filter by visibility
-        user = request.user
-        is_owner = clip_reel.primary_player and clip_reel.primary_player.user == user
+            if serializer.is_valid():
+                serializer.save()
+                return Response(
+                    {"message": "Comment added successfully", "data": serializer.data},
+                    status=http_status.HTTP_201_CREATED,
+                )
 
-        if not is_owner:
-            # Non-owners only see public comments
-            comments = comments.filter(visibility="public")
-
-        serializer = TraceClipReelCommentSerializer(
-            comments, many=True, context={"request": request}
-        )
-
-        return Response({"comments": serializer.data}, status=http_status.HTTP_200_OK)
+            return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"], url_path="notes")
     def add_note(self, request, pk=None):
@@ -2707,17 +2904,15 @@ class TraceClipReelNoteViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """Filter notes to only those accessible by current user"""
         user = self.request.user
-        notes = TraceClipReelNote.objects.filter(is_deleted=False)
 
-        # Filter to only notes the user can view
-        accessible_notes = [note for note in notes if note.can_view(user)]
-
-        # Return queryset with accessible note IDs
-        return TraceClipReelNote.objects.filter(
-            id__in=[note.id for note in accessible_notes]
-        )
+        return TraceClipReel.objects.filter(
+            Q(primary_player__user=user) |
+            Q(
+                shares__shared_with=user,
+                shares__is_active=True
+            )
+        ).distinct()
 
     def partial_update(self, request, *args, **kwargs):
         """
@@ -2814,7 +3009,7 @@ class TraceClipReelNoteViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            share = TraceClipReelNoteShare.objects.get(id=share_id, note=note)
+            share = TraceClipReelNoteShare.objects.get(id=share_id,clip_reel=clip_reel,is_active=True,)
             share.is_active = False
             share.save()
 
@@ -2826,4 +3021,371 @@ class TraceClipReelNoteViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "Share not found"},
                 status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+
+class GameUsersListView(APIView):
+    """
+    List all players and coaches associated with a specific game via session.
+    Includes users from home team, away team, and GameUserRole.
+    Filters out users without contact information (email or phone).
+    
+    GET /api/vision/sessions/{session_id}/users/
+    
+    Query Parameters:
+    - role: Filter by role - "Player", "Coach", or "all" (default: "all")
+    - registered_only: Show only registered users (default: true)
+    """
+    
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, session_id):
+        """
+        List users associated with a game via session.
+        
+        Args:
+            session_id: ID of the TraceSession
+            
+        Query Parameters:
+            role: "Player", "Coach", or "all" (default: "all")
+            registered_only: Boolean (default: true)
+        """
+        from tracevision.serializers import GameUserSerializer
+        from django.shortcuts import get_object_or_404
+        from accounts.models import WajoUser
+        
+        # Get query parameters
+        role_filter = request.query_params.get("role", "all").strip()
+        registered_only = request.query_params.get("registered_only", "true").lower() in ["true", "1", "yes"]
+        
+        # Validate role parameter
+        if role_filter not in ["Player", "Coach", "all"]:
+            return Response(
+                {
+                    "error": "Invalid role parameter",
+                    "details": "Role must be 'Player', 'Coach', or 'all'"
+                },
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get session
+        session = get_object_or_404(TraceSession, id=session_id)
+        
+        # Collect user IDs from multiple sources
+        user_ids = set()
+        
+        # Source 1: Users from GameUserRole (if game exists)
+        if session.game:
+            game_user_roles = GameUserRole.objects.filter(
+                game=session.game,
+                deleted_at__isnull=True
+            ).select_related("user")
+            
+            user_ids.update([gur.user.id for gur in game_user_roles if gur.user])
+        
+        # Source 2: Players from home team
+        if session.home_team:
+            home_players = WajoUser.objects.filter(
+                team=session.home_team,
+                role="Player"
+            ).values_list("id", flat=True)
+            user_ids.update(home_players)
+            
+            # Coaches of home team
+            home_coaches = WajoUser.objects.filter(
+                teams_coached=session.home_team,
+                role="Coach"
+            ).values_list("id", flat=True)
+            user_ids.update(home_coaches)
+        
+        # Source 3: Players from away team
+        if session.away_team:
+            away_players = WajoUser.objects.filter(
+                team=session.away_team,
+                role="Player"
+            ).values_list("id", flat=True)
+            user_ids.update(away_players)
+            
+            # Coaches of away team
+            away_coaches = WajoUser.objects.filter(
+                teams_coached=session.away_team,
+                role="Coach"
+            ).values_list("id", flat=True)
+            user_ids.update(away_coaches)
+        
+        # Query users with all collected IDs
+        users_queryset = WajoUser.objects.filter(id__in=user_ids)
+        
+        # Filter 1: Exclude users without contact information
+        # User must have at least email OR phone_no
+        users_queryset = users_queryset.filter(
+            Q(email__isnull=False, email__gt="") | 
+            Q(phone_no__isnull=False, phone_no__gt="")
+        )
+        
+        # Filter 2: Registration status
+        if registered_only:
+            users_queryset = users_queryset.filter(is_registered=True)
+        
+        # Filter 3: Role filter
+        if role_filter != "all":
+            users_queryset = users_queryset.filter(role=role_filter)
+        
+        # Order by role (Coach first, then Player) and name
+        users_queryset = users_queryset.order_by("role", "name")
+        
+        # Separate users by team (only include users with team association)
+        home_team_users = []
+        away_team_users = []
+        
+        for user in users_queryset:
+            # Check if user belongs to home team
+            if session.home_team and user.team and user.team.id == session.home_team.id:
+                home_team_users.append(user)
+            # Check if user belongs to away team
+            elif session.away_team and user.team and user.team.id == session.away_team.id:
+                away_team_users.append(user)
+            # Check if user is a coach of home team
+            elif session.home_team and user.role == "Coach" and user.teams_coached.filter(id=session.home_team.id).exists():
+                home_team_users.append(user)
+            # Check if user is a coach of away team
+            elif session.away_team and user.role == "Coach" and user.teams_coached.filter(id=session.away_team.id).exists():
+                away_team_users.append(user)
+            # Skip users not associated with either team
+        
+        # Serialize each group
+        home_team_serializer = GameUserSerializer(
+            home_team_users,
+            many=True,
+            context={"request": request}
+        )
+        
+        away_team_serializer = GameUserSerializer(
+            away_team_users,
+            many=True,
+            context={"request": request}
+        )
+        
+        # Calculate total count (only team-associated users)
+        total_count = len(home_team_users) + len(away_team_users)
+        
+        # Get user's language preference for team name localization
+        user_language = "en"
+        if request.user:
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        return Response(
+            {
+                "count": total_count,
+                "session_id": session_id,
+                "game_id": session.game.id if session.game else None,
+                "home_team": {
+                    "id": session.home_team.id if session.home_team else None,
+                    "name": get_localized_team_name(session.home_team, user_language) if session.home_team else None,
+                    "users": home_team_serializer.data
+                },
+                "away_team": {
+                    "id": session.away_team.id if session.away_team else None,
+                    "name": get_localized_team_name(session.away_team, user_language) if session.away_team else None,
+                    "users": away_team_serializer.data
+                },
+                "filters": {
+                    "role": role_filter,
+                    "registered_only": registered_only
+                }
+            },
+            status=http_status.HTTP_200_OK
+        )
+
+
+class SessionHighlightsView(ListAPIView):
+    """
+    API endpoint to get highlights for a specific session with role-based filtering.
+    
+    URL: /api/vision/sessions/<session_id>/highlights/
+    
+    Role-based filtering:
+    - Coach: Returns all highlights for all players in the coach's team
+    - Player: Returns only the logged-in player's own highlights
+    """
+    
+    permission_classes = [IsAuthenticated]
+    serializer_class = HighlightClipReelSerializer
+    pagination_class = HighlightPagination
+    
+    def get_queryset(self):
+        """Get highlights filtered by user role and shared highlights"""
+        session_id = self.kwargs.get("session_id")
+        user = self.request.user
+        
+        # Get games where user has GameUserRole
+        user_games = Game.objects.filter(
+            game_roles__user=user
+        ).values_list("id", flat=True)
+        
+        # Get session and verify user has access
+        try:
+            session = (
+                TraceSession.objects.select_related("home_team", "away_team")
+                .filter(
+                    Q(id=session_id)
+                    & (
+                        Q(user=user)
+                        | Q(game__id__in=user_games)
+                        | Q(home_team=user.team)
+                        | Q(away_team=user.team)
+                    )
+                )
+                .get()
+            )
+        except TraceSession.DoesNotExist:
+            return TraceHighlight.objects.none()
+        
+        # Base queryset with optimized selects
+        base_queryset = (
+            TraceHighlight.objects.filter(session=session)
+            .select_related("player__team", "session__home_team", "session__away_team")
+            .prefetch_related(
+                Prefetch(
+                    "clip_reels",
+                    queryset=TraceClipReel.objects.select_related(
+                        "primary_player", "primary_player__team"
+                    ),
+                )
+            )
+        )
+        
+        # Build role-based filter conditions
+        role_filter = Q()
+        
+        if user.role == "Coach":
+            # Get all players that have this coach assigned
+            coach_players = user.players.all()
+            
+            # Get TracePlayer IDs for these WajoUsers
+            trace_player_ids = TracePlayer.objects.filter(
+                user__in=coach_players
+            ).values_list("id", flat=True)
+            
+            # Filter highlights where the player is in the coach's player list
+            role_filter = Q(player_id__in=trace_player_ids)
+            
+        elif user.role == "Player":
+            # Get the player's TracePlayer record(s)
+            trace_players = TracePlayer.objects.filter(user=user)
+            
+            # Filter highlights where the player matches
+            role_filter = Q(player__in=trace_players)
+        else:
+            # For other roles (Referee, etc.), return empty queryset
+            return TraceHighlight.objects.none()
+        
+        # Add filter for highlights shared with the user via TraceClipReelShare
+        shared_filter = Q(
+            reel_shares__shared_with=user,
+            reel_shares__is_active=True
+        )
+        
+        # Combine filters: user's own highlights OR shared highlights
+        queryset = base_queryset.filter(role_filter | shared_filter).distinct()
+        
+        return queryset.order_by("-created_at")
+    
+    def get_serializer_context(self):
+        """Add session and request to serializer context for perspective transformation"""
+        context = super().get_serializer_context()
+        session_id = self.kwargs.get("session_id")
+        try:
+            # Get games where user has GameUserRole
+            user_games = Game.objects.filter(
+                game_roles__user=self.request.user
+            ).values_list("id", flat=True)
+            
+            context["session"] = (
+                TraceSession.objects.select_related("home_team", "away_team")
+                .filter(
+                    Q(id=session_id)
+                    & (
+                        Q(user=self.request.user)
+                        | Q(game__id__in=user_games)
+                        | Q(home_team=self.request.user.team)
+                        | Q(away_team=self.request.user.team)
+                    )
+                )
+                .get()
+            )
+        except TraceSession.DoesNotExist:
+            context["session"] = None
+        
+        return context
+
+
+class BulkHighlightShareView(APIView):
+    """
+    API endpoint to share a highlight with multiple users in a single request.
+    
+    POST /api/vision/highlights/share/
+    
+    Request Body:
+    {
+        "highlight_id": 123,
+        "user_ids": ["uuid1", "uuid2", "uuid3"],
+        "can_comment": true
+    }
+    
+    Supports both Player and Coach roles.
+    """
+    
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Share a highlight with multiple users"""
+        serializer = BulkHighlightShareSerializer(
+            data=request.data,
+            context={"request": request}
+        )
+        
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "success": False,
+                    "errors": serializer.errors
+                },
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            result = serializer.save()
+            
+            # Calculate summary statistics
+            total_created = sum(share["shares_created"] for share in result["shares"])
+            total_updated = sum(share["shares_updated"] for share in result["shares"])
+            successful_shares = sum(1 for share in result["shares"] if share["status"] == "success")
+            skipped_shares = sum(1 for share in result["shares"] if share["status"] == "skipped")
+            
+            return Response(
+                {
+                    "success": True,
+                    "highlight_id": result["highlight_id"],
+                    "clip_reels_count": result["clip_reels_count"],
+                    "recipients_count": result["recipients_count"],
+                    "summary": {
+                        "successful_shares": successful_shares,
+                        "skipped_shares": skipped_shares,
+                        "total_shares_created": total_created,
+                        "total_shares_updated": total_updated
+                    },
+                    "shares": result["shares"]
+                },
+                status=http_status.HTTP_201_CREATED
+            )
+        except Exception as e:
+            logger.exception(f"Error sharing highlight: {str(e)}")
+            return Response(
+                {
+                    "success": False,
+                    "error": "Internal server error",
+                    "details": str(e)
+                },
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
             )

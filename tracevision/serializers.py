@@ -3,6 +3,7 @@ import logging
 import requests
 from django.db.models import Q
 from django.conf import settings
+from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
@@ -34,6 +35,7 @@ from teams.models import Team
 from tracevision.models import TraceSession
 from games.models import GameUserRole
 from tracevision.services import TraceVisionService
+from accounts.models import WajoUser
 
 logger = logging.getLogger(__name__)
 
@@ -2147,16 +2149,20 @@ class PlayerDetailSerializer(serializers.ModelSerializer):
     """Serializer for player details in highlights"""
 
     id = serializers.CharField(read_only=True)
+    name = serializers.SerializerMethodField()
     team_id = serializers.CharField(source="team.id", read_only=True)
     team_name = serializers.SerializerMethodField()
 
-    def get_team_name(self, obj):
+    def get_name(self, obj):
+        """Get localized player name based on user language"""
         user_language = "en"
         if self.context.get("request") and hasattr(self.context["request"], "user"):
             user_language = (
                 getattr(self.context["request"].user, "selected_language", "en") or "en"
             )
-        return get_localized_team_name(obj.team, user_language) if obj.team else None
+        return get_localized_name(obj, user_language, field_name="name")
+
+    
 
     created_at = serializers.DateTimeField(
         format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True
@@ -2394,8 +2400,18 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
 
     def get_event_name(self, obj):
         """Generate event name from event type and match time"""
-        time_str = obj.match_time or "Unknown time"
-        return f"{obj.get_event_type_display()} at {time_str}"
+        # Access match_time and event_type through highlight if it exists
+        if hasattr(obj, 'highlight') and obj.highlight:
+            time_str = obj.highlight.match_time or "Unknown time"
+            # Get event type - use get_event_type_display if available
+            if hasattr(obj.highlight, 'get_event_type_display'):
+                event_type = obj.highlight.get_event_type_display()
+            else:
+                event_type = getattr(obj.highlight, 'event_type', 'Event')
+        else:
+            time_str = "Unknown time"
+            event_type = "Event"
+        return f"{event_type} at {time_str}"
 
     def get_side(self, obj):
         """Get side from highlight tags or player team"""
@@ -2419,12 +2435,12 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
                     return side
 
         # Fallback to player's team
-        if obj.player and obj.player.team:
+        if obj.primary_player and obj.primary_player.team:
             session = obj.session
             side = None
-            if session.home_team and session.home_team.id == obj.player.team.id:
+            if session.home_team and session.home_team.id == obj.primary_player.team.id:
                 side = "home"
-            elif session.away_team and session.away_team.id == obj.player.team.id:
+            elif session.away_team and session.away_team.id == obj.primary_player.team.id:
                 side = "away"
 
             # Apply perspective transformation
@@ -2445,17 +2461,15 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
         return None
 
     def get_videos(self, obj):
-        """Get all related clip reels as videos list"""
-        # Order: default videos first (is_default=True), then by ratio, then by id
-        clip_reels = obj.clip_reels.all().order_by("-is_default", "ratio", "id")
-        return ClipReelVideoSerializer(clip_reels, many=True).data
+        """Get clip reel as video - obj is already a TraceClipReel"""
+        # Since obj is a TraceClipReel, return it as a single-item list
+        return ClipReelVideoSerializer([obj], many=True).data
 
     def get_label(self, obj):
-        """Get label from default clip reel or generate from event_name"""
-        # Try to get label from default clip reel first
-        default_clip_reel = obj.clip_reels.filter(is_default=True).first()
-        if default_clip_reel and default_clip_reel.label:
-            return default_clip_reel.label
+        """Get label from clip reel or generate from event_name"""
+        # obj is a TraceClipReel, so check its label directly
+        if obj.label:
+            return obj.label
 
         # Fallback to event_name if no label in clip reel
         return self.get_event_name(obj)
@@ -2663,24 +2677,83 @@ class WajoUserBasicSerializer(serializers.Serializer):
     """
 
     id = serializers.UUIDField(read_only=True)
-    name = serializers.CharField(read_only=True)
+    name = serializers.SerializerMethodField()
     phone_no = serializers.CharField(read_only=True)
     role = serializers.CharField(read_only=True)
     picture = serializers.ImageField(read_only=True)
     jersey_number = serializers.IntegerField(read_only=True)
 
+    def get_name(self, obj):
+        """Get localized user name based on user language"""
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
+        return get_localized_name(obj, user_language, field_name="name")
+
+
+class GameUserSerializer(serializers.ModelSerializer):
+    """
+    Serializer for listing users associated with a game.
+    Includes contact information and registration status.
+    """
+    
+    name = serializers.SerializerMethodField()
+    team_id = serializers.CharField(source="team.id", read_only=True, allow_null=True)
+    team_name = serializers.SerializerMethodField()
+    
+    def get_name(self, obj):
+        """Get localized user name"""
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
+        return get_localized_name(obj, user_language, field_name="name")
+    
+    def get_team_name(self, obj):
+        """Get localized team name"""
+        if not obj.team:
+            return None
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
+        return get_localized_team_name(obj.team, user_language)
+    
+    class Meta:
+        model = WajoUser
+        fields = [
+            "id",
+            "name",
+            "email",
+            "phone_no",
+            "role",
+            "is_registered",
+            "team_id",
+            "team_name",
+            "jersey_number",
+        ]
+        read_only_fields = fields
+
 
 class TraceClipReelShareSerializer(serializers.ModelSerializer):
     """
     Serializer for sharing clip reels with other users.
-    Validates permissions and prevents self-sharing.
+    Enforces permission checks and prevents unauthorized access.
     """
 
     shared_by = WajoUserBasicSerializer(read_only=True)
-    shared_with_user = WajoUserBasicSerializer(source="shared_with", read_only=True)
+    shared_with_user = WajoUserBasicSerializer(
+        source="shared_with", read_only=True
+    )
+
+    # Write-only inputs
     clip_reel_id = serializers.IntegerField(write_only=True)
     highlight_id = serializers.IntegerField(write_only=True)
-    shared_with_id = serializers.UUIDField(write_only=True, source="shared_with")
+    shared_with_id = serializers.UUIDField(write_only=True)
 
     class Meta:
         model = TraceClipReelShare
@@ -2700,39 +2773,125 @@ class TraceClipReelShareSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "shared_by", "shared_at", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "clip_reel",
+            "highlight",
+            "shared_by",
+            "shared_with",
+            "shared_at",
+            "created_at",
+            "updated_at",
+        ]
 
     def validate(self, attrs):
-        """Validate that user can share and not sharing with self"""
-        user = self.context["request"].user
-        shared_with = attrs.get("shared_with")
+        request = self.context["request"]
+        user = request.user
 
-        # Can't share with self
-        if user == shared_with:
-            raise ValidationError("Cannot share clip reel with yourself.")
+        # Resolve objects safely
+        clip_reel = get_object_or_404(
+            TraceClipReel, id=attrs["clip_reel_id"]
+        )
+        highlight = get_object_or_404(
+            TraceHighlight, id=attrs["highlight_id"]
+        )
+        shared_with = get_object_or_404(
+            WajoUser, id=attrs["shared_with_id"]
+        )
 
-        # Check if user is owner or has permission to share
-        clip_reel = attrs.get("clip_reel")
-        if clip_reel:
-            is_owner = (
-                clip_reel.primary_player and clip_reel.primary_player.user == user
+        # ❌ Prevent self-sharing
+        if shared_with == user:
+            raise ValidationError("You cannot share a clip reel with yourself.")
+
+        # ✅ Ownership / permission check
+        is_owner = (
+            clip_reel.primary_player
+            and clip_reel.primary_player.user == user
+        )
+
+        if not is_owner:
+            has_access = TraceClipReelShare.objects.filter(
+                clip_reel=clip_reel,
+                shared_with=user,
+                is_active=True,
+            ).exists()
+
+            if not has_access:
+                raise ValidationError(
+                    "You don't have permission to share this clip reel."
+                )
+
+        # ✅ NEW: Validate that shared_with user belongs to the game
+        # Get the session from highlight
+        session = highlight.session
+        
+        # Check if user belongs to the game through multiple paths:
+        # 1. Player on home or away team
+        # 2. Coach of home or away team
+        # 3. Has GameUserRole for the game (includes referees)
+        
+        belongs_to_game = False
+        
+        # Check if user is on home or away team
+        if shared_with.team:
+            if session.home_team and shared_with.team.id == session.home_team.id:
+                belongs_to_game = True
+            elif session.away_team and shared_with.team.id == session.away_team.id:
+                belongs_to_game = True
+        
+        # Check if user is a coach of either team
+        if not belongs_to_game and shared_with.role == "Coach":
+            coached_teams = shared_with.teams_coached.values_list("id", flat=True)
+            if session.home_team and session.home_team.id in coached_teams:
+                belongs_to_game = True
+            elif session.away_team and session.away_team.id in coached_teams:
+                belongs_to_game = True
+        
+        # Check if user has a GameUserRole for this session's game
+        if not belongs_to_game and session.game:
+            from games.models import GameUserRole
+            has_game_role = GameUserRole.objects.filter(
+                game=session.game,
+                user=shared_with
+            ).exists()
+            if has_game_role:
+                belongs_to_game = True
+        
+        # Raise error if user doesn't belong to the game
+        if not belongs_to_game:
+            raise ValidationError(
+                "This user is not associated with the game"
             )
-            if not is_owner:
-                # Check if user has the reel shared with them (could allow resharing)
-                has_access = TraceClipReelShare.objects.filter(
-                    clip_reel=clip_reel, shared_with=user, is_active=True
-                ).exists()
-                if not has_access:
-                    raise ValidationError(
-                        "You don't have permission to share this clip reel."
-                    )
+
+        # Attach resolved objects
+        attrs["clip_reel"] = clip_reel
+        attrs["highlight"] = highlight
+        attrs["shared_with"] = shared_with
 
         return attrs
 
     def create(self, validated_data):
-        """Set shared_by to current user"""
-        validated_data["shared_by"] = self.context["request"].user
-        return super().create(validated_data)
+        """
+        Create or reactivate a reel share safely.
+        """
+        request = self.context["request"]
+
+        validated_data.pop("clip_reel_id", None)
+        validated_data.pop("highlight_id", None)
+        validated_data.pop("shared_with_id", None)
+
+        share, created = TraceClipReelShare.objects.update_or_create(
+            clip_reel=validated_data["clip_reel"],
+            shared_with=validated_data["shared_with"],
+            defaults={
+                "highlight": validated_data["highlight"],
+                "shared_by": request.user,
+                "can_comment": validated_data.get("can_comment", True),
+                "is_active": True,
+            },
+        )
+
+        return share
 
 
 class TraceClipReelCommentSerializer(serializers.ModelSerializer):
@@ -2771,6 +2930,8 @@ class TraceClipReelCommentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "clip_reel",
+            "highlight",
             "author",
             "is_edited",
             "is_deleted",
@@ -2787,8 +2948,24 @@ class TraceClipReelCommentSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """Validate comment access and mentions"""
+        from tracevision.models import TraceClipReel, TraceHighlight
+        from django.shortcuts import get_object_or_404
+        
         user = self.context["request"].user
-        clip_reel = attrs.get("clip_reel")
+        
+        # Resolve clip_reel_id and highlight_id to objects
+        clip_reel_id = attrs.get("clip_reel_id")
+        highlight_id = attrs.get("highlight_id")
+        
+        if clip_reel_id:
+            clip_reel = get_object_or_404(TraceClipReel, id=clip_reel_id)
+            attrs["clip_reel"] = clip_reel
+        else:
+            clip_reel = attrs.get("clip_reel")
+        
+        if highlight_id:
+            highlight = get_object_or_404(TraceHighlight, id=highlight_id)
+            attrs["highlight"] = highlight
 
         # Check if user has access to clip reel
         if clip_reel:
@@ -2831,6 +3008,10 @@ class TraceClipReelCommentSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         """Set author to current user"""
+        # Remove write-only fields
+        validated_data.pop("clip_reel_id", None)
+        validated_data.pop("highlight_id", None)
+        
         validated_data["author"] = self.context["request"].user
         return super().create(validated_data)
 
@@ -2899,6 +3080,7 @@ class TraceClipReelNoteSerializer(serializers.ModelSerializer):
     """
 
     author = WajoUserBasicSerializer(read_only=True)
+    created_by = serializers.SerializerMethodField()
     is_shared = serializers.SerializerMethodField()
     shared_with_count = serializers.SerializerMethodField()
     clip_reel_id = serializers.IntegerField(write_only=True, required=False)
@@ -2913,6 +3095,7 @@ class TraceClipReelNoteSerializer(serializers.ModelSerializer):
             "highlight",
             "highlight_id",
             "author",
+            "created_by",
             "content",
             "is_deleted",
             "is_shared",
@@ -2920,7 +3103,11 @@ class TraceClipReelNoteSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "author", "is_deleted", "created_at", "updated_at"]
+        read_only_fields = ["id", "clip_reel", "highlight", "author", "is_deleted", "created_at", "updated_at"]
+    
+    def get_created_by(self, obj):
+        """Return the role of the note creator (Player or Coach)"""
+        return obj.author.role if obj.author else None
 
     def get_is_shared(self, obj):
         """Check if note has any active shares"""
@@ -2931,16 +3118,34 @@ class TraceClipReelNoteSerializer(serializers.ModelSerializer):
         return obj.shares.filter(is_active=True).count()
 
     def validate(self, attrs):
-        """Validate that author is Player or Coach"""
+        """Validate that author is Player or Coach and resolve clip_reel_id/highlight_id"""
+        from django.shortcuts import get_object_or_404
+        
         user = self.context["request"].user
 
         if user.role not in ["Player", "Coach"]:
             raise ValidationError("Only Players and Coaches can create notes.")
 
+        # Resolve clip_reel_id and highlight_id to objects
+        clip_reel_id = attrs.get("clip_reel_id")
+        highlight_id = attrs.get("highlight_id")
+        
+        if clip_reel_id:
+            clip_reel = get_object_or_404(TraceClipReel, id=clip_reel_id)
+            attrs["clip_reel"] = clip_reel
+        
+        if highlight_id:
+            highlight = get_object_or_404(TraceHighlight, id=highlight_id)
+            attrs["highlight"] = highlight
+
         return attrs
 
     def create(self, validated_data):
-        """Set author to current user"""
+        """Set author to current user and remove write-only fields"""
+        # Remove write-only fields
+        validated_data.pop("clip_reel_id", None)
+        validated_data.pop("highlight_id", None)
+        
         validated_data["author"] = self.context["request"].user
         return super().create(validated_data)
 
@@ -3024,3 +3229,186 @@ class TraceClipReelCaptionSerializer(serializers.ModelSerializer):
                 raise ValidationError("Only the owner can update the caption.")
 
         return attrs
+
+
+class BulkHighlightShareSerializer(serializers.Serializer):
+    
+    """
+    Serializer for sharing a highlight with multiple users in a single request.
+    Supports both players and coaches sharing highlights.
+    """
+    
+    highlight_id = serializers.IntegerField(required=True)
+    user_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=True,
+        allow_empty=False,
+        help_text="List of user IDs to share the highlight with"
+    )
+    can_comment = serializers.BooleanField(default=True, required=False)
+    
+    def validate_highlight_id(self, value):
+        """Validate that highlight exists"""
+        try:
+            highlight = TraceHighlight.objects.get(id=value)
+            return value
+        except TraceHighlight.DoesNotExist:
+            raise ValidationError(f"Highlight with ID {value} does not exist")
+    
+    def validate_user_ids(self, value):
+        """Validate that all user IDs exist and are unique"""
+        if not value:
+            raise ValidationError("At least one user ID must be provided")
+        
+        # Remove duplicates while preserving order
+        unique_ids = list(dict.fromkeys(value))
+        
+        # Check all users exist
+        existing_users = WajoUser.objects.filter(id__in=unique_ids)
+        existing_ids = set(str(user.id) for user in existing_users)
+        provided_ids = set(str(uid) for uid in unique_ids)
+        
+        missing_ids = provided_ids - existing_ids
+        if missing_ids:
+            raise ValidationError(
+                f"The following user IDs do not exist: {', '.join(missing_ids)}"
+            )
+        
+        return unique_ids
+    
+    def validate(self, attrs):
+        from tracevision.models import Game
+        """Validate access and prevent self-sharing"""
+        request = self.context.get("request")
+        user = request.user
+        
+        # Get highlight
+        highlight = get_object_or_404(TraceHighlight, id=attrs["highlight_id"])
+        session = highlight.session
+        
+        # Check if user has access to the session
+        user_games = Game.objects.filter(
+            game_roles__user=user
+        ).values_list("id", flat=True)
+        
+        has_access = (
+            session.user == user
+            or (session.game and session.game.id in user_games)
+            or session.home_team == user.team
+            or session.away_team == user.team
+        )
+        
+        if not has_access:
+            raise ValidationError(
+                "You don't have permission to share this highlight"
+            )
+        
+        # Check user role
+        if user.role not in ["Player", "Coach"]:
+            raise ValidationError(
+                "Only players and coaches can share highlights"
+            )
+        
+        # Prevent self-sharing
+        user_id_str = str(user.id)
+        if user_id_str in [str(uid) for uid in attrs["user_ids"]]:
+            raise ValidationError("You cannot share a highlight with yourself")
+        
+        # Attach highlight for use in create
+        attrs["highlight"] = highlight
+        attrs["session"] = session
+        
+        return attrs
+    
+    def create(self, validated_data):
+        """Create shares for all users"""
+        highlight = validated_data["highlight"]
+        session = validated_data["session"]
+        user_ids = validated_data["user_ids"]
+        can_comment = validated_data.get("can_comment", True)
+        request = self.context.get("request")
+        shared_by = request.user
+        
+        # Get all clip reels for this highlight
+        clip_reels = TraceClipReel.objects.filter(highlight=highlight)
+        
+        if not clip_reels.exists():
+            raise ValidationError(
+                "No clip reels found for this highlight"
+            )
+        
+        results = []
+        
+        # For each recipient
+        for user_id in user_ids:
+            shared_with = WajoUser.objects.get(id=user_id)
+            
+            # Check if user belongs to the game
+            belongs_to_game = False
+            
+            # Check if user is on home or away team
+            if shared_with.team:
+                if session.home_team and shared_with.team.id == session.home_team.id:
+                    belongs_to_game = True
+                elif session.away_team and shared_with.team.id == session.away_team.id:
+                    belongs_to_game = True
+            
+            # Check if user is a coach of either team
+            if not belongs_to_game and shared_with.role == "Coach":
+                coached_teams = shared_with.teams_coached.values_list("id", flat=True)
+                if session.home_team and session.home_team.id in coached_teams:
+                    belongs_to_game = True
+                elif session.away_team and session.away_team.id in coached_teams:
+                    belongs_to_game = True
+            
+            # Check if user has a GameUserRole for this session's game
+            if not belongs_to_game and session.game:
+                from games.models import GameUserRole
+                has_game_role = GameUserRole.objects.filter(
+                    game=session.game,
+                    user=shared_with
+                ).exists()
+                if has_game_role:
+                    belongs_to_game = True
+            
+            user_result = {
+                "user_id": str(user_id),
+                "user_name": shared_with.name or shared_with.phone_no or shared_with.email,
+                "shares_created": 0,
+                "shares_updated": 0,
+                "belongs_to_game": belongs_to_game
+            }
+            
+            # Only create shares if user belongs to the game
+            if belongs_to_game:
+                # Create share for each clip reel
+                for clip_reel in clip_reels:
+                    share, created = TraceClipReelShare.objects.update_or_create(
+                        clip_reel=clip_reel,
+                        shared_with=shared_with,
+                        defaults={
+                            "highlight": highlight,
+                            "shared_by": shared_by,
+                            "can_comment": can_comment,
+                            "is_active": True,
+                        }
+                    )
+                    
+                    if created:
+                        user_result["shares_created"] += 1
+                    else:
+                        user_result["shares_updated"] += 1
+                
+                user_result["status"] = "success"
+            else:
+                user_result["status"] = "skipped"
+                user_result["reason"] = "User is not associated with this game"
+            
+            results.append(user_result)
+        
+        return {
+            "highlight_id": highlight.id,
+            "clip_reels_count": clip_reels.count(),
+            "recipients_count": len(user_ids),
+            "shares": results
+        }
