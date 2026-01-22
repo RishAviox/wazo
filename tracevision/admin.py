@@ -14,6 +14,12 @@ from .models import (
     TracePass,
     TracePassingNetwork,
     TracePossessionStats,
+    TraceClipReelShare,
+    TraceClipReelComment,
+    TraceClipReelCommentLike,
+    TraceClipReelCommentEditHistory,
+    TraceClipReelNote,
+    TraceClipReelNoteShare,
 )
 from core.admin import admin_site
 
@@ -645,6 +651,230 @@ class TracePossessionStatsAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related("session", "team", "player")
 
 
+class TraceClipReelShareAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "clip_reel",
+        "shared_by",
+        "shared_with",
+        "can_comment",
+        "is_active",
+        "shared_at",
+    ]
+    list_filter = ["can_comment", "is_active", "shared_at", "created_at"]
+    search_fields = [
+        "clip_reel__id",
+        "shared_by__phone_no",
+        "shared_by__name",
+        "shared_with__phone_no",
+        "shared_with__name",
+    ]
+    readonly_fields = ["id", "shared_at", "created_at", "updated_at"]
+    date_hierarchy = "shared_at"
+
+    fieldsets = (
+        (
+            "Share Information",
+            {"fields": ("id", "clip_reel", "highlight", "shared_by", "shared_with")},
+        ),
+        ("Permissions", {"fields": ("can_comment", "is_active")}),
+        (
+            "Timestamps",
+            {"fields": ("shared_at", "created_at", "updated_at"), "classes": ("collapse",)},
+        ),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "clip_reel", "highlight", "shared_by", "shared_with"
+        )
+
+
+class TraceClipReelCommentAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "clip_reel",
+        "author",
+        "visibility",
+        "likes_count",
+        "replies_count",
+        "is_edited",
+        "is_deleted",
+        "created_at",
+    ]
+    list_filter = [
+        "visibility",
+        "is_edited",
+        "is_deleted",
+        "created_at",
+        "updated_at",
+    ]
+    search_fields = [
+        "content",
+        "author__phone_no",
+        "author__name",
+        "clip_reel__id",
+    ]
+    readonly_fields = [
+        "id",
+        "likes_count",
+        "replies_count",
+        "created_at",
+        "updated_at",
+    ]
+    date_hierarchy = "created_at"
+
+    fieldsets = (
+        (
+            "Comment Information",
+            {"fields": ("id", "clip_reel", "highlight", "author", "parent_comment")},
+        ),
+        ("Content", {"fields": ("content", "visibility", "mentions")}),
+        (
+            "Status",
+            {
+                "fields": (
+                    "is_edited",
+                    "is_deleted",
+                    "deleted_at",
+                    "likes_count",
+                    "replies_count",
+                )
+            },
+        ),
+        (
+            "Timestamps",
+            {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
+        ),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "clip_reel", "highlight", "author", "parent_comment"
+        )
+
+
+class TraceClipReelCommentLikeAdmin(admin.ModelAdmin):
+    list_display = ["id", "comment", "user", "created_at"]
+    list_filter = ["created_at"]
+    search_fields = [
+        "comment__id",
+        "comment__content",
+        "user__phone_no",
+        "user__name",
+    ]
+    readonly_fields = ["id", "created_at"]
+    date_hierarchy = "created_at"
+
+    fieldsets = (
+        ("Like Information", {"fields": ("id", "comment", "user")}),
+        ("Timestamps", {"fields": ("created_at",), "classes": ("collapse",)}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("comment", "user")
+
+
+class TraceClipReelCommentEditHistoryAdmin(admin.ModelAdmin):
+    list_display = ["id", "comment", "edited_by", "edited_at"]
+    list_filter = ["edited_at"]
+    search_fields = [
+        "comment__id",
+        "comment__content",
+        "previous_content",
+        "edited_by__phone_no",
+        "edited_by__name",
+    ]
+    readonly_fields = ["id", "edited_at"]
+    date_hierarchy = "edited_at"
+
+    fieldsets = (
+        ("Edit Information", {"fields": ("id", "comment", "edited_by", "edited_at")}),
+        ("Content", {"fields": ("previous_content",)}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("comment", "edited_by")
+
+
+class TraceClipReelNoteAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "clip_reel",
+        "author",
+        "is_deleted",
+        "created_at",
+        "updated_at",
+    ]
+    list_filter = ["is_deleted", "created_at", "updated_at", "author__role"]
+    search_fields = [
+        "content",
+        "author__phone_no",
+        "author__name",
+        "clip_reel__id",
+    ]
+    readonly_fields = ["id", "created_at", "updated_at"]
+    date_hierarchy = "created_at"
+
+    fieldsets = (
+        (
+            "Note Information",
+            {"fields": ("id", "clip_reel", "highlight", "author")},
+        ),
+        ("Content", {"fields": ("content",)}),
+        ("Status", {"fields": ("is_deleted", "deleted_at")}),
+        (
+            "Timestamps",
+            {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
+        ),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "clip_reel", "highlight", "author"
+        )
+
+
+class TraceClipReelNoteShareAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "note",
+        "shared_by",
+        "shared_with_user",
+        "shared_with_group",
+        "is_active",
+        "shared_at",
+    ]
+    list_filter = ["shared_with_group", "is_active", "shared_at"]
+    search_fields = [
+        "note__id",
+        "note__content",
+        "shared_by__phone_no",
+        "shared_by__name",
+        "shared_with_user__phone_no",
+        "shared_with_user__name",
+    ]
+    readonly_fields = ["id", "shared_at"]
+    date_hierarchy = "shared_at"
+
+    fieldsets = (
+        (
+            "Share Information",
+            {"fields": ("id", "note", "shared_by")},
+        ),
+        (
+            "Share Target",
+            {"fields": ("shared_with_user", "shared_with_group")},
+        ),
+        ("Status", {"fields": ("is_active", "shared_at")}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "note", "shared_by", "shared_with_user"
+        )
+
+
 admin_site.register(TraceSession, TraceSessionAdmin)
 admin_site.register(TracePlayer, TracePlayerAdmin)
 admin_site.register(TraceHighlight, TraceHighlightAdmin)
@@ -659,3 +889,9 @@ admin_site.register(TraceClipReel, TraceClipReelAdmin)
 admin_site.register(TracePass, TracePassAdmin)
 admin_site.register(TracePassingNetwork, TracePassingNetworkAdmin)
 admin_site.register(TracePossessionStats, TracePossessionStatsAdmin)
+admin_site.register(TraceClipReelShare, TraceClipReelShareAdmin)
+admin_site.register(TraceClipReelComment, TraceClipReelCommentAdmin)
+admin_site.register(TraceClipReelCommentLike, TraceClipReelCommentLikeAdmin)
+admin_site.register(TraceClipReelCommentEditHistory, TraceClipReelCommentEditHistoryAdmin)
+admin_site.register(TraceClipReelNote, TraceClipReelNoteAdmin)
+admin_site.register(TraceClipReelNoteShare, TraceClipReelNoteShareAdmin)

@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
     TraceVisionProcessesList,
     TraceVisionProcessDetail,
@@ -14,7 +15,21 @@ from .views import (
     MapUserToPlayerView,
     DeleteErroredTraceSessionView,
     GetPlayerByTokenView,
+    HighlightNotesView,
+    TraceClipReelViewSet,
+    TraceClipReelCommentViewSet,
+    TraceClipReelNoteViewSet,
+    GameUsersListView,
+    SessionHighlightsView,
+    BulkHighlightShareView,
 )
+
+
+# Create router for ViewSets
+router = DefaultRouter()
+router.register(r"clip-reels", TraceClipReelViewSet, basename="clipreel")
+router.register(r"comments", TraceClipReelCommentViewSet, basename="comment")
+router.register(r"notes", TraceClipReelNoteViewSet, basename="note")
 
 urlpatterns = [
     path(
@@ -82,4 +97,30 @@ urlpatterns = [
         GetPlayerByTokenView.as_view(),
         name="get-player-by-token",
     ),
+    # Highlight notes endpoint
+    path(
+        "highlights/<int:highlight_id>/notes/",
+        HighlightNotesView.as_view(),
+        name="highlight-notes",
+    ),
+    # Session users list endpoint
+    path(
+        "sessions/<int:session_id>/users/",
+        GameUsersListView.as_view(),
+        name="session-users-list",
+    ),
+    # Session highlights endpoint with role-based filtering
+    path(
+        "sessions/<int:session_id>/highlights/",
+        SessionHighlightsView.as_view(),
+        name="session-highlights",
+    ),
+    # Bulk highlight sharing endpoint
+    path(
+        "highlights/share/",
+        BulkHighlightShareView.as_view(),
+        name="bulk-highlight-share",
+    ),
+    # Include router URLs for ClipReel comment system
+    path("", include(router.urls)),
 ]

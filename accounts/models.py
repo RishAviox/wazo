@@ -15,7 +15,6 @@ def profile_picture_path(instance, filename):
     # MEDIA_ROOT / uploads/user_id/profile_picture/<filename>
     return "uploads/user_{0}/profile_picture/{1}".format(instance.id, filename)
 
-
 class WajoUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     phone_no = models.CharField(max_length=15, unique=True, blank=True, null=True)
