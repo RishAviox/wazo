@@ -2432,7 +2432,16 @@ class PlayerDetailSerializer(serializers.ModelSerializer):
             )
         return get_localized_name(obj, user_language, field_name="name")
 
-    
+    def get_team_name(self, obj):
+        """Get localized team name"""
+        if not obj.team:
+            return None
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
+        return get_localized_team_name(obj.team, user_language)
 
     created_at = serializers.DateTimeField(
         format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True
@@ -2599,7 +2608,7 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
     trace_player = PlayerDetailSerializer(
         source="player", read_only=True, allow_null=True
     )
-    primary_player = PlayerDetailSerializer(read_only=True)
+    primary_player = PlayerDetailSerializer(source="player", read_only=True)
     involved_players = PlayerDetailSerializer(many=True, read_only=True)
     # session = serializers.CharField(source="session.id", read_only=True)
     match_start_time = serializers.CharField(
@@ -2670,17 +2679,12 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
 
     def get_event_name(self, obj):
         """Generate event name from event type and match time"""
-        # Access match_time and event_type through highlight if it exists
-        if hasattr(obj, 'highlight') and obj.highlight:
-            time_str = obj.highlight.match_time or "Unknown time"
-            # Get event type - use get_event_type_display if available
-            if hasattr(obj.highlight, 'get_event_type_display'):
-                event_type = obj.highlight.get_event_type_display()
-            else:
-                event_type = getattr(obj.highlight, 'event_type', 'Event')
+        time_str = obj.match_time or "Unknown time"
+        # Get event type - use get_event_type_display if available
+        if hasattr(obj, 'get_event_type_display'):
+            event_type = obj.get_event_type_display()
         else:
-            time_str = "Unknown time"
-            event_type = "Event"
+            event_type = getattr(obj, 'event_type', 'Event')
         return f"{event_type} at {time_str}"
 
     def get_side(self, obj):
@@ -2705,12 +2709,12 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
                     return side
 
         # Fallback to player's team
-        if obj.primary_player and obj.primary_player.team:
+        if obj.player and obj.player.team:
             session = obj.session
             side = None
-            if session.home_team and session.home_team.id == obj.primary_player.team.id:
+            if session.home_team and session.home_team.id == obj.player.team.id:
                 side = "home"
-            elif session.away_team and session.away_team.id == obj.primary_player.team.id:
+            elif session.away_team and session.away_team.id == obj.player.team.id:
                 side = "away"
 
             # Apply perspective transformation
@@ -2731,17 +2735,15 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
         return None
 
     def get_videos(self, obj):
-        """Get clip reel as video - obj is already a TraceClipReel"""
-        # Since obj is a TraceClipReel, return it as a single-item list
-        return ClipReelVideoSerializer([obj], many=True).data
+        """Get clip reels as videos from the highlight"""
+        # obj is TraceHighlight, return all related clip_reels
+        if hasattr(obj, 'clip_reels'):
+            return ClipReelVideoSerializer(obj.clip_reels.all(), many=True).data
+        return []
 
     def get_label(self, obj):
-        """Get label from clip reel or generate from event_name"""
-        # obj is a TraceClipReel, so check its label directly
-        if obj.label:
-            return obj.label
-
-        # Fallback to event_name if no label in clip reel
+        """Get label from highlight or generate from event_name"""
+        # TraceHighlight does not have a label field, default to event_name
         return self.get_event_name(obj)
 
     # Commented out methods not needed by frontend
