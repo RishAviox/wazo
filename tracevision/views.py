@@ -1140,115 +1140,126 @@ class GetTracePlayerReelsView(ListAPIView):
 
     def list(self, request, *args, **kwargs):
         """Override list to add match_info and custom response format"""
-        session_id = kwargs.get("session_id")
 
-        # Get games where user has GameUserRole
-        user_games = Game.objects.filter(game_roles__user=request.user).values_list(
-            "id", flat=True
-        )
-
-        # Get session for match_info
         try:
-            session = (
-                TraceSession.objects.select_related("home_team", "away_team")
-                .filter(
-                    Q(id=session_id)
-                    & (
-                        Q(user=request.user)
-                        | Q(game__id__in=user_games)
-                        | Q(home_team=request.user.team)
-                        | Q(away_team=request.user.team)
-                    )
-                )
-                .get()
-            )
-        except TraceSession.DoesNotExist:
-            return Response(
-                {
-                    "error": "Session not found",
-                    "details": f"No session found with ID {session_id} for this user",
-                },
-                status=http_status.HTTP_404_NOT_FOUND,
+            session_id = kwargs.get("session_id")
+
+            # Get games where user has GameUserRole
+            user_games = Game.objects.filter(game_roles__user=request.user).values_list(
+                "id", flat=True
             )
 
-        # Validate query parameters
-        player_id = request.query_params.get("player_id")
-        if player_id:
+            # Get session for match_info
             try:
-                int(player_id)
-            except ValueError:
+                session = (
+                    TraceSession.objects.select_related("home_team", "away_team")
+                    .filter(
+                        Q(id=session_id)
+                        & (
+                            Q(user=request.user)
+                            | Q(game__id__in=user_games)
+                            | Q(home_team=request.user.team)
+                            | Q(away_team=request.user.team)
+                        )
+                    )
+                    .get()
+                )
+            except TraceSession.DoesNotExist:
                 return Response(
                     {
-                        "error": "Invalid player_id",
-                        "details": "player_id must be a valid integer",
+                        "error": "Session not found",
+                        "details": f"No session found with ID {session_id} for this user",
                     },
-                    status=http_status.HTTP_400_BAD_REQUEST,
+                    status=http_status.HTTP_404_NOT_FOUND,
                 )
 
-        half = request.query_params.get("half")
-        if half:
-            try:
-                half_num = int(half)
-                if half_num not in [1, 2]:
+            # Validate query parameters
+            player_id = request.query_params.get("player_id")
+            if player_id:
+                try:
+                    int(player_id)
+                except ValueError:
+                    return Response(
+                        {
+                            "error": "Invalid player_id",
+                            "details": "player_id must be a valid integer",
+                        },
+                        status=http_status.HTTP_400_BAD_REQUEST,
+                    )
+
+            half = request.query_params.get("half")
+            if half:
+                try:
+                    half_num = int(half)
+                    if half_num not in [1, 2]:
+                        return Response(
+                            {"error": "Invalid half", "details": "half must be 1 or 2"},
+                            status=http_status.HTTP_400_BAD_REQUEST,
+                        )
+                except ValueError:
                     return Response(
                         {"error": "Invalid half", "details": "half must be 1 or 2"},
                         status=http_status.HTTP_400_BAD_REQUEST,
                     )
-            except ValueError:
-                return Response(
-                    {"error": "Invalid half", "details": "half must be 1 or 2"},
-                    status=http_status.HTTP_400_BAD_REQUEST,
+
+            # Get queryset and apply filters
+            queryset = self.filter_queryset(self.get_queryset())
+
+            # Order queryset for consistent pagination
+            queryset = queryset.order_by("-created_at", "-id")
+
+            # Paginate queryset at database level (more efficient)
+            page = self.paginate_queryset(queryset)
+
+            if page is not None:
+                # Serialize only the paginated results
+                serializer = self.get_serializer(page, many=True)
+                highlights = serializer.data
+
+                # Get paginated response
+                paginated_response = self.get_paginated_response(highlights)
+
+                # Serialize match_info with request context for perspective transformation
+                match_info_serializer = MatchInfoSerializer(
+                    session, context={"request": request}
                 )
+                match_info = match_info_serializer.data
 
-        # Get queryset and apply filters
-        queryset = self.filter_queryset(self.get_queryset())
+                # Build response with match_info
+                response_data = paginated_response.data
+                response_data["match_info"] = match_info
 
-        # Order queryset for consistent pagination
-        queryset = queryset.order_by("-created_at", "-id")
+                return Response(response_data, status=http_status.HTTP_200_OK)
 
-        # Paginate queryset at database level (more efficient)
-        page = self.paginate_queryset(queryset)
-
-        if page is not None:
-            # Serialize only the paginated results
-            serializer = self.get_serializer(page, many=True)
+            # Fallback if pagination is not applied (shouldn't happen with ListAPIView)
+            serializer = self.get_serializer(queryset, many=True)
             highlights = serializer.data
 
-            # Get paginated response
-            paginated_response = self.get_paginated_response(highlights)
-
-            # Serialize match_info with request context for perspective transformation
+            # Serialize match_info
             match_info_serializer = MatchInfoSerializer(
                 session, context={"request": request}
             )
             match_info = match_info_serializer.data
 
-            # Build response with match_info
-            response_data = paginated_response.data
-            response_data["match_info"] = match_info
-
-            return Response(response_data, status=http_status.HTTP_200_OK)
-
-        # Fallback if pagination is not applied (shouldn't happen with ListAPIView)
-        serializer = self.get_serializer(queryset, many=True)
-        highlights = serializer.data
-
-        # Serialize match_info
-        match_info_serializer = MatchInfoSerializer(
-            session, context={"request": request}
-        )
-        match_info = match_info_serializer.data
-
-        return Response(
-            {
-                "highlights": highlights,
-                "match_info": match_info,
-                "count": len(highlights),
-                "next": None,
-                "previous": None,
-            },
-            status=http_status.HTTP_200_OK,
-        )
+            return Response(
+                {
+                    "highlights": highlights,
+                    "match_info": match_info,
+                    "count": len(highlights),
+                    "next": None,
+                    "previous": None,
+                },
+                status=http_status.HTTP_200_OK,
+            )
+        except Exception as e:
+            logger.exception(f"Error getting trace player reels: {str(e)}")
+            return Response(
+                {
+                    "error": "Internal server error",
+                    "details": str(e),
+                },
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class GetAvailableHighlightDatesView(APIView):

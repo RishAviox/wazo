@@ -2681,17 +2681,12 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
 
     def get_event_name(self, obj):
         """Generate event name from event type and match time"""
-        # Access match_time and event_type through highlight if it exists
-        if hasattr(obj, 'highlight') and obj.highlight:
-            time_str = obj.highlight.match_time or "Unknown time"
-            # Get event type - use get_event_type_display if available
-            if hasattr(obj.highlight, 'get_event_type_display'):
-                event_type = obj.highlight.get_event_type_display()
-            else:
-                event_type = getattr(obj.highlight, 'event_type', 'Event')
+        time_str = obj.match_time or "Unknown time"
+        # Get event type - use get_event_type_display if available
+        if hasattr(obj, 'get_event_type_display'):
+            event_type = obj.get_event_type_display()
         else:
-            time_str = "Unknown time"
-            event_type = "Event"
+            event_type = getattr(obj, 'event_type', 'Event')
         return f"{event_type} at {time_str}"
 
     def get_side(self, obj):
