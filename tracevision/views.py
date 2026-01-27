@@ -2414,33 +2414,6 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
 
-    @action(detail=True, methods=["post"], url_path="share")
-    def share_reel(self, request, pk=None):
-        """
-        Share clip reel with another user.
-        """
-        clip_reel = self.get_object()
-
-        data = request.data.copy()
-        data["clip_reel_id"] = clip_reel.id
-        data["highlight_id"] = clip_reel.highlight.id if clip_reel.highlight else None
-
-        serializer = TraceClipReelShareSerializer(
-            data=data,
-            context={"request": request},
-        )
-
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-
-        return Response(
-            {
-                "message": "Reel shared successfully",
-                "data": serializer.data,
-            },
-            status=http_status.HTTP_201_CREATED,
-        )
-
     @action(detail=True, methods=["get"], url_path="shares")
     def list_shares(self, request, pk=None):
         """

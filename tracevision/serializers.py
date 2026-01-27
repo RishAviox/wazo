@@ -2162,6 +2162,17 @@ class PlayerDetailSerializer(serializers.ModelSerializer):
             )
         return get_localized_name(obj, user_language, field_name="name")
 
+    def get_team_name(self, obj):
+        """Get localized team name based on user language"""
+        if not obj.team:
+            return None
+        user_language = "en"
+        if self.context.get("request") and hasattr(self.context["request"], "user"):
+            user_language = (
+                getattr(self.context["request"].user, "selected_language", "en") or "en"
+            )
+        return get_localized_team_name(obj.team, user_language)
+
     
 
     created_at = serializers.DateTimeField(
@@ -2329,8 +2340,8 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
     trace_player = PlayerDetailSerializer(
         source="player", read_only=True, allow_null=True
     )
-    primary_player = PlayerDetailSerializer(read_only=True)
-    involved_players = PlayerDetailSerializer(many=True, read_only=True)
+    primary_player = serializers.SerializerMethodField()
+    involved_players = serializers.SerializerMethodField()
     # session = serializers.CharField(source="session.id", read_only=True)
     match_start_time = serializers.CharField(
         source="session.match_start_time", read_only=True
@@ -2435,12 +2446,14 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
                     return side
 
         # Fallback to player's team
-        if obj.primary_player and obj.primary_player.team:
+        # TraceHighlight has 'player', TraceClipReel has 'primary_player'
+        player = getattr(obj, 'primary_player', None) or getattr(obj, 'player', None)
+        if player and player.team:
             session = obj.session
             side = None
-            if session.home_team and session.home_team.id == obj.primary_player.team.id:
+            if session.home_team and session.home_team.id == player.team.id:
                 side = "home"
-            elif session.away_team and session.away_team.id == obj.primary_player.team.id:
+            elif session.away_team and session.away_team.id == player.team.id:
                 side = "away"
 
             # Apply perspective transformation
@@ -2461,18 +2474,38 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
         return None
 
     def get_videos(self, obj):
-        """Get clip reel as video - obj is already a TraceClipReel"""
-        # Since obj is a TraceClipReel, return it as a single-item list
-        return ClipReelVideoSerializer([obj], many=True).data
+        """Get related clip reels as videos"""
+        # obj is a TraceHighlight, get its related clip reels
+        if hasattr(obj, 'clip_reels'):
+            clip_reels = obj.clip_reels.all()
+            return ClipReelVideoSerializer(clip_reels, many=True, context=self.context).data
+        return []
 
     def get_label(self, obj):
         """Get label from clip reel or generate from event_name"""
-        # obj is a TraceClipReel, so check its label directly
-        if obj.label:
+        # Check if obj has a label attribute (TraceClipReel has it, TraceHighlight doesn't)
+        if hasattr(obj, 'label') and obj.label:
             return obj.label
 
-        # Fallback to event_name if no label in clip reel
+        # Fallback to event_name if no label
         return self.get_event_name(obj)
+
+    def get_primary_player(self, obj):
+        """Get primary player - handles both TraceHighlight and TraceClipReel"""
+        # TraceClipReel has 'primary_player', TraceHighlight has 'player'
+        player = getattr(obj, 'primary_player', None) or getattr(obj, 'player', None)
+        if player:
+            return PlayerDetailSerializer(player, context=self.context).data
+        return None
+
+    def get_involved_players(self, obj):
+        """Get involved players - handles both TraceHighlight and TraceClipReel"""
+        # TraceClipReel has 'involved_players' ManyToMany field
+        if hasattr(obj, 'involved_players'):
+            players = obj.involved_players.all()
+            return PlayerDetailSerializer(players, many=True, context=self.context).data
+        # TraceHighlight doesn't have involved_players
+        return []
 
     # Commented out methods not needed by frontend
     # def get_start_clock(self, obj):
