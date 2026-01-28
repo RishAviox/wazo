@@ -99,9 +99,9 @@ urlpatterns = [
     ),
     # Highlight notes endpoint
     path(
-        "highlights/<int:highlight_id>/notes/",
+        "clip-reels/<int:clip_reel_id>/notes/",
         HighlightNotesView.as_view(),
-        name="highlight-notes",
+        name="clip-reel-notes",
     ),
     # Session users list endpoint
     path(

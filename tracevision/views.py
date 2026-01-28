@@ -1011,8 +1011,15 @@ class TraceVisionPlayerStatsDetailView(APIView):
 
 class GetTracePlayerReelsView(ListAPIView):
     """
-    API endpoint to get highlights for a specific session.
+    API endpoint to get highlights for a specific session with role-based access control.
+    
     URL: highlights/<session_id>/
+    
+    Role-based filtering:
+    - Admin: Can see all highlights for all teams and players (full access)
+    - Coach: All highlights for players in their team + Highlights shared with them
+    - Player: Only their own highlights + Highlights shared with them
+    
     Query Parameters:
     - player_id: Filter by specific player ID (optional)
     - generation_status: Filter by generation status of clip reels (optional)
@@ -1025,34 +1032,39 @@ class GetTracePlayerReelsView(ListAPIView):
     pagination_class = HighlightPagination
 
     def get_queryset(self):
-        """Get optimized queryset for highlights"""
+        """Get optimized queryset for highlights with role-based filtering"""
         session_id = self.kwargs.get("session_id")
+        user = self.request.user
 
         # Get games where user has GameUserRole
         user_games = Game.objects.filter(
-            game_roles__user=self.request.user
+            game_roles__user=user
         ).values_list("id", flat=True)
 
         # Get session and verify user has access
         try:
-            session = (
-                TraceSession.objects.select_related("home_team", "away_team")
-                .filter(
-                    Q(id=session_id)
-                    & (
-                        Q(user=self.request.user)
-                        | Q(game__id__in=user_games)
-                        | Q(home_team=self.request.user.team)
-                        | Q(away_team=self.request.user.team)
+            # Admin can access any session
+            if user.role == "Admin":
+                session = TraceSession.objects.select_related("home_team", "away_team").get(id=session_id)
+            else:
+                session = (
+                    TraceSession.objects.select_related("home_team", "away_team")
+                    .filter(
+                        Q(id=session_id)
+                        & (
+                            Q(user=user)
+                            | Q(game__id__in=user_games)
+                            | Q(home_team=user.team)
+                            | Q(away_team=user.team)
+                        )
                     )
+                    .get()
                 )
-                .get()
-            )
         except TraceSession.DoesNotExist:
             return TraceHighlight.objects.none()
 
         # Base queryset with optimized selects
-        queryset = (
+        base_queryset = (
             TraceHighlight.objects.filter(session=session)
             .select_related("player__team", "session__home_team", "session__away_team")
             .prefetch_related(
@@ -1065,9 +1077,61 @@ class GetTracePlayerReelsView(ListAPIView):
             )  # Prefetch clip reels with primary_player for videos
         )
 
-        # Apply filters from query parameters
-        # video_type filter removed - not needed anymore
+        # Build role-based filter conditions
+        role_filter = Q()
+        
+        if user.role == "Admin":
+            # Admin can see all highlights - no filtering needed
+            role_filter = Q()  # Empty Q() means no restriction
+            
+        elif user.role == "Coach":
+            # Get all players that have this coach assigned
+            coach_players = user.players.all()
+            
+            # Get TracePlayer IDs for these WajoUsers
+            trace_player_ids = TracePlayer.objects.filter(
+                user__in=coach_players
+            ).values_list("id", flat=True)
+            
+            # Filter highlights where the player is in the coach's player list
+            role_filter = Q(player_id__in=trace_player_ids)
+            
+        elif user.role == "Player":
+            # Get the player's TracePlayer record(s)
+            trace_players = TracePlayer.objects.filter(user=user)
+            
+            # Debug logging
+            logger.info(f"Player filtering - User: {user.name} (ID: {user.id}), Role: {user.role}")
+            logger.info(f"Found {trace_players.count()} TracePlayer records for this user")
+            for tp in trace_players:
+                logger.info(f"  - TracePlayer ID: {tp.id}, Name: {tp.name}, Jersey: {tp.jersey_number}, Team: {tp.team.name}")
+            
+            # Filter highlights where the player matches
+            role_filter = Q(player__in=trace_players)
+        else:
+            # For other roles (Referee, etc.), return empty queryset
+            return TraceHighlight.objects.none()
+        
+        # Add filter for highlights shared with the user via TraceClipReelShare
+        shared_filter = Q(
+            reel_shares__shared_with=user,
+            reel_shares__is_active=True
+        )
+        
+        # Combine filters based on role
+        if user.role == "Admin":
+            # Admin sees everything - no need to combine with shared filter
+            queryset = base_queryset
+        else:
+            # Combine filters: user's own highlights OR shared highlights
+            queryset = base_queryset.filter(role_filter | shared_filter).distinct()
+            
+            # Debug logging
+            logger.info(f"After filtering - Total highlights: {queryset.count()}")
+            for hl in queryset[:5]:  # Log first 5
+                logger.info(f"  - Highlight ID: {hl.id}, Player: {hl.player.name if hl.player else 'None'}")
 
+        # Apply additional filters from query parameters
         generation_status = self.request.query_params.get("generation_status")
         if generation_status:
             # Filter highlights that have clip reels with this status
@@ -1113,24 +1177,28 @@ class GetTracePlayerReelsView(ListAPIView):
         context = super().get_serializer_context()
         session_id = self.kwargs.get("session_id")
         try:
-            # Get games where user has GameUserRole
-            user_games = Game.objects.filter(
-                game_roles__user=self.request.user
-            ).values_list("id", flat=True)
+            # Admin can access any session
+            if self.request.user.role == "Admin":
+                context["session"] = TraceSession.objects.select_related("home_team", "away_team").get(id=session_id)
+            else:
+                # Get games where user has GameUserRole
+                user_games = Game.objects.filter(
+                    game_roles__user=self.request.user
+                ).values_list("id", flat=True)
 
-            context["session"] = (
-                TraceSession.objects.select_related("home_team", "away_team")
-                .filter(
-                    Q(id=session_id)
-                    & (
-                        Q(user=self.request.user)
-                        | Q(game__id__in=user_games)
-                        | Q(home_team=self.request.user.team)
-                        | Q(away_team=self.request.user.team)
+                context["session"] = (
+                    TraceSession.objects.select_related("home_team", "away_team")
+                    .filter(
+                        Q(id=session_id)
+                        & (
+                            Q(user=self.request.user)
+                            | Q(game__id__in=user_games)
+                            | Q(home_team=self.request.user.team)
+                            | Q(away_team=self.request.user.team)
+                        )
                     )
+                    .get()
                 )
-                .get()
-            )
         except TraceSession.DoesNotExist:
             context["session"] = None
         # Request is already in context from super(), but ensure it's there
@@ -1144,26 +1212,30 @@ class GetTracePlayerReelsView(ListAPIView):
         try:
             session_id = kwargs.get("session_id")
 
-            # Get games where user has GameUserRole
-            user_games = Game.objects.filter(game_roles__user=request.user).values_list(
-                "id", flat=True
-            )
-
             # Get session for match_info
             try:
-                session = (
-                    TraceSession.objects.select_related("home_team", "away_team")
-                    .filter(
-                        Q(id=session_id)
-                        & (
-                            Q(user=request.user)
-                            | Q(game__id__in=user_games)
-                            | Q(home_team=request.user.team)
-                            | Q(away_team=request.user.team)
-                        )
+                # Admin can access any session
+                if request.user.role == "Admin":
+                    session = TraceSession.objects.select_related("home_team", "away_team").get(id=session_id)
+                else:
+                    # Get games where user has GameUserRole
+                    user_games = Game.objects.filter(game_roles__user=request.user).values_list(
+                        "id", flat=True
                     )
-                    .get()
-                )
+
+                    session = (
+                        TraceSession.objects.select_related("home_team", "away_team")
+                        .filter(
+                            Q(id=session_id)
+                            & (
+                                Q(user=request.user)
+                                | Q(game__id__in=user_games)
+                                | Q(home_team=request.user.team)
+                                | Q(away_team=request.user.team)
+                            )
+                        )
+                        .get()
+                    )
             except TraceSession.DoesNotExist:
                 return Response(
                     {
@@ -1225,9 +1297,10 @@ class GetTracePlayerReelsView(ListAPIView):
                 )
                 match_info = match_info_serializer.data
 
-                # Build response with match_info
+                # Build response with match_info and user_role
                 response_data = paginated_response.data
                 response_data["match_info"] = match_info
+                response_data["user_role"] = request.user.role  # Add user role to response
 
                 return Response(response_data, status=http_status.HTTP_200_OK)
 
@@ -1245,6 +1318,7 @@ class GetTracePlayerReelsView(ListAPIView):
                 {
                     "highlights": highlights,
                     "match_info": match_info,
+                    "user_role": request.user.role,  # Add user role to response
                     "count": len(highlights),
                     "next": None,
                     "previous": None,
@@ -2284,9 +2358,9 @@ class HighlightNotesView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, highlight_id):
+    def post(self, request, clip_reel_id):
         """
-        Create a new note on a highlight.
+        Create a new note on a clip reel.
         
         Request body:
         {
@@ -2305,22 +2379,13 @@ class HighlightNotesView(APIView):
                 status=http_status.HTTP_403_FORBIDDEN,
             )
         
-        # Get highlight
-        highlight = get_object_or_404(TraceHighlight, id=highlight_id)
-        # NOTE or TODO: Take the clip reel id for the higlight and if not provided then use the first clip reel of the highlight
-        
-        # Get the first clip reel for this highlight
-        clip_reel = TraceClipReel.objects.filter(highlight=highlight).first()
-        if not clip_reel:
-            return Response(
-                {"error": "No clip reel found for this highlight."},
-                status=http_status.HTTP_404_NOT_FOUND,
-            )
+        # Get clip reel
+        clip_reel = get_object_or_404(TraceClipReel, id=clip_reel_id)
         
         # Prepare data for serializer
         data = {
             "clip_reel_id": clip_reel.id,
-            "highlight_id": highlight_id,
+            "highlight_id": clip_reel.highlight.id,
             "content": request.data.get("content"),
         }
         
@@ -2404,20 +2469,20 @@ class HighlightNotesView(APIView):
         
         return Response(response_data, status=http_status.HTTP_201_CREATED)
     
-    def get(self, request, highlight_id):
+    def get(self, request, clip_reel_id):
         """
-        List all notes visible to the requesting user for this highlight.
+        List all notes visible to the requesting user for this clip reel.
         Returns notes authored by user or shared with user.
         """
         from tracevision.serializers import TraceClipReelNoteSerializer
         from django.shortcuts import get_object_or_404
         
-        # Get highlight
-        highlight = get_object_or_404(TraceHighlight, id=highlight_id)
+        # Get clip reel
+        clip_reel = get_object_or_404(TraceClipReel, id=clip_reel_id)
         
-        # Get all notes for clip reels in this highlight
+        # Get all notes for this clip reel
         notes = TraceClipReelNote.objects.filter(
-            highlight=highlight,
+            clip_reel=clip_reel,
             is_deleted=False
         ).select_related("author", "clip_reel")
         
@@ -2453,33 +2518,6 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
     serializer_class = HighlightClipReelSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
-
-    @action(detail=True, methods=["post"], url_path="share")
-    def share_reel(self, request, pk=None):
-        """
-        Share clip reel with another user.
-        """
-        clip_reel = self.get_object()
-
-        data = request.data.copy()
-        data["clip_reel_id"] = clip_reel.id
-        data["highlight_id"] = clip_reel.highlight.id if clip_reel.highlight else None
-
-        serializer = TraceClipReelShareSerializer(
-            data=data,
-            context={"request": request},
-        )
-
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-
-        return Response(
-            {
-                "message": "Reel shared successfully",
-                "data": serializer.data,
-            },
-            status=http_status.HTTP_201_CREATED,
-        )
 
     @action(detail=True, methods=["get"], url_path="shares")
     def list_shares(self, request, pk=None):
