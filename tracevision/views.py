@@ -1085,16 +1085,27 @@ class GetTracePlayerReelsView(ListAPIView):
             role_filter = Q()  # Empty Q() means no restriction
             
         elif user.role == "Coach":
-            # Get all players that have this coach assigned
+            # Use two parallel approaches to get all relevant players:
+            # 1. Get all players that have this coach assigned
             coach_players = user.players.all()
             
             # Get TracePlayer IDs for these WajoUsers
-            trace_player_ids = TracePlayer.objects.filter(
+            trace_player_ids_from_assignment = TracePlayer.objects.filter(
                 user__in=coach_players
             ).values_list("id", flat=True)
             
-            # Filter highlights where the player is in the coach's player list
-            role_filter = Q(player_id__in=trace_player_ids)
+            # 2. Get all players from the coach's team
+            trace_player_ids_from_team = []
+            if user.team:
+                # Get all TracePlayer records for the coach's team in this session
+                trace_player_ids_from_team = TracePlayer.objects.filter(
+                    team=user.team,
+                    sessions=session
+                ).values_list("id", flat=True)
+            
+            # Combine both approaches: players assigned to coach OR players from coach's team
+            # This ensures coach gets all highlights related to their team for this trace session
+            role_filter = Q(player_id__in=trace_player_ids_from_assignment) | Q(player_id__in=trace_player_ids_from_team)
             
         elif user.role == "Player":
             # Get the player's TracePlayer record(s)
