@@ -2592,7 +2592,7 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
     side = serializers.SerializerMethodField()
     start_ms = serializers.IntegerField(source="start_offset", read_only=True)
     duration_ms = serializers.IntegerField(source="duration", read_only=True)
-    match_time = serializers.CharField(read_only=True, allow_null=True)
+    match_time = serializers.SerializerMethodField()
     half = serializers.IntegerField(read_only=True, allow_null=True)
 
     # Videos list from related clip reels
@@ -2679,9 +2679,22 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
             "videos",
         ]
 
+    def get_match_time(self, obj):
+        """Get match time safely"""
+        if hasattr(obj, "match_time"):
+            return obj.match_time
+        if hasattr(obj, "highlight") and hasattr(obj.highlight, "match_time"):
+            return obj.highlight.match_time
+        return None
+
     def get_event_name(self, obj):
         """Generate event name from event type and match time"""
-        time_str = obj.match_time or "Unknown time"
+        time_str = "Unknown time"
+        if hasattr(obj, "match_time"):
+            time_str = obj.match_time or "Unknown time"
+        elif hasattr(obj, "highlight") and hasattr(obj.highlight, "match_time"):
+            time_str = obj.highlight.match_time or "Unknown time"
+            
         # Get event type - use get_event_type_display if available
         if hasattr(obj, 'get_event_type_display'):
             event_type = obj.get_event_type_display()
@@ -2744,6 +2757,12 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
         if hasattr(obj, 'clip_reels'):
             clip_reels = obj.clip_reels.all()
             return ClipReelVideoSerializer(clip_reels, many=True, context=self.context).data
+            
+        # obj is a TraceClipReel (it has 'highlight' FK but no 'clip_reels' manager)
+        # In this case, the object itself IS the video
+        if hasattr(obj, 'highlight') and hasattr(obj, 'generation_status'):
+             return ClipReelVideoSerializer([obj], many=True, context=self.context).data
+             
         return []
 
     def get_label(self, obj):

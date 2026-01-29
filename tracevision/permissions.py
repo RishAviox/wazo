@@ -95,10 +95,12 @@ class CanCommentOnClipReel(permissions.BasePermission):
         if share and share.can_comment:
             return True
 
-        # Additional check for coaches
         if user.role == "Coach" and obj.primary_player:
             player_user = obj.primary_player.user
             
+            if not player_user:
+                return False
+
             # Check if coach is part of the player's team
             if player_user.team:
                 team_coaches = player_user.team.coach.all()
@@ -109,8 +111,8 @@ class CanCommentOnClipReel(permissions.BasePermission):
             if player_user.coach.filter(id=user.id).exists():
                 return True
 
-            # Check if coach is part of the player's team
-            if player_user.team.id == user.team.id:
+            # Check if coach is part of the player's team (comparing team IDs)
+            if player_user.team and user.team and player_user.team.id == user.team.id:
                 return True
 
         return False
