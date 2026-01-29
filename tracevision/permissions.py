@@ -109,6 +109,10 @@ class CanCommentOnClipReel(permissions.BasePermission):
             if player_user.coach.filter(id=user.id).exists():
                 return True
 
+            # Check if coach is part of the player's team
+            if player_user.team.id == user.team.id:
+                return True
+
         return False
 
 
