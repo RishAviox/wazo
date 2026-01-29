@@ -46,6 +46,9 @@ class HasClipReelAccess(permissions.BasePermission):
                 print(f"Team coaches: {team_coaches}::{user}")
                 if user in team_coaches:
                     return True
+            # Check if coach is part of the player's team
+            if player_user.team.id == user.team.id:
+                return True
             
             # Check if coach is personally assigned to the player
             if player_user.coach.filter(id=user.id).exists():
