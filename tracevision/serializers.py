@@ -3270,22 +3270,45 @@ class TraceClipReelCommentSerializer(serializers.ModelSerializer):
             is_owner = (
                 clip_reel.primary_player and clip_reel.primary_player.user == user
             )
-            has_share = TraceClipReelShare.objects.filter(
-                clip_reel=clip_reel, shared_with=user, is_active=True
-            ).exists()
-
-            if not is_owner and not has_share:
-                raise ValidationError("You don't have access to this clip reel.")
-
-            # Check can_comment permission
-            if not is_owner:
-                share = TraceClipReelShare.objects.filter(
+            
+            # Owner always has access
+            if is_owner:
+                pass  # Owner can always comment
+            else:
+                # Check if explicitly shared with user
+                has_share = TraceClipReelShare.objects.filter(
                     clip_reel=clip_reel, shared_with=user, is_active=True
-                ).first()
-                if not share or not share.can_comment:
-                    raise ValidationError(
-                        "You don't have permission to comment on this clip reel."
-                    )
+                ).exists()
+                
+                # Check coach-player relationships
+                has_coach_relationship = False
+                if user.role == "Coach" and clip_reel.primary_player:
+                    player_user = clip_reel.primary_player.user
+                    
+                    # Check if coach is part of the player's team
+                    if player_user.team:
+                        team_coaches = player_user.team.coach.all()
+                        if user in team_coaches:
+                            has_coach_relationship = True
+                    
+                    # Check if coach is personally assigned to the player
+                    if not has_coach_relationship and player_user.coach.filter(id=user.id).exists():
+                        has_coach_relationship = True
+                
+                # User must have share OR coach relationship
+                if not has_share and not has_coach_relationship:
+                    raise ValidationError("You don't have access to this clip reel.")
+
+                # If user has a share, check can_comment permission
+                if has_share:
+                    share = TraceClipReelShare.objects.filter(
+                        clip_reel=clip_reel, shared_with=user, is_active=True
+                    ).first()
+                    if not share or not share.can_comment:
+                        raise ValidationError(
+                            "You don't have permission to comment on this clip reel."
+                        )
+                # Coach relationships automatically grant comment permission
 
         # Validate mentions if provided
         mentions = attrs.get("mentions", [])

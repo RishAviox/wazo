@@ -2662,7 +2662,14 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
         GET /api/vision/clip-reels/{id}/comments/ - List comments
         POST /api/vision/clip-reels/{id}/comments/ - Add comment
         """
-        clip_reel = self.get_object()
+        # Check if clip reel exists first
+        try:
+            clip_reel = TraceClipReel.objects.get(id=pk)
+        except TraceClipReel.DoesNotExist:
+            return Response(
+                {"error": f"Clip reel with ID {pk} does not exist."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
 
         if request.method == "GET":
             # List comments (filtered by visibility)
@@ -2672,7 +2679,10 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
             permission = HasClipReelAccess()
             if not permission.has_object_permission(request, self, clip_reel):
                 return Response(
-                    {"error": "You don't have access to this reel."},
+                    {
+                        "error": "Access denied. This clip reel is not shared with you.",
+                        "details": "You can only view clip reels that belong to you or have been shared with you."
+                    },
                     status=http_status.HTTP_403_FORBIDDEN,
                 )
 
@@ -2704,8 +2714,29 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
             # Check if user can comment
             permission = CanCommentOnClipReel()
             if not permission.has_object_permission(request, self, clip_reel):
+                # Provide detailed error message based on user role
+                user = request.user
+                error_details = {
+                    "error": "You don't have permission to comment on this clip reel.",
+                }
+                
+                # Add helpful context based on user role
+                if user.role == "Coach":
+                    error_details["details"] = (
+                        "As a coach, you can only comment on clip reels if:\n"
+                        "1. You are a coach of the player's team, OR\n"
+                        "2. You are personally assigned as the player's coach, OR\n"
+                        "3. The clip reel has been explicitly shared with you"
+                    )
+                else:
+                    error_details["details"] = (
+                        "You can only comment on clip reels that:\n"
+                        "1. Belong to you, OR\n"
+                        "2. Have been shared with you with comment permission enabled"
+                    )
+                
                 return Response(
-                    {"error": "You don't have permission to comment on this reel."},
+                    error_details,
                     status=http_status.HTTP_403_FORBIDDEN,
                 )
 
@@ -2723,6 +2754,7 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
                 )
 
             return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
 
     @action(detail=True, methods=["post"], url_path="notes")
     def add_note(self, request, pk=None):

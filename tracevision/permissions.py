@@ -46,7 +46,14 @@ class HasClipReelAccess(permissions.BasePermission):
 class CanCommentOnClipReel(permissions.BasePermission):
     """
     Permission to check if user can comment on the clip reel.
-    User must have access AND can_comment permission.
+    
+    Rules:
+    1. Owner (player) can always comment
+    2. Coach can comment if:
+       a) The reel is explicitly shared with them (can_comment=True), OR
+       b) The coach is part of the player's team, OR
+       c) The coach is personally assigned to the player
+    3. Other users can comment only if the reel is shared with them (can_comment=True)
     """
 
     def has_object_permission(self, request, view, obj):
@@ -64,6 +71,20 @@ class CanCommentOnClipReel(permissions.BasePermission):
 
         if share and share.can_comment:
             return True
+
+        # Additional check for coaches
+        if user.role == "Coach" and obj.primary_player:
+            player_user = obj.primary_player.user
+            
+            # Check if coach is part of the player's team
+            if player_user.team:
+                team_coaches = player_user.team.coach.all()
+                if user in team_coaches:
+                    return True
+            
+            # Check if coach is personally assigned to the player
+            if player_user.coach.filter(id=user.id).exists():
+                return True
 
         return False
 
