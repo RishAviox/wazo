@@ -33,12 +33,32 @@ class HasClipReelAccess(permissions.BasePermission):
         # Owner has access
         if obj.primary_player and obj.primary_player.user == user:
             return True
+        
+        # Additional check for coaches
+        if user.role == "Coach" and obj.primary_player:
+            player_user = obj.primary_player.user
 
-        # Check if shared with user
-        if TraceClipReelShare.objects.filter(
+            print(f"Coach player user: {player_user}")
+            
+            # Check if coach is part of the player's team
+            if player_user.team:
+                team_coaches = player_user.team.coach.all()
+                print(f"Team coaches: {team_coaches}::{user}")
+                if user in team_coaches:
+                    return True
+            
+            # Check if coach is personally assigned to the player
+            if player_user.coach.filter(id=user.id).exists():
+                return True
+
+        # Check if shared with can_comment=True
+        share = TraceClipReelShare.objects.filter(
             clip_reel=obj, shared_with=user, is_active=True
-        ).exists():
+        ).first()
+
+        if share and share.can_comment:
             return True
+
 
         return False
 

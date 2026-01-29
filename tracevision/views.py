@@ -1093,6 +1093,7 @@ class GetTracePlayerReelsView(ListAPIView):
             trace_player_ids_from_assignment = TracePlayer.objects.filter(
                 user__in=coach_players
             ).values_list("id", flat=True)
+            print(f"trace_player_ids_from_assignment: {trace_player_ids_from_assignment}")
             
             # 2. Get all players from the coach's team
             trace_player_ids_from_team = []
@@ -1103,6 +1104,7 @@ class GetTracePlayerReelsView(ListAPIView):
                     sessions=session
                 ).values_list("id", flat=True)
             
+            print(f"trace player ids from the team: {trace_player_ids_from_team}")
             # Combine both approaches: players assigned to coach OR players from coach's team
             # This ensures coach gets all highlights related to their team for this trace session
             role_filter = Q(player_id__in=trace_player_ids_from_assignment) | Q(player_id__in=trace_player_ids_from_team)
