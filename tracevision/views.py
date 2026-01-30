@@ -16,6 +16,7 @@ from tracevision.permissions import HasClipReelAccess
 
 
 from teams.models import Team
+from accounts.models import WajoUser
 from tracevision.models import (
     TraceClipReel,
     TraceSession,
@@ -3672,4 +3673,119 @@ class BulkHighlightShareView(APIView):
             return Response(
                 {"success": False, "error": "Internal server error", "details": str(e)},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+
+
+class SessionUsersListView(APIView):
+    """
+    API endpoint to get all users associated with a trace session.
+    
+    GET /api/vision/get_user/<session_id>/
+    
+    Returns list of all users (players, coaches, referees) for the session.
+    """
+    
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, session_id):
+        """Get all users for a trace session"""
+        try:
+            # Get the trace session
+            from tracevision.models import TraceSession
+            
+            try:
+                session = TraceSession.objects.get(id=session_id)
+            except TraceSession.DoesNotExist:
+                return Response(
+                    {
+                        "success": False,
+                        "error": "Session not found",
+                        "details": f"No trace session found with ID {session_id}"
+                    },
+                    status=http_status.HTTP_404_NOT_FOUND
+                )
+            
+            # Get all users associated with this session
+            users_data = []
+            
+            # Get users from home team
+            if session.home_team:
+                # Get players from home team
+                home_players = WajoUser.objects.filter(team=session.home_team, role="Player")
+                for player in home_players:
+                    users_data.append({
+                        "user": player,
+                        "is_registered": player.is_registered,
+                        "user_role": player.role,
+                    })
+                
+                # Get coaches from home team
+                home_coaches = session.home_team.coach.all()
+                for coach in home_coaches:
+                    users_data.append({
+                        "user": coach,
+                        "is_registered": coach.is_registered,
+                        "user_role": coach.role,
+                    })
+            
+            # Get users from away team
+            if session.away_team:
+                # Get players from away team
+                away_players = WajoUser.objects.filter(team=session.away_team, role="Player")
+                for player in away_players:
+                    users_data.append({
+                        "user": player,
+                        "is_registered": player.is_registered,
+                        "user_role": player.role,
+                    })
+                
+                # Get coaches from away team
+                away_coaches = session.away_team.coach.all()
+                for coach in away_coaches:
+                    users_data.append({
+                        "user": coach,
+                        "is_registered": coach.is_registered,
+                        "user_role": coach.role,
+                    })
+            
+            # Get users from GameUserRole (referees and other roles)
+            if session.game:
+                from games.models import GameUserRole
+                game_users = GameUserRole.objects.filter(game=session.game).select_related('user')
+                for game_user in game_users:
+                    # Avoid duplicates
+                    if not any(u['user'].id == game_user.user.id for u in users_data):
+                        users_data.append({
+                            "user": game_user.user,
+                            "is_registered": game_user.user.is_registered,
+                            "user_role": game_user.user.role,
+                        })
+            
+            # Serialize all users
+            from tracevision.serializers import UserRegistrationStatusSerializer
+            serializer = UserRegistrationStatusSerializer(
+                users_data, many=True, context={"request": request}
+            )
+            
+            return Response(
+                {
+                    "success": True,
+                    "session_id": session_id,
+                    "users_count": len(users_data),
+                    "users": serializer.data
+                },
+                status=http_status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.exception(f"Error retrieving users for session {session_id}: {str(e)}")
+            return Response(
+                {
+                    "success": False,
+                    "error": "Internal server error",
+                    "details": str(e)
+                },
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
             )
