@@ -22,6 +22,7 @@ from .views import (
     GameUsersListView,
     SessionHighlightsView,
     BulkHighlightShareView,
+    SessionUsersListView,
 )
 
 
@@ -121,6 +122,15 @@ urlpatterns = [
         BulkHighlightShareView.as_view(),
         name="bulk-highlight-share",
     ),
+    # User registration status endpoint
+    path(
+        "get_user/<int:session_id>/",
+        SessionUsersListView.as_view(),
+        name="user-registration-status",
+    ),
     # Include router URLs for ClipReel comment system
     path("", include(router.urls)),
+
+
+    
 ]

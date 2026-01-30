@@ -3752,3 +3752,112 @@ class BulkHighlightShareSerializer(serializers.Serializer):
             "recipients_count": len(user_ids),
             "shares": results
         }
+
+
+class UserRegistrationStatusSerializer(serializers.Serializer):
+    """
+    Serializer for user registration status response.
+    Returns user details with localized names and team information.
+    """
+    
+    user_id = serializers.SerializerMethodField()
+    user_name = serializers.SerializerMethodField()
+    user_role = serializers.SerializerMethodField()
+    mobile_number = serializers.SerializerMethodField()
+    email = serializers.SerializerMethodField()
+    is_registered = serializers.SerializerMethodField()
+    team = serializers.SerializerMethodField()
+    
+    def get_user_id(self, obj):
+        """Get user ID"""
+        user = obj.get('user')
+        return str(user.id) if user else None
+    
+    def get_user_name(self, obj):
+        """Get localized user name based on language preference"""
+        user = obj.get('user')
+        if not user:
+            return None
+        
+        request = self.context.get('request')
+        if not request:
+            return user.name or user.phone_no
+        
+        # Get user's selected language
+        selected_language = request.user.selected_language or 'en'
+        
+        # Try to get localized name from language_metadata
+        if user.language_metadata:
+            localized_name = user.language_metadata.get(selected_language, {}).get('name')
+            if localized_name:
+                return localized_name
+        
+        # Fallback to name or phone_no
+        return user.name or user.phone_no
+    
+    def get_user_role(self, obj):
+        """Get user role"""
+        return obj.get('user_role')
+    
+    def get_is_registered(self, obj):
+        """Get user registration status"""
+        return obj.get('is_registered', False)
+    
+    def get_mobile_number(self, obj):
+        """Get user mobile number"""
+        user = obj.get('user')
+        return user.phone_no if user else None
+    
+    def get_email(self, obj):
+        """Get user email"""
+        user = obj.get('user')
+        return user.email if user else None
+    
+    def get_team(self, obj):
+        """Get team information for the user"""
+        user = obj.get('user')
+        if not user:
+            return None
+        
+        request = self.context.get('request')
+        selected_language = 'en'
+        if request:
+            selected_language = request.user.selected_language or 'en'
+        
+        teams = []
+        
+        # For Players - get their team
+        if user.role == "Player" and user.team:
+            team_name = user.team.name
+            
+            # Get localized team name
+            if user.team.language_metadata:
+                localized_team_name = user.team.language_metadata.get(selected_language, {}).get('name')
+                if localized_team_name:
+                    team_name = localized_team_name
+            
+            teams.append({
+                "id": str(user.team.id),
+                "name": team_name,
+                "relationship": "player"
+            })
+        
+        # For Coaches - get all teams they coach
+        elif user.role == "Coach":
+            coached_teams = user.teams_coached.all()
+            for team in coached_teams:
+                team_name = team.name
+                
+                # Get localized team name
+                if team.language_metadata:
+                    localized_team_name = team.language_metadata.get(selected_language, {}).get('name')
+                    if localized_team_name:
+                        team_name = localized_team_name
+                
+                teams.append({
+                    "id": str(team.id),
+                    "name": team_name,
+                    "relationship": "coach"
+                })
+        
+        return teams if teams else None
