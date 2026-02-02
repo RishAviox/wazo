@@ -3611,13 +3611,13 @@ class SessionHighlightsView(ListAPIView):
 
 class BulkHighlightShareView(APIView):
     """
-    API endpoint to share a highlight with multiple users in a single request.
+    API endpoint to share a clip reel with multiple users in a single request.
 
     POST /api/vision/highlights/share/
 
     Request Body:
     {
-        "highlight_id": 123,
+        "clip_id": 123,
         "user_ids": ["uuid1", "uuid2", "uuid3"],
         "can_comment": true
     }
@@ -3628,7 +3628,7 @@ class BulkHighlightShareView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        """Share a highlight with multiple users"""
+        """Share a clip reel with multiple users"""
         serializer = BulkHighlightShareSerializer(
             data=request.data, context={"request": request}
         )
@@ -3655,8 +3655,8 @@ class BulkHighlightShareView(APIView):
             return Response(
                 {
                     "success": True,
+                    "clip_id": result["clip_id"],
                     "highlight_id": result["highlight_id"],
-                    "clip_reels_count": result["clip_reels_count"],
                     "recipients_count": result["recipients_count"],
                     "summary": {
                         "successful_shares": successful_shares,
@@ -3669,11 +3669,12 @@ class BulkHighlightShareView(APIView):
                 status=http_status.HTTP_201_CREATED,
             )
         except Exception as e:
-            logger.exception(f"Error sharing highlight: {str(e)}")
+            logger.exception(f"Error sharing clip reel: {str(e)}")
             return Response(
                 {"success": False, "error": "Internal server error", "details": str(e)},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
 
 
 

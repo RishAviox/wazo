@@ -3574,26 +3574,26 @@ class TraceClipReelCaptionSerializer(serializers.ModelSerializer):
 class BulkHighlightShareSerializer(serializers.Serializer):
     
     """
-    Serializer for sharing a highlight with multiple users in a single request.
-    Supports both players and coaches sharing highlights.
+    Serializer for sharing a clip reel with multiple users in a single request.
+    Supports both players and coaches sharing clip reels.
     """
     
-    highlight_id = serializers.IntegerField(required=True)
+    clip_id = serializers.IntegerField(required=True)
     user_ids = serializers.ListField(
         child=serializers.UUIDField(),
         required=True,
         allow_empty=False,
-        help_text="List of user IDs to share the highlight with"
+        help_text="List of user IDs to share the clip reel with"
     )
     can_comment = serializers.BooleanField(default=True, required=False)
     
-    def validate_highlight_id(self, value):
-        """Validate that highlight exists"""
+    def validate_clip_id(self, value):
+        """Validate that clip reel exists"""
         try:
-            highlight = TraceHighlight.objects.get(id=value)
+            clip_reel = TraceClipReel.objects.select_related('highlight__session').get(id=value)
             return value
-        except TraceHighlight.DoesNotExist:
-            raise ValidationError(f"Highlight with ID {value} does not exist")
+        except TraceClipReel.DoesNotExist:
+            raise ValidationError(f"Clip reel with ID {value} does not exist")
     
     def validate_user_ids(self, value):
         """Validate that all user IDs exist and are unique"""
@@ -3622,8 +3622,9 @@ class BulkHighlightShareSerializer(serializers.Serializer):
         request = self.context.get("request")
         user = request.user
         
-        # Get highlight
-        highlight = get_object_or_404(TraceHighlight, id=attrs["highlight_id"])
+        # Get clip reel and highlight
+        clip_reel = get_object_or_404(TraceClipReel.objects.select_related('highlight__session'), id=attrs["clip_id"])
+        highlight = clip_reel.highlight
         session = highlight.session
         
         # Check if user has access to the session
@@ -3640,21 +3641,22 @@ class BulkHighlightShareSerializer(serializers.Serializer):
         
         if not has_access:
             raise ValidationError(
-                "You don't have permission to share this highlight"
+                "You don't have permission to share this clip reel"
             )
         
         # Check user role
         if user.role not in ["Player", "Coach"]:
             raise ValidationError(
-                "Only players and coaches can share highlights"
+                "Only players and coaches can share clip reels"
             )
         
         # Prevent self-sharing
         user_id_str = str(user.id)
         if user_id_str in [str(uid) for uid in attrs["user_ids"]]:
-            raise ValidationError("You cannot share a highlight with yourself")
+            raise ValidationError("You cannot share a clip reel with yourself")
         
-        # Attach highlight for use in create
+        # Attach objects for use in create
+        attrs["clip_reel"] = clip_reel
         attrs["highlight"] = highlight
         attrs["session"] = session
         
@@ -3662,20 +3664,13 @@ class BulkHighlightShareSerializer(serializers.Serializer):
     
     def create(self, validated_data):
         """Create shares for all users"""
+        clip_reel = validated_data["clip_reel"]
         highlight = validated_data["highlight"]
         session = validated_data["session"]
         user_ids = validated_data["user_ids"]
         can_comment = validated_data.get("can_comment", True)
         request = self.context.get("request")
         shared_by = request.user
-        
-        # Get all clip reels for this highlight
-        clip_reels = TraceClipReel.objects.filter(highlight=highlight)
-        
-        if not clip_reels.exists():
-            raise ValidationError(
-                "No clip reels found for this highlight"
-            )
         
         results = []
         
@@ -3721,23 +3716,22 @@ class BulkHighlightShareSerializer(serializers.Serializer):
             
             # Only create shares if user belongs to the game
             if belongs_to_game:
-                # Create share for each clip reel
-                for clip_reel in clip_reels:
-                    share, created = TraceClipReelShare.objects.update_or_create(
-                        clip_reel=clip_reel,
-                        shared_with=shared_with,
-                        defaults={
-                            "highlight": highlight,
-                            "shared_by": shared_by,
-                            "can_comment": can_comment,
-                            "is_active": True,
-                        }
-                    )
-                    
-                    if created:
-                        user_result["shares_created"] += 1
-                    else:
-                        user_result["shares_updated"] += 1
+                # Create share for the specific clip reel
+                share, created = TraceClipReelShare.objects.update_or_create(
+                    clip_reel=clip_reel,
+                    shared_with=shared_with,
+                    defaults={
+                        "highlight": highlight,
+                        "shared_by": shared_by,
+                        "can_comment": can_comment,
+                        "is_active": True,
+                    }
+                )
+                
+                if created:
+                    user_result["shares_created"] = 1
+                else:
+                    user_result["shares_updated"] = 1
                 
                 user_result["status"] = "success"
             else:
@@ -3747,8 +3741,8 @@ class BulkHighlightShareSerializer(serializers.Serializer):
             results.append(user_result)
         
         return {
+            "clip_id": clip_reel.id,
             "highlight_id": highlight.id,
-            "clip_reels_count": clip_reels.count(),
             "recipients_count": len(user_ids),
             "shares": results
         }
