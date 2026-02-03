@@ -2628,21 +2628,44 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="shared-with-me")
     def shared_with_me(self, request):
+        """
+        List all clip reels shared with the current user, grouped by who shared them.
+        Returns shares grouped by shared_by user with recipient details.
+
+        GET /api/vision/clip-reels/shared-with-me/
+        """
         try:
-            shares = TraceClipReelShare.objects.filter(
-                shared_with=request.user, is_active=True
-            ).select_related("clip_reel")
+            from itertools import groupby
+            from operator import attrgetter
+            from tracevision.serializers import SharedWithMeGroupSerializer
 
-            clip_reels = [share.clip_reel for share in shares]
+            # Get all active shares for this user
+            shares = (
+                TraceClipReelShare.objects.filter(
+                    shared_with=request.user, is_active=True
+                )
+                .select_related("clip_reel", "highlight", "shared_by", "clip_reel__primary_player")
+                .order_by("shared_by__id", "-shared_at")
+            )
 
-            serializer = HighlightClipReelSerializer(
-                clip_reels,
+            # Group shares by shared_by user
+            grouped_data = []
+            for shared_by_user, user_shares in groupby(shares, key=attrgetter("shared_by")):
+                user_shares_list = list(user_shares)
+                grouped_data.append({
+                    "shared_by": shared_by_user,
+                    "clip_reels": user_shares_list
+                })
+
+            # Serialize the grouped data
+            serializer = SharedWithMeGroupSerializer(
+                grouped_data,
                 many=True,
                 context={"request": request},
             )
 
             return Response(
-                {"clip_reels": serializer.data},
+                serializer.data,
                 status=http_status.HTTP_200_OK,
             )
         except Exception as e:
@@ -2650,6 +2673,7 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
                 {"error": str(e)},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
 
     @action(detail=False, methods=["get"], url_path="shared-by-me")
     def shared_by_me(self, request):
@@ -3764,6 +3788,9 @@ class SessionUsersListView(APIView):
                             "user_role": game_user.user.role,
                         })
             
+            # Filter out the logged-in user from the response
+            users_data = [u for u in users_data if u['user'].id != request.user.id]
+
             # Serialize all users
             from tracevision.serializers import UserRegistrationStatusSerializer
             serializer = UserRegistrationStatusSerializer(

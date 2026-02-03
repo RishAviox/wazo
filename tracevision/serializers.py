@@ -3211,6 +3211,78 @@ class TraceClipReelShareSerializer(serializers.ModelSerializer):
         return share
 
 
+class SharedWithMeClipReelSerializer(serializers.Serializer):
+    """
+    Serializer for individual clip reels in the shared-with-me response.
+    Returns detailed clip reel information with permissions.
+    """
+
+    trace_vision_id = serializers.IntegerField(source="clip_reel.session.id", read_only=True)
+    highlight_id = serializers.IntegerField(source="highlight.id", read_only=True)
+    clip_id = serializers.IntegerField(source="clip_reel.id", read_only=True)
+    url = serializers.URLField(source="clip_reel.video_url", read_only=True, allow_null=True)
+    ratio = serializers.CharField(source="clip_reel.ratio", read_only=True)
+    event_type = serializers.CharField(source="highlight.event_type", read_only=True)
+    event_name = serializers.SerializerMethodField()
+    label = serializers.SerializerMethodField()
+    primary_player = serializers.SerializerMethodField()
+    shared_at = serializers.DateTimeField(read_only=True)
+    can_comment = serializers.BooleanField(read_only=True)
+    can_write_note = serializers.SerializerMethodField()
+    can_share = serializers.SerializerMethodField()
+
+    def get_event_name(self, obj):
+        """Generate event name from event type and match time"""
+        highlight = obj.highlight
+        time_str = highlight.match_time or "Unknown time"
+        
+        # Get event type display
+        if hasattr(highlight, 'get_event_type_display'):
+            event_type = highlight.get_event_type_display()
+        else:
+            event_type = getattr(highlight, 'event_type', 'Event')
+        
+        return f"{event_type} at {time_str}"
+
+    def get_label(self, obj):
+        """Get label from clip reel or generate from event_name"""
+        clip_reel = obj.clip_reel
+        if hasattr(clip_reel, 'label') and clip_reel.label:
+            return clip_reel.label
+        # Fallback to event_name
+        return self.get_event_name(obj)
+
+    def get_primary_player(self, obj):
+        """Get primary player details"""
+        clip_reel = obj.clip_reel
+        if clip_reel.primary_player:
+            return PlayerDetailSerializer(clip_reel.primary_player, context=self.context).data
+        return None
+
+    def get_can_write_note(self, obj):
+        """Check if user can write notes - Players and Coaches can always write notes"""
+        user = self.context.get('request').user if self.context.get('request') else None
+        if user and user.role in ["Player", "Coach"]:
+            return True
+        return False
+
+    def get_can_share(self, obj):
+        """Check if user can share this clip reel - shared recipients can re-share"""
+        # Users who receive a share can re-share it with others
+        return True
+
+
+class SharedWithMeGroupSerializer(serializers.Serializer):
+    """
+    Serializer for grouping clip reels by the user who shared them.
+    Groups multiple clip reels from the same sharer together.
+    """
+
+    shared_by = WajoUserBasicSerializer(read_only=True)
+    clip_reels = SharedWithMeClipReelSerializer(many=True, read_only=True)
+
+
+
 class TraceClipReelCommentSerializer(serializers.ModelSerializer):
     """
     Serializer for clip reel comments.
