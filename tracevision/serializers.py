@@ -2561,6 +2561,7 @@ class ClipReelVideoSerializer(serializers.ModelSerializer):
     label = serializers.CharField(read_only=True, allow_blank=True)
     primary_player = PlayerDetailSerializer(read_only=True, allow_null=True)
     can_generate = serializers.SerializerMethodField()
+    shared_by = serializers.SerializerMethodField()
 
     class Meta:
         model = TraceClipReel
@@ -2574,11 +2575,30 @@ class ClipReelVideoSerializer(serializers.ModelSerializer):
             "label",
             "primary_player",
             "can_generate",
+            "shared_by",
         ]
 
     def get_can_generate(self, obj):
         """Return True if primary_player is set, False otherwise"""
         return obj.primary_player is not None
+
+    def get_shared_by(self, obj):
+        """Get who shared this clip with the current user"""
+        request = self.context.get('request')
+        if request and request.user:
+            share = TraceClipReelShare.objects.filter(
+                clip_reel=obj,
+                shared_with=request.user,
+                is_active=True
+            ).select_related('shared_by').first()
+            
+            if share:
+                return {
+                    "user_id": str(share.shared_by.id),
+                    "name": share.shared_by.name or share.shared_by.email or share.shared_by.phone_no,
+                    "role": share.shared_by.role
+                }
+        return None
 
 
 class HighlightClipReelSerializer(serializers.ModelSerializer):
@@ -3721,6 +3741,20 @@ class BulkHighlightShareSerializer(serializers.Serializer):
             raise ValidationError(
                 "Only players and coaches can share clip reels"
             )
+        
+        # NEW: Check ownership for players
+        # Players can only share their own clip reels (where they are the primary player)
+        # Coaches can share any clip reel from the session
+        if user.role == "Player":
+            is_owner = (
+                clip_reel.primary_player 
+                and clip_reel.primary_player.user 
+                and clip_reel.primary_player.user == user
+            )
+            if not is_owner:
+                raise ValidationError(
+                    "Players can only share their own clip reels. Only coaches can share other players' clip reels."
+                )
         
         # Prevent self-sharing
         user_id_str = str(user.id)
