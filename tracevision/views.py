@@ -2626,23 +2626,26 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @action(detail=False, methods=["get"], url_path="shared-with-me")
-    def shared_with_me(self, request):
+    @action(detail=False, methods=["get"], url_path="shared-with-me/(?P<trace_session_id>[^/.]+)")
+    def shared_with_me(self, request, trace_session_id=None):
         """
-        List all clip reels shared with the current user, grouped by who shared them.
+        List all clip reels shared with the current user for a specific trace session,
+        grouped by who shared them.
         Returns shares grouped by shared_by user with recipient details.
 
-        GET /api/vision/clip-reels/shared-with-me/
+        GET /api/vision/clip-reels/shared-with-me/<trace_session_id>/
         """
         try:
             from itertools import groupby
             from operator import attrgetter
             from tracevision.serializers import SharedWithMeGroupSerializer
 
-            # Get all active shares for this user
+            # Get all active shares for this user filtered by trace session
             shares = (
                 TraceClipReelShare.objects.filter(
-                    shared_with=request.user, is_active=True
+                    shared_with=request.user, 
+                    is_active=True,
+                    clip_reel__session_id=trace_session_id
                 )
                 .select_related("clip_reel", "highlight", "shared_by", "clip_reel__primary_player")
                 .order_by("shared_by__id", "-shared_at")
