@@ -4,6 +4,7 @@ import uuid
 import json
 import logging
 import math
+import hashlib
 import tempfile
 import webcolors
 import subprocess
@@ -3117,14 +3118,19 @@ def download_excel_file_from_storage(blob_url: str) -> str:
         raise
 
 
-def get_or_create_azure_sas_token(blob_url: str, validity_days: int = 1) -> str:
+def get_or_create_azure_sas_token(
+    blob_url: str, validity_days: int = 1, use_cache: bool = True
+) -> str:
     """
     Get or create Azure SAS token for a blob URL.
-    Checks if existing token is valid, otherwise generates a new one.
+    Checks cache first, then existing token validity, otherwise generates a new one.
 
     Args:
         blob_url: Azure blob URL (with or without existing SAS token)
-        validity_days: Number of days the SAS token should be valid (default: 3)
+        validity_days: Number of days the SAS token should be valid (default: 1).
+            Use 365 or more for long-lived streaming URLs.
+        use_cache: If True, cache the generated URL with SAS to avoid regenerating
+            (default: True). Cache key is derived from container+blob path.
 
     Returns:
         str: Blob URL with valid SAS token
@@ -3132,6 +3138,33 @@ def get_or_create_azure_sas_token(blob_url: str, validity_days: int = 1) -> str:
     try:
         parsed_url = urlparse(blob_url)
         query_params = parse_qs(parsed_url.query)
+
+        # Extract blob path from URL for cache key (before any early return)
+        url_parts = blob_url.split("/")
+        container_index = None
+        for i, part in enumerate(url_parts):
+            if part.endswith(".blob.core.windows.net"):
+                container_index = i + 1
+                break
+
+        if container_index and container_index < len(url_parts):
+            container_name = url_parts[container_index]
+            blob_path = "/".join(url_parts[container_index + 1 :])
+            if "?" in blob_path:
+                blob_path = blob_path.split("?")[0]
+            cache_key = f"azure_sas:{container_name}:{hashlib.md5(blob_path.encode()).hexdigest()}"
+            cache_ttl = (validity_days - 1) * 86400  # Refresh 1 day before expiry
+            if use_cache and cache_ttl > 0:
+                from django.core.cache import cache
+                cached = cache.get(cache_key)
+                if cached:
+                    logger.debug("Returning cached SAS URL")
+                    return cached
+        else:
+            container_name = None
+            blob_path = None
+            cache_key = None
+            cache_ttl = 0
 
         # Check if SAS token exists and is still valid
         if "sig" in query_params and "se" in query_params:
@@ -3141,6 +3174,9 @@ def get_or_create_azure_sas_token(blob_url: str, validity_days: int = 1) -> str:
                 # Check if token expires in less than 1 day (regenerate if close to expiry)
                 if expiry_time > datetime.now(expiry_time.tzinfo) + timedelta(days=1):
                     logger.debug(f"Existing SAS token is valid until {expiry_time}")
+                    if use_cache and cache_key and cache_ttl > 0:
+                        from django.core.cache import cache
+                        cache.set(cache_key, blob_url, cache_ttl)
                     return blob_url
                 else:
                     logger.info(
@@ -3156,29 +3192,15 @@ def get_or_create_azure_sas_token(blob_url: str, validity_days: int = 1) -> str:
             f"Generating new SAS token for blob URL (validity: {validity_days} days)"
         )
 
-        # Extract blob path from URL
-        url_parts = blob_url.split("/")
-        container_index = None
-        for i, part in enumerate(url_parts):
-            if part.endswith(".blob.core.windows.net"):
-                container_index = i + 1
-                break
-
         if not container_index or container_index >= len(url_parts):
             raise ValueError(
                 f"Could not extract container and blob path from URL: {blob_url}"
             )
 
-        container_name = url_parts[container_index]
-        blob_path = "/".join(url_parts[container_index + 1 :])
-        # Remove query parameters if any
-        if "?" in blob_path:
-            blob_path = blob_path.split("?")[0]
-
         # Get Azure storage credentials from Django settings
         connection_string = getattr(settings, "AZURE_CONNECTION_STRING", None)
 
-        # Extract from connection string if available
+        # Extract from connection string if available, then fallback to direct settings
         account_name = None
         account_key = None
         if connection_string:
@@ -3188,27 +3210,16 @@ def get_or_create_azure_sas_token(blob_url: str, validity_days: int = 1) -> str:
             match = re.search(r"AccountKey=([^;]+)", connection_string)
             if match:
                 account_key = match.group(1)
+        if not account_name:
+            account_name = getattr(settings, "AZURE_ACCOUNT_NAME", None)
+        if not account_key:
+            account_key = getattr(settings, "AZURE_ACCOUNT_KEY", None)
 
         if not account_name or not account_key:
             raise ValueError(
-                "Azure account name and key not configured. "
-                "Set AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY in Django settings"
+                "Azure storage not configured. Set AZURE_CONNECTION_STRING or "
+                "AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY in Django settings."
             )
-
-        # Get blob client for URL construction
-        if connection_string:
-            blob_service_client = BlobServiceClient.from_connection_string(
-                connection_string
-            )
-        else:
-            account_url = f"https://{account_name}.blob.core.windows.net"
-            blob_service_client = BlobServiceClient(
-                account_url=account_url, credential=account_key
-            )
-
-        blob_client = blob_service_client.get_blob_client(
-            container=container_name, blob=blob_path
-        )
 
         # Set expiry time
         expiry_time = datetime.utcnow() + timedelta(days=validity_days)
@@ -3223,10 +3234,15 @@ def get_or_create_azure_sas_token(blob_url: str, validity_days: int = 1) -> str:
             expiry=expiry_time,
         )
 
-        # Construct URL with SAS token
-        blob_url_with_sas = f"{blob_client.url}?{sas_token}"
+        # Build URL from original blob URL (no existing query) + SAS so host/path match exactly
+        base_url = blob_url.split("?")[0].strip()
+        blob_url_with_sas = f"{base_url}?{sas_token}"
 
-        logger.info(f"Generated SAS token valid until {expiry_time}:{sas_token}")
+        if use_cache and cache_key and cache_ttl > 0:
+            from django.core.cache import cache
+            cache.set(cache_key, blob_url_with_sas, cache_ttl)
+
+        logger.info(f"Generated SAS token valid until {expiry_time}")
         return blob_url_with_sas
 
     except Exception as e:

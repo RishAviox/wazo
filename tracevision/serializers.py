@@ -30,6 +30,7 @@ from tracevision.utils import (
     get_localized_team_name,
     get_localized_player_name,
     get_localized_name,
+    get_or_create_azure_sas_token,
 )
 from teams.models import Team
 from tracevision.models import TraceSession
@@ -2551,9 +2552,11 @@ class MatchInfoSerializer(serializers.ModelSerializer):
 
 
 class ClipReelVideoSerializer(serializers.ModelSerializer):
-    """Serializer for clip reel video information in highlight response"""
+    """Serializer for clip reel video information in highlight response.
+    Attaches a long-lived SAS token to Azure blob URLs so the Flutter app can stream the video.
+    """
 
-    url = serializers.URLField(source="video_url", read_only=True, allow_null=True)
+    url = serializers.SerializerMethodField()
     ratio = serializers.CharField(read_only=True)
     tags = serializers.JSONField(read_only=True)
     status = serializers.CharField(source="generation_status", read_only=True)
@@ -2577,6 +2580,18 @@ class ClipReelVideoSerializer(serializers.ModelSerializer):
             "can_generate",
             "shared_by",
         ]
+
+    def get_url(self, obj):
+        """Return video URL with SAS token for Azure blobs so the app can stream the video."""
+        video_url = getattr(obj, "video_url", None) or ""
+        if not video_url:
+            return None
+        # Attach long-lived SAS token for Azure blob URLs (1 year, cached)
+        if "blob.core.windows.net" in video_url:
+            return get_or_create_azure_sas_token(
+                video_url, validity_days=365, use_cache=True
+            )
+        return video_url
 
     def get_can_generate(self, obj):
         """Return True if primary_player is set, False otherwise"""
