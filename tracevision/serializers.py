@@ -3265,6 +3265,8 @@ class SharedWithMeClipReelSerializer(serializers.Serializer):
     can_comment = serializers.BooleanField(read_only=True)
     can_write_note = serializers.SerializerMethodField()
     can_share = serializers.SerializerMethodField()
+    comments = serializers.SerializerMethodField()
+    notes = serializers.SerializerMethodField()
 
     def get_event_name(self, obj):
         """Generate event name from event type and match time"""
@@ -3305,6 +3307,81 @@ class SharedWithMeClipReelSerializer(serializers.Serializer):
         """Check if user can share this clip reel - shared recipients can re-share"""
         # Users who receive a share can re-share it with others
         return True
+
+    def get_comments(self, obj):
+        """
+        Get all visible comments for this clip reel.
+        Filters comments based on visibility rules:
+        - Public comments: visible to all users with access to the clip reel
+        - Private comments: only visible to the clip reel owner and comment author
+        
+        Returns empty list if no comments exist.
+        """
+        from django.db.models import Q
+        from tracevision.models import TraceClipReelComment
+        
+        clip_reel = obj.clip_reel
+        user = self.context.get('request').user if self.context.get('request') else None
+        
+        if not user:
+            return []
+        
+        # Get all non-deleted, top-level comments for this clip reel
+        comments = TraceClipReelComment.objects.filter(
+            clip_reel=clip_reel,
+            is_deleted=False,
+            parent_comment__isnull=True
+        )
+        
+        # Check if user is the owner of the clip reel
+        is_owner = (
+            clip_reel.primary_player and clip_reel.primary_player.user == user
+        )
+        
+        if not is_owner:
+            # Non-owners only see public comments and their own private comments
+            comments = comments.filter(Q(visibility="public") | Q(author=user))
+        
+        # Serialize the comments using the existing TraceClipReelCommentSerializer
+        serializer = TraceClipReelCommentSerializer(
+            comments, many=True, context=self.context
+        )
+        
+        return serializer.data
+
+    def get_notes(self, obj):
+        """
+        Get all visible notes for this clip reel.
+        Filters notes based on can_view permission:
+        - Author can always see their own notes
+        - Notes shared with user are visible
+        - Notes shared with user's groups are visible
+        
+        Returns empty list if no notes exist.
+        """
+        from tracevision.models import TraceClipReelNote
+        
+        clip_reel = obj.clip_reel
+        user = self.context.get('request').user if self.context.get('request') else None
+        
+        if not user:
+            return []
+        
+        # Get all non-deleted notes for this clip reel
+        notes = TraceClipReelNote.objects.filter(
+            clip_reel=clip_reel,
+            is_deleted=False
+        ).select_related('author')
+        
+        # Filter notes based on can_view permission
+        accessible_notes = [note for note in notes if note.can_view(user)]
+        
+        # Serialize the notes using the existing TraceClipReelNoteSerializer
+        serializer = TraceClipReelNoteSerializer(
+            accessible_notes, many=True, context=self.context
+        )
+        
+        return serializer.data
 
 
 class SharedWithMeGroupSerializer(serializers.Serializer):

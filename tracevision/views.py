@@ -2645,7 +2645,7 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
                 TraceClipReelShare.objects.filter(
                     shared_with=request.user, 
                     is_active=True,
-                    clip_reel__session_id=trace_session_id
+                    clip_reel__session__session_id=trace_session_id
                 )
                 .select_related("clip_reel", "highlight", "shared_by", "clip_reel__primary_player")
                 .order_by("shared_by__id", "-shared_at")
