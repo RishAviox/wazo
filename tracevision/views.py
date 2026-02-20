@@ -3216,7 +3216,14 @@ class TraceClipReelNoteViewSet(viewsets.ModelViewSet):
         """
         Override to ensure queryset is ordered and filtered by user access.
         Returns notes that the user can view (authored by them or shared with them).
+        For reply/list_replies actions, returns all non-deleted notes since
+        those actions check can_view() separately.
         """
+        # For reply actions, use a broad queryset — the action itself
+        # enforces access via note.can_view()
+        if self.action in ("reply", "list_replies"):
+            return TraceClipReelNote.objects.filter(is_deleted=False)
+
         user = self.request.user
 
         # Get all notes that are not deleted
@@ -3226,7 +3233,7 @@ class TraceClipReelNoteViewSet(viewsets.ModelViewSet):
         # User can see notes they authored or notes shared with them
         accessible_notes = (
             notes.filter(
-                Q(author=user) | Q(shares__shared_with=user, shares__is_active=True)
+                Q(author=user) | Q(shares__shared_with_user=user, shares__is_active=True)
             )
             .distinct()
             .order_by("-created_at")
@@ -3351,6 +3358,104 @@ class TraceClipReelNoteViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "Share not found"},
                 status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+    @action(detail=True, methods=["post"], url_path="reply")
+    def reply(self, request, pk=None):
+        """
+        Reply to a note.
+        POST /api/vision/notes/{note_id}/reply/
+
+        Body: { "content": "Reply text" }
+
+        Visibility rules:
+        - User must be able to view the parent note to reply.
+        - Public note replies are visible to everyone with reel access.
+        - Private note replies are visible only to the note author and
+          the reply author.
+        """
+        try:
+            note = self.get_object()
+
+            # Check that the user can view this note
+            if not note.can_view(request.user):
+                return Response(
+                    {"error": "You don't have access to this note."},
+                    status=http_status.HTTP_403_FORBIDDEN,
+                )
+
+            from tracevision.serializers import NoteReplyCreateSerializer
+
+            serializer = NoteReplyCreateSerializer(
+                data=request.data,
+                context={"request": request, "note": note},
+            )
+
+            if serializer.is_valid():
+                reply = serializer.save()
+                return Response(
+                    {"message": "Reply added successfully", "data": serializer.data},
+                    status=http_status.HTTP_201_CREATED,
+                )
+
+            return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=True, methods=["get"], url_path="replies")
+    def list_replies(self, request, pk=None):
+        """
+        List replies on a note.
+        GET /api/vision/notes/{note_id}/replies/
+
+        Visibility rules:
+        - Public notes: all non-deleted replies are returned to anyone
+          who can view the note.
+        - Private notes: only replies authored by the requesting user
+          OR authored by the note author are returned.
+        """
+        try:
+            note = self.get_object()
+
+            # Check that the user can view this note
+            if not note.can_view(request.user):
+                return Response(
+                    {"error": "You don't have access to this note."},
+                    status=http_status.HTTP_403_FORBIDDEN,
+                )
+
+            from tracevision.models import TraceClipReelNoteReply
+            from tracevision.serializers import NoteReplySerializer
+
+            replies = TraceClipReelNoteReply.objects.filter(
+                note=note, is_deleted=False
+            ).select_related("author")
+
+            # For private notes, only show replies from the note author
+            # and the current user
+            if note.visibility == "private":
+                replies = replies.filter(
+                    Q(author=request.user) | Q(author=note.author)
+                )
+
+            include_user = note.visibility == "public"
+            serializer = NoteReplySerializer(
+                replies,
+                many=True,
+                context={"request": request, "include_reply_user": include_user},
+            )
+
+            return Response(
+                {"replies": serializer.data},
+                status=http_status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 

@@ -20,6 +20,7 @@ from .models import (
     TraceClipReelCommentEditHistory,
     TraceClipReelNote,
     TraceClipReelNoteShare,
+    TraceClipReelNoteReply,
 )
 from core.admin import admin_site
 
@@ -895,3 +896,42 @@ admin_site.register(TraceClipReelCommentLike, TraceClipReelCommentLikeAdmin)
 admin_site.register(TraceClipReelCommentEditHistory, TraceClipReelCommentEditHistoryAdmin)
 admin_site.register(TraceClipReelNote, TraceClipReelNoteAdmin)
 admin_site.register(TraceClipReelNoteShare, TraceClipReelNoteShareAdmin)
+
+
+class TraceClipReelNoteReplyAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "note",
+        "author",
+        "content",
+        "is_deleted",
+        "created_at",
+    ]
+    list_filter = ["is_deleted", "created_at"]
+    search_fields = [
+        "content",
+        "author__phone_no",
+        "author__name",
+        "note__id",
+    ]
+    readonly_fields = ["id", "created_at", "updated_at"]
+    date_hierarchy = "created_at"
+
+    fieldsets = (
+        (
+            "Reply Information",
+            {"fields": ("id", "note", "author")},
+        ),
+        ("Content", {"fields": ("content",)}),
+        ("Status", {"fields": ("is_deleted", "deleted_at")}),
+        (
+            "Timestamps",
+            {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
+        ),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("note", "author")
+
+
+admin_site.register(TraceClipReelNoteReply, TraceClipReelNoteReplyAdmin)

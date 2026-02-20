@@ -3261,9 +3261,15 @@ class NoteReplySerializer(serializers.Serializer):
         # The 'include_user' flag is set via context by the parent serializer
         if not self.context.get("include_reply_user", True):
             return None
+        from tracevision.utils import get_localized_name
+        user_language = "en"
+        request = self.context.get("request")
+        if request and request.user:
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        name = get_localized_name(obj.author, user_language, "name") or obj.author.phone_no
         return {
             "user_id": str(obj.author.id),
-            "name": obj.author.name or obj.author.phone_no,
+            "name": name,
         }
 
     def to_representation(self, instance):
@@ -3271,6 +3277,53 @@ class NoteReplySerializer(serializers.Serializer):
         # Remove user_replied key entirely for private notes
         if not self.context.get("include_reply_user", True):
             data.pop("user_replied", None)
+        return data
+
+
+class NoteReplyCreateSerializer(serializers.Serializer):
+    """
+    Serializer for creating a reply on a note.
+    POST /api/vision/notes/{note_id}/reply/
+    """
+
+    content = serializers.CharField(required=True, help_text="Reply text content")
+
+    def validate_content(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Reply content cannot be empty.")
+        return value
+
+    def create(self, validated_data):
+        from tracevision.models import TraceClipReelNoteReply
+
+        note = self.context["note"]
+        user = self.context["request"].user
+
+        reply = TraceClipReelNoteReply.objects.create(
+            note=note,
+            author=user,
+            content=validated_data["content"],
+        )
+        return reply
+
+    def to_representation(self, instance):
+        """Return the created reply in the standard reply format."""
+        from tracevision.utils import get_localized_name
+        user_language = "en"
+        request = self.context.get("request")
+        if request and request.user:
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        name = get_localized_name(instance.author, user_language, "name") or instance.author.phone_no
+        data = {
+            "reply_id": instance.id,
+            "parent_id": instance.note.id,
+            "reply_text": instance.content,
+            "user_replied": {
+                "user_id": str(instance.author.id),
+                "name": name,
+            },
+            "created_at": instance.created_at.isoformat() if instance.created_at else None,
+        }
         return data
 
 
