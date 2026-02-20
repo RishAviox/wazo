@@ -2386,16 +2386,24 @@ class HighlightNotesView(APIView):
 
     def post(self, request, clip_reel_id):
         """
-        Create a new note on a clip reel.
+        Create one or multiple notes on a clip reel.
 
-        Request body:
+        Single note body:
         {
             "content": str,
-            "share_with_coach_id": uuid (optional),
-            "share_with_team_coaches": bool (optional)
+            "visibility": "public" | "private",
+            "private_to": ["uuid1", ...]
+        }
+
+        Bulk body (same endpoint):
+        {
+            "notes": [
+                {"content": str, "visibility": "public" | "private", "private_to": [...]},
+                ...
+            ]
         }
         """
-        from tracevision.serializers import TraceClipReelNoteSerializer
+        from tracevision.serializers import TraceClipReelNoteSerializer, BulkNoteCreateSerializer
         from django.shortcuts import get_object_or_404
 
         # Validate user is Player or Coach
@@ -2408,14 +2416,33 @@ class HighlightNotesView(APIView):
         # Get clip reel
         clip_reel = get_object_or_404(TraceClipReel, id=clip_reel_id)
 
-        # Prepare data for serializer
+        # ── BULK mode: body contains a "notes" list ──────────────────────────
+        if "notes" in request.data:
+            serializer = BulkNoteCreateSerializer(
+                data=request.data,
+                context={"request": request, "clip_reel": clip_reel},
+            )
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+            result = serializer.save()
+            return Response(
+                {
+                    "message": f"{result['notes_created']} note(s) created successfully.",
+                    **result,
+                },
+                status=http_status.HTTP_201_CREATED,
+            )
+
+        # ── SINGLE mode: flat body with "content" ────────────────────────────
         data = {
             "clip_reel_id": clip_reel.id,
             "highlight_id": clip_reel.highlight.id,
             "content": request.data.get("content"),
+            "visibility": request.data.get("visibility", "private"),
+            "private_to": request.data.get("private_to", []),
         }
 
-        # Create note
         serializer = TraceClipReelNoteSerializer(
             data=data, context={"request": request}
         )
@@ -2423,84 +2450,15 @@ class HighlightNotesView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
 
-        note = serializer.save()
+        serializer.save()
 
-        # Handle sharing if requested
-        share_with_coach_id = request.data.get("share_with_coach_id")
-        share_with_team_coaches = request.data.get("share_with_team_coaches", False)
-
-        shares_created = []
-
-        if share_with_coach_id:
-            # Share with specific coach
-            from accounts.models import WajoUser
-
-            try:
-                coach = WajoUser.objects.get(id=share_with_coach_id, role="Coach")
-
-                # Validate that coach belongs to player's team or is assigned to player
-                author = request.user
-                is_valid_coach = False
-
-                # Check if coach is part of the author's team
-                if author.team:
-                    team_coaches = author.team.coach.all()
-                    if coach in team_coaches:
-                        is_valid_coach = True
-
-                # Check if coach is assigned to the player
-                if not is_valid_coach and hasattr(author, "coach"):
-                    if author.coach.filter(id=coach.id).exists():
-                        is_valid_coach = True
-
-                if not is_valid_coach:
-                    return Response(
-                        {
-                            "error": "You can only share notes with coaches from your team or coaches assigned to you.",
-                            "note": serializer.data,
-                        },
-                        status=http_status.HTTP_400_BAD_REQUEST,
-                    )
-
-                # Coach is valid, create share
-                share = note.share_with_user(coach, request.user)
-                shares_created.append(
-                    {
-                        "id": str(share.id),
-                        "shared_with_user": str(coach.id),
-                        "shared_with_user_name": coach.name or coach.phone_no,
-                    }
-                )
-            except WajoUser.DoesNotExist:
-                # Note created but sharing failed
-                return Response(
-                    {
-                        "message": "Note created but coach not found for sharing.",
-                        "note": serializer.data,
-                    },
-                    status=http_status.HTTP_201_CREATED,
-                )
-
-        if share_with_team_coaches:
-            # Share with all team coaches
-            share = note.share_with_group("team_coaches", request.user)
-            shares_created.append(
-                {
-                    "id": str(share.id),
-                    "shared_with_group": "team_coaches",
-                }
-            )
-
-        # Return created note with shares
-        response_data = {
-            "message": "Note created successfully",
-            "note": serializer.data,
-        }
-
-        if shares_created:
-            response_data["shares"] = shares_created
-
-        return Response(response_data, status=http_status.HTTP_201_CREATED)
+        return Response(
+            {
+                "message": "Note created successfully",
+                "data": serializer.data,
+            },
+            status=http_status.HTTP_201_CREATED,
+        )
 
     def get(self, request, clip_reel_id):
         """
@@ -2528,6 +2486,67 @@ class HighlightNotesView(APIView):
         return Response(
             {"count": len(accessible_notes), "results": serializer.data},
             status=http_status.HTTP_200_OK,
+        )
+
+
+
+# ============================================================================
+# BULK Note Creation View
+# ============================================================================
+
+
+class BulkHighlightNotesView(APIView):
+    """
+    Bulk note creation endpoint.
+
+    POST /api/vision/clip-reels/{clip_reel_id}/notes/bulk/
+
+    Create multiple notes on a single clip reel in one request.
+    Each note entry is independent: it can be public, private to specific users,
+    or private to the author only.
+
+    Request body example:
+    {
+        "notes": [
+            {"content": "Public note for everyone!", "visibility": "public"},
+            {"content": "Private for User 2 only",  "visibility": "private", "private_to": ["uuid-2"]},
+            {"content": "Private for User 3 only",  "visibility": "private", "private_to": ["uuid-3"]},
+            {"content": "Private for User 4 only",  "visibility": "private", "private_to": ["uuid-4"]}
+        ]
+    }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, clip_reel_id):
+        from tracevision.serializers import BulkNoteCreateSerializer
+        from django.shortcuts import get_object_or_404
+
+        # Only Players and Coaches can create notes
+        if request.user.role not in ["Player", "Coach"]:
+            return Response(
+                {"error": "Only Players and Coaches can create notes."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        clip_reel = get_object_or_404(TraceClipReel, id=clip_reel_id)
+
+        serializer = BulkNoteCreateSerializer(
+            data=request.data,
+            context={"request": request, "clip_reel": clip_reel},
+        )
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+        result = serializer.save()
+
+        return Response(
+            {
+                "message": f"{result['notes_created']} note(s) created successfully.",
+                **result,
+            },
+            status=http_status.HTTP_201_CREATED,
         )
 
 
@@ -3638,15 +3657,25 @@ class SessionHighlightsView(ListAPIView):
 
 class BulkHighlightShareView(APIView):
     """
-    API endpoint to share a clip reel with multiple users in a single request.
+    API endpoint to share clip reels with users.
 
     POST /api/vision/highlights/share/
 
-    Request Body:
+    Auto-detects mode from the request body:
+
+    Single mode (one clip at a time):
     {
         "clip_id": 123,
-        "user_ids": ["uuid1", "uuid2", "uuid3"],
+        "user_ids": ["uuid1", "uuid2"],
         "can_comment": true
+    }
+
+    Bulk mode (multiple clips in one request):
+    {
+        "shares": [
+            {"clip_id": 123, "user_ids": ["uuid1"], "can_comment": true},
+            {"clip_id": 124, "user_ids": ["uuid2", "uuid3"]},
+        ]
     }
 
     Supports both Player and Coach roles.
@@ -3655,7 +3684,73 @@ class BulkHighlightShareView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        """Share a clip reel with multiple users"""
+        """
+        Share one or multiple clip reels with users.
+
+        Bulk mode (same endpoint, pass a "shares" array):
+        {
+            "shares": [
+                {"clip_id": 123, "user_ids": ["uuid1"], "can_comment": true},
+                {"clip_id": 124, "user_ids": ["uuid2", "uuid3"]},
+                ...
+            ]
+        }
+        """
+        # ── BULK mode: body contains a "shares" list ─────────────────────────
+        if "shares" in request.data:
+            shares_data = request.data.get("shares")
+            if not isinstance(shares_data, list) or len(shares_data) == 0:
+                return Response(
+                    {"success": False, "errors": {"shares": ["At least one share entry is required."]}},
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+
+            all_results = []
+            all_errors = []
+
+            for idx, entry in enumerate(shares_data):
+                serializer = BulkHighlightShareSerializer(
+                    data=entry, context={"request": request}
+                )
+                if not serializer.is_valid():
+                    all_errors.append({"index": idx, "clip_id": entry.get("clip_id"), "errors": serializer.errors})
+                    continue
+
+                try:
+                    result = serializer.save()
+                    total_created = sum(s["shares_created"] for s in result["shares"])
+                    total_updated = sum(s["shares_updated"] for s in result["shares"])
+                    successful = sum(1 for s in result["shares"] if s["status"] == "success")
+                    skipped = sum(1 for s in result["shares"] if s["status"] == "skipped")
+                    all_results.append({
+                        "clip_id": result["clip_id"],
+                        "highlight_id": result["highlight_id"],
+                        "recipients_count": result["recipients_count"],
+                        "summary": {
+                            "successful_shares": successful,
+                            "skipped_shares": skipped,
+                            "total_shares_created": total_created,
+                            "total_shares_updated": total_updated,
+                        },
+                        "shares": result["shares"],
+                    })
+                except Exception as e:
+                    logger.exception(f"Error sharing clip_id={entry.get('clip_id')}: {str(e)}")
+                    all_errors.append({"index": idx, "clip_id": entry.get("clip_id"), "errors": str(e)})
+
+            return Response(
+                {
+                    "success": len(all_errors) == 0,
+                    "total_clips": len(shares_data),
+                    "successful_clips": len(all_results),
+                    "failed_clips": len(all_errors),
+                    "results": all_results,
+                    "errors": all_errors if all_errors else [],
+                },
+                status=http_status.HTTP_201_CREATED if all_results else http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── SINGLE mode: flat body with "clip_id" ────────────────────────────
         serializer = BulkHighlightShareSerializer(
             data=request.data, context={"request": request}
         )
@@ -3669,29 +3764,12 @@ class BulkHighlightShareView(APIView):
         try:
             result = serializer.save()
 
-            # Calculate summary statistics
-            total_created = sum(share["shares_created"] for share in result["shares"])
-            total_updated = sum(share["shares_updated"] for share in result["shares"])
-            successful_shares = sum(
-                1 for share in result["shares"] if share["status"] == "success"
-            )
-            skipped_shares = sum(
-                1 for share in result["shares"] if share["status"] == "skipped"
-            )
-
             return Response(
                 {
-                    "success": True,
                     "clip_id": result["clip_id"],
-                    "highlight_id": result["highlight_id"],
-                    "recipients_count": result["recipients_count"],
-                    "summary": {
-                        "successful_shares": successful_shares,
-                        "skipped_shares": skipped_shares,
-                        "total_shares_created": total_created,
-                        "total_shares_updated": total_updated,
-                    },
-                    "shares": result["shares"],
+                    "users": result["users"],
+                    "can_comment": result["can_comment"],
+                    "public_note": result["public_note"],
                 },
                 status=http_status.HTTP_201_CREATED,
             )

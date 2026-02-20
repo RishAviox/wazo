@@ -1691,9 +1691,15 @@ class TraceClipReelCommentEditHistory(models.Model):
 
 class TraceClipReelNote(models.Model):
     """
-    Private notes on clip reels for users and coaches.
-    Notes are private by default and can be shared with specific users or groups.
+    Public or private notes on clip reels for users and coaches.
+    Private notes are only visible to the author and explicit share recipients.
+    Public notes are visible to all users who have access to the clip reel.
     """
+
+    VISIBILITY_CHOICES = [
+        ("public", "Public"),
+        ("private", "Private"),
+    ]
 
     id = models.AutoField(primary_key=True)
     clip_reel = models.ForeignKey(
@@ -1715,6 +1721,15 @@ class TraceClipReelNote(models.Model):
         help_text="User who wrote the note (must be Player or Coach)",
     )
     content = models.TextField(help_text="Note content")
+    visibility = models.CharField(
+        max_length=10,
+        choices=VISIBILITY_CHOICES,
+        default="private",
+        help_text=(
+            "public: visible to all users with clip reel access. "
+            "private: visible only to the author and explicitly shared users."
+        ),
+    )
     is_deleted = models.BooleanField(default=False, help_text="Soft delete flag")
     deleted_at = models.DateTimeField(
         null=True, blank=True, help_text="When note was deleted"
@@ -1730,6 +1745,7 @@ class TraceClipReelNote(models.Model):
             models.Index(fields=["clip_reel", "author"]),
             models.Index(fields=["highlight"]),
             models.Index(fields=["is_deleted"]),
+            models.Index(fields=["visibility", "is_deleted"]),
         ]
 
     def __str__(self):
@@ -1752,10 +1768,14 @@ class TraceClipReelNote(models.Model):
     def can_view(self, user):
         """
         Check if a user can view this note.
-        
+
+        - Public notes: visible to anyone with access to the clip reel
+          (owner, or any active TraceClipReelShare recipient).
+        - Private notes: visible only to the author and explicitly shared users/groups.
+
         Args:
             user: WajoUser instance
-            
+
         Returns:
             bool: True if user can view the note
         """
@@ -1767,7 +1787,23 @@ class TraceClipReelNote(models.Model):
         if self.author == user:
             return True
 
-        # Check if note is explicitly shared with user
+        # --- Public note visibility ---
+        if self.visibility == "public":
+            # Clip reel owner can see public notes
+            if (
+                self.clip_reel.primary_player
+                and self.clip_reel.primary_player.user == user
+            ):
+                return True
+            # Any user the reel has been shared with can see public notes
+            if TraceClipReelShare.objects.filter(
+                clip_reel=self.clip_reel, shared_with=user, is_active=True
+            ).exists():
+                return True
+            return False
+
+        # --- Private note visibility ---
+        # Check if note is explicitly shared with this user
         if TraceClipReelNoteShare.objects.filter(
             note=self, shared_with_user=user, is_active=True
         ).exists():
@@ -1934,3 +1970,53 @@ class TraceClipReelNoteShare(models.Model):
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
+
+
+class TraceClipReelNoteReply(models.Model):
+    """
+    Replies on clip reel notes.
+    Each reply belongs to a single parent note and is authored by a user.
+    """
+
+    id = models.AutoField(primary_key=True)
+    note = models.ForeignKey(
+        TraceClipReelNote,
+        on_delete=models.CASCADE,
+        related_name="replies",
+        help_text="The parent note this reply belongs to",
+    )
+    author = models.ForeignKey(
+        WajoUser,
+        on_delete=models.CASCADE,
+        related_name="note_replies",
+        help_text="User who wrote the reply",
+    )
+    content = models.TextField(help_text="Reply text content")
+    is_deleted = models.BooleanField(default=False, help_text="Soft delete flag")
+    deleted_at = models.DateTimeField(
+        null=True, blank=True, help_text="When reply was deleted"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Note Reply"
+        verbose_name_plural = "Note Replies"
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["note", "created_at"]),
+            models.Index(fields=["author"]),
+            models.Index(fields=["is_deleted"]),
+        ]
+
+    def __str__(self):
+        author_name = self.author.name or self.author.phone_no
+        return f"Reply by {author_name} on note {self.note.id}"
+
+    def soft_delete(self):
+        """Soft delete the reply by setting flags"""
+        from django.utils import timezone
+
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save(update_fields=["is_deleted", "deleted_at"])

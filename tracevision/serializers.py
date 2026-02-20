@@ -3246,6 +3246,59 @@ class TraceClipReelShareSerializer(serializers.ModelSerializer):
         return share
 
 
+class NoteReplySerializer(serializers.Serializer):
+    """
+    Serializer for note replies in the shared-with-me response.
+    """
+
+    parent_id = serializers.IntegerField(source="note.id", read_only=True)
+    reply_id = serializers.IntegerField(source="id", read_only=True)
+    reply_text = serializers.CharField(source="content", read_only=True)
+    user_replied = serializers.SerializerMethodField()
+
+    def get_user_replied(self, obj):
+        """Return user info for public note replies, omit for private."""
+        # The 'include_user' flag is set via context by the parent serializer
+        if not self.context.get("include_reply_user", True):
+            return None
+        return {
+            "user_id": str(obj.author.id),
+            "name": obj.author.name or obj.author.phone_no,
+        }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Remove user_replied key entirely for private notes
+        if not self.context.get("include_reply_user", True):
+            data.pop("user_replied", None)
+        return data
+
+
+class SharedWithMeNoteSerializer(serializers.Serializer):
+    """
+    Serializer for a single note in the shared-with-me response.
+    Includes nested replies.
+    """
+
+    note_id = serializers.IntegerField(source="id", read_only=True)
+    is_private = serializers.SerializerMethodField()
+    note = serializers.CharField(source="content", read_only=True)
+    reply = serializers.SerializerMethodField()
+
+    def get_is_private(self, obj):
+        return obj.visibility == "private"
+
+    def get_reply(self, obj):
+        """Get non-deleted replies for this note."""
+        replies = obj.replies.filter(is_deleted=False)
+        include_user = self.context.get("include_reply_user", True)
+        return NoteReplySerializer(
+            replies,
+            many=True,
+            context={**self.context, "include_reply_user": include_user},
+        ).data
+
+
 class SharedWithMeClipReelSerializer(serializers.Serializer):
     """
     Serializer for individual clip reels in the shared-with-me response.
@@ -3266,7 +3319,8 @@ class SharedWithMeClipReelSerializer(serializers.Serializer):
     can_write_note = serializers.SerializerMethodField()
     can_share = serializers.SerializerMethodField()
     comments = serializers.SerializerMethodField()
-    notes = serializers.SerializerMethodField()
+    public_notes = serializers.SerializerMethodField()
+    private_notes = serializers.SerializerMethodField()
 
     def get_event_name(self, obj):
         """Generate event name from event type and match time"""
@@ -3349,39 +3403,47 @@ class SharedWithMeClipReelSerializer(serializers.Serializer):
         
         return serializer.data
 
-    def get_notes(self, obj):
+    def _get_accessible_notes(self, obj):
         """
-        Get all visible notes for this clip reel.
-        Filters notes based on can_view permission:
-        - Author can always see their own notes
-        - Notes shared with user are visible
-        - Notes shared with user's groups are visible
-        
-        Returns empty list if no notes exist.
+        Get all visible notes for this clip reel, filtered by can_view permission.
+        Returns a list of accessible TraceClipReelNote objects.
         """
         from tracevision.models import TraceClipReelNote
-        
+
         clip_reel = obj.clip_reel
         user = self.context.get('request').user if self.context.get('request') else None
-        
+
         if not user:
             return []
-        
-        # Get all non-deleted notes for this clip reel
+
         notes = TraceClipReelNote.objects.filter(
             clip_reel=clip_reel,
             is_deleted=False
-        ).select_related('author')
-        
-        # Filter notes based on can_view permission
-        accessible_notes = [note for note in notes if note.can_view(user)]
-        
-        # Serialize the notes using the existing TraceClipReelNoteSerializer
-        serializer = TraceClipReelNoteSerializer(
-            accessible_notes, many=True, context=self.context
-        )
-        
-        return serializer.data
+        ).select_related('author').prefetch_related('replies', 'replies__author')
+
+        return [note for note in notes if note.can_view(user)]
+
+    def get_public_notes(self, obj):
+        """
+        Get all visible PUBLIC notes for this clip reel.
+        Replies include user_replied info.
+        """
+        accessible = self._get_accessible_notes(obj)
+        public = [n for n in accessible if n.visibility == "public"]
+        return SharedWithMeNoteSerializer(
+            public, many=True, context={**self.context, "include_reply_user": True}
+        ).data
+
+    def get_private_notes(self, obj):
+        """
+        Get all visible PRIVATE notes for this clip reel.
+        Replies omit user_replied info.
+        """
+        accessible = self._get_accessible_notes(obj)
+        private = [n for n in accessible if n.visibility == "private"]
+        return SharedWithMeNoteSerializer(
+            private, many=True, context={**self.context, "include_reply_user": False}
+        ).data
 
 
 class SharedWithMeGroupSerializer(serializers.Serializer):
@@ -3599,16 +3661,36 @@ class TraceClipReelCommentLikeSerializer(serializers.ModelSerializer):
 
 class TraceClipReelNoteSerializer(serializers.ModelSerializer):
     """
-    Serializer for private notes on clip reels.
-    Only for Players and Coaches.
+    Serializer for notes on clip reels.
+
+    Supports two visibility modes:
+      - "public": visible to all users with clip reel access.
+      - "private": visible only to the author and explicitly shared users.
+
+    On creation, the ``private_to`` write-only field accepts a list of user UUIDs.
+    For each UUID, a TraceClipReelNoteShare row is created automatically so the
+    note is immediately accessible to those users (only applies when visibility="private").
     """
 
     author = WajoUserBasicSerializer(read_only=True)
+    note = serializers.CharField(source="content")
     created_by = serializers.SerializerMethodField()
     is_shared = serializers.SerializerMethodField()
     shared_with_count = serializers.SerializerMethodField()
+    shared_with = serializers.SerializerMethodField()
     clip_reel_id = serializers.IntegerField(write_only=True, required=False)
     highlight_id = serializers.IntegerField(write_only=True, required=False)
+    # Write-only: list of user UUIDs to immediately share a private note with
+    private_to = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+        allow_empty=True,
+        help_text=(
+            "List of user UUIDs to share this private note with immediately. "
+            "Only used when visibility=\"private\". Ignored for public notes."
+        ),
+    )
 
     class Meta:
         model = TraceClipReelNote
@@ -3620,15 +3702,26 @@ class TraceClipReelNoteSerializer(serializers.ModelSerializer):
             "highlight_id",
             "author",
             "created_by",
-            "content",
+            "note",
+            "visibility",
+            "private_to",
             "is_deleted",
             "is_shared",
             "shared_with_count",
+            "shared_with",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "clip_reel", "highlight", "author", "is_deleted", "created_at", "updated_at"]
-    
+        read_only_fields = [
+            "id",
+            "clip_reel",
+            "highlight",
+            "author",
+            "is_deleted",
+            "created_at",
+            "updated_at",
+        ]
+
     def get_created_by(self, obj):
         """Return the role of the note creator (Player or Coach)"""
         return obj.author.role if obj.author else None
@@ -3638,13 +3731,28 @@ class TraceClipReelNoteSerializer(serializers.ModelSerializer):
         return obj.shares.filter(is_active=True).exists()
 
     def get_shared_with_count(self, obj):
-        """Count how many users/groups note is shared with"""
+        """Count how many users/groups the note is shared with"""
         return obj.shares.filter(is_active=True).count()
+
+    def get_shared_with(self, obj):
+        """
+        Return a list of users this note is privately shared with.
+        Only individual user shares are included (not group shares).
+        """
+        shares = obj.shares.filter(
+            is_active=True, shared_with_user__isnull=False
+        ).select_related("shared_with_user")
+        return [
+            WajoUserBasicSerializer(
+                share.shared_with_user, context=self.context
+            ).data
+            for share in shares
+        ]
 
     def validate(self, attrs):
         """Validate that author is Player or Coach and resolve clip_reel_id/highlight_id"""
         from django.shortcuts import get_object_or_404
-        
+
         user = self.context["request"].user
 
         if user.role not in ["Player", "Coach"]:
@@ -3653,25 +3761,58 @@ class TraceClipReelNoteSerializer(serializers.ModelSerializer):
         # Resolve clip_reel_id and highlight_id to objects
         clip_reel_id = attrs.get("clip_reel_id")
         highlight_id = attrs.get("highlight_id")
-        
+
         if clip_reel_id:
             clip_reel = get_object_or_404(TraceClipReel, id=clip_reel_id)
             attrs["clip_reel"] = clip_reel
-        
+
         if highlight_id:
             highlight = get_object_or_404(TraceHighlight, id=highlight_id)
             attrs["highlight"] = highlight
 
+        # Validate private_to user IDs exist
+        private_to = attrs.get("private_to", [])
+        if private_to:
+            from accounts.models import WajoUser as _WajoUser
+
+            existing_ids = set(
+                str(uid)
+                for uid in _WajoUser.objects.filter(id__in=private_to).values_list(
+                    "id", flat=True
+                )
+            )
+            for uid in private_to:
+                if str(uid) not in existing_ids:
+                    raise ValidationError(
+                        f"User with id {uid} does not exist."
+                    )
+
         return attrs
 
     def create(self, validated_data):
-        """Set author to current user and remove write-only fields"""
-        # Remove write-only fields
+        """Create note, set author, and immediately share with any private_to users."""
+        from accounts.models import WajoUser as _WajoUser
+        from tracevision.models import TraceClipReelNoteShare as _NoteShare
+
+        # Remove write-only fields before model creation
         validated_data.pop("clip_reel_id", None)
         validated_data.pop("highlight_id", None)
-        
+        private_to_ids = validated_data.pop("private_to", [])
+
         validated_data["author"] = self.context["request"].user
-        return super().create(validated_data)
+        note = super().create(validated_data)
+
+        # Auto-create shares if this is a private note with specific recipients
+        if note.visibility == "private" and private_to_ids:
+            author = note.author
+            for user_id in private_to_ids:
+                try:
+                    target_user = _WajoUser.objects.get(id=user_id)
+                    note.share_with_user(target_user, author)
+                except _WajoUser.DoesNotExist:
+                    pass  # Already validated above
+
+        return note
 
 
 class TraceClipReelNoteShareSerializer(serializers.ModelSerializer):
@@ -3730,7 +3871,131 @@ class TraceClipReelNoteShareSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class BulkNoteEntrySerializer(serializers.Serializer):
+    """
+    Validates a single note entry inside a bulk request.
+    """
+
+    content = serializers.CharField(required=True, allow_blank=False)
+    visibility = serializers.ChoiceField(
+        choices=["public", "private"],
+        default="private",
+        required=False,
+    )
+    private_to = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        allow_empty=True,
+        default=list,
+        help_text=(
+            "List of user UUIDs to share this private note with. "
+            "Ignored when visibility='public'."
+        ),
+    )
+
+    def validate(self, attrs):
+        """Validate private_to user IDs exist."""
+        private_to = attrs.get("private_to", [])
+        if private_to:
+            from accounts.models import WajoUser as _WajoUser
+
+            existing_ids = set(
+                str(uid)
+                for uid in _WajoUser.objects.filter(id__in=private_to).values_list(
+                    "id", flat=True
+                )
+            )
+            for uid in private_to:
+                if str(uid) not in existing_ids:
+                    raise ValidationError(
+                        f"User with id {uid} does not exist."
+                    )
+        return attrs
+
+
+class BulkNoteCreateSerializer(serializers.Serializer):
+    """
+    Serializer for creating multiple notes on a clip reel in a single request.
+
+    Each entry can independently be:
+      - Public  (visible to all users with reel access)
+      - Private to specific users (different content per recipient)
+      - Private to author only   (no private_to)
+
+    Example request body:
+    {
+        "notes": [
+            {"content": "Public note for everyone!", "visibility": "public"},
+            {"content": "Private for User 2 only",  "visibility": "private", "private_to": ["uuid-2"]},
+            {"content": "Private for User 3 only",  "visibility": "private", "private_to": ["uuid-3"]},
+            {"content": "Private for User 4 only",  "visibility": "private", "private_to": ["uuid-4"]}
+        ]
+    }
+    """
+
+    notes = BulkNoteEntrySerializer(many=True, required=True, allow_empty=False)
+
+    def validate_notes(self, value):
+        if not value:
+            raise ValidationError("At least one note entry is required.")
+        return value
+
+    def create(self, validated_data):
+        from accounts.models import WajoUser as _WajoUser
+        from tracevision.models import TraceClipReelNote as _Note
+
+        clip_reel = self.context["clip_reel"]
+        highlight = clip_reel.highlight
+        author = self.context["request"].user
+
+        created_notes = []
+
+        for entry in validated_data["notes"]:
+            content = entry["content"]
+            visibility = entry.get("visibility", "private")
+            private_to_ids = entry.get("private_to", [])
+
+            note = _Note.objects.create(
+                clip_reel=clip_reel,
+                highlight=highlight,
+                author=author,
+                content=content,
+                visibility=visibility,
+            )
+
+            # Auto-share private notes with specified recipients
+            if visibility == "private" and private_to_ids:
+                for user_id in private_to_ids:
+                    try:
+                        target_user = _WajoUser.objects.get(id=user_id)
+                        note.share_with_user(target_user, author)
+                    except _WajoUser.DoesNotExist:
+                        pass
+
+            # Build response entry
+            shares_info = []
+            for share in note.shares.filter(is_active=True, shared_with_user__isnull=False).select_related("shared_with_user"):
+                shares_info.append({
+                    "id": str(share.shared_with_user.id),
+                    "name": share.shared_with_user.name or share.shared_with_user.phone_no,
+                    "role": share.shared_with_user.role,
+                })
+
+            created_notes.append({
+                "id": note.id,
+                "content": note.content,
+                "visibility": note.visibility,
+                "is_shared": bool(shares_info),
+                "shared_with_count": len(shares_info),
+                "shared_with": shares_info,
+                "created_at": note.created_at,
+            })
+
+        return {"notes_created": len(created_notes), "notes": created_notes}
+
+
 class TraceClipReelCaptionSerializer(serializers.ModelSerializer):
+
     """
     Serializer for updating clip reel caption.
     Only owner can update caption.
@@ -3755,92 +4020,162 @@ class TraceClipReelCaptionSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class BulkHighlightShareSerializer(serializers.Serializer):
-    
+class _PrivateNoteRecipientSerializer(serializers.Serializer):
     """
-    Serializer for sharing a clip reel with multiple users in a single request.
+    Nested serializer for a single private-note recipient entry inside
+    BulkHighlightShareSerializer's `private_to` list.
+    """
+    user_id = serializers.UUIDField(required=True)
+    note = serializers.CharField(allow_blank=True, required=False, default="")
+
+
+class BulkHighlightShareSerializer(serializers.Serializer):
+
+    """
+    Serializer for sharing a clip reel with users.
     Supports both players and coaches sharing clip reels.
+
+    Two input modes (auto-detected):
+
+    Mode A — explicit user list (original):
+        { "clip_id": 123, "user_ids": ["uuid1", "uuid2"], "can_comment": true }
+
+    Mode B — visibility-based (new, mirrors notes endpoint):
+        { "clip_id": 123, "visibility": "public", "can_comment": true }
+        { "clip_id": 123, "visibility": "private", "share_with": ["uuid1", "uuid2"] }
+
+    "public"  → shares with ALL users in the session (home/away team + coaches)
+    "private" → shares only with the users listed in share_with
+
+    Optional note fields:
+        public_note  – creates one public TraceClipReelNote visible to all reel recipients.
+        private_to   – list of {user_id, note} dicts; creates one private note per entry
+                       and shares it only with that user.
     """
     
     clip_id = serializers.IntegerField(required=True)
+    # Mode A
     user_ids = serializers.ListField(
         child=serializers.UUIDField(),
-        required=True,
+        required=False,
         allow_empty=False,
-        help_text="List of user IDs to share the clip reel with"
+        help_text="List of user IDs to share the clip reel with (Mode A)",
+    )
+    # Mode B
+    visibility = serializers.ChoiceField(
+        choices=["public", "private"],
+        required=False,
+        help_text='"public" = all session users, "private" = only share_with users',
+    )
+    share_with = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        allow_empty=False,
+        help_text="User UUIDs to share with when visibility='private' (Mode B)",
     )
     can_comment = serializers.BooleanField(default=True, required=False)
+
+    # ── Note fields ─────────────────────────────────────────────────────────
+    public_note = serializers.CharField(
+        allow_blank=True,
+        required=False,
+        default=None,
+        help_text="Optional public note visible to all users with reel access.",
+    )
+    users = _PrivateNoteRecipientSerializer(
+        many=True,
+        required=False,
+        default=list,
+        help_text=(
+            "List of {user_id, note} objects. "
+            "Creates a private note for each entry, shared only with that user."
+        ),
+    )
     
     def validate_clip_id(self, value):
         """Validate that clip reel exists"""
         try:
-            clip_reel = TraceClipReel.objects.select_related('highlight__session').get(id=value)
+            TraceClipReel.objects.select_related('highlight__session').get(id=value)
             return value
         except TraceClipReel.DoesNotExist:
             raise ValidationError(f"Clip reel with ID {value} does not exist")
-    
-    def validate_user_ids(self, value):
-        """Validate that all user IDs exist and are unique"""
-        if not value:
-            raise ValidationError("At least one user ID must be provided")
-        
-        # Remove duplicates while preserving order
-        unique_ids = list(dict.fromkeys(value))
-        
-        # Check all users exist
-        existing_users = WajoUser.objects.filter(id__in=unique_ids)
-        existing_ids = set(str(user.id) for user in existing_users)
-        provided_ids = set(str(uid) for uid in unique_ids)
-        
-        missing_ids = provided_ids - existing_ids
-        if missing_ids:
+
+    def _validate_user_id_list(self, id_list):
+        """Check all UUIDs in a list exist in WajoUser"""
+        unique_ids = list(dict.fromkeys(id_list))
+        existing_ids = set(
+            str(uid)
+            for uid in WajoUser.objects.filter(id__in=unique_ids).values_list("id", flat=True)
+        )
+        missing = set(str(uid) for uid in unique_ids) - existing_ids
+        if missing:
             raise ValidationError(
-                f"The following user IDs do not exist: {', '.join(missing_ids)}"
+                f"The following user IDs do not exist: {', '.join(missing)}"
             )
-        
         return unique_ids
-    
+
     def validate(self, attrs):
+        """Validate access, determine recipient list, prevent self-sharing, and validate note recipients."""
         from tracevision.models import Game
-        """Validate access and prevent self-sharing"""
         request = self.context.get("request")
         user = request.user
-        
-        # Get clip reel and highlight
-        clip_reel = get_object_or_404(TraceClipReel.objects.select_related('highlight__session'), id=attrs["clip_id"])
+
+        has_user_ids = bool(attrs.get("user_ids"))
+        visibility = attrs.get("visibility")
+        share_with = attrs.get("share_with", [])
+        users_notes = attrs.get("users", [])
+
+        if not has_user_ids and not visibility and not users_notes:
+            raise ValidationError(
+                'Provide either "user_ids" (Mode A), "visibility" (Mode B), or "users" (Notes).'
+            )
+
+        # Mode validation: prevent supplying both Mode A and Mode B
+        if has_user_ids and visibility:
+            raise ValidationError(
+                'Provide either "user_ids" or "visibility", not both.'
+            )
+        # Get clip reel + session
+        from django.shortcuts import get_object_or_404
+        clip_reel = get_object_or_404(
+            TraceClipReel.objects.select_related("highlight__session__home_team",
+                                                  "highlight__session__away_team"),
+            id=attrs["clip_id"],
+        )
         highlight = clip_reel.highlight
         session = highlight.session
-        
-        # Check if user has access to the session
-        user_games = Game.objects.filter(
-            game_roles__user=user
-        ).values_list("id", flat=True)
-        
+
+        # Access check
+        user_games = Game.objects.filter(game_roles__user=user).values_list("id", flat=True)
+
+        # Check coach-team relationship (coaches don't have user.team set)
+        is_team_coach = False
+        if user.role == "Coach":
+            coached_team_ids = set(user.teams_coached.values_list("id", flat=True))
+            if session.home_team and session.home_team.id in coached_team_ids:
+                is_team_coach = True
+            if session.away_team and session.away_team.id in coached_team_ids:
+                is_team_coach = True
+
         has_access = (
             session.user == user
             or (session.game and session.game.id in user_games)
             or session.home_team == user.team
             or session.away_team == user.team
+            or is_team_coach
         )
-        
         if not has_access:
-            raise ValidationError(
-                "You don't have permission to share this clip reel"
-            )
-        
-        # Check user role
+            raise ValidationError("You don't have permission to share this clip reel")
+
+        # Role check
         if user.role not in ["Player", "Coach"]:
-            raise ValidationError(
-                "Only players and coaches can share clip reels"
-            )
-        
-        # NEW: Check ownership for players
-        # Players can only share their own clip reels (where they are the primary player)
-        # Coaches can share any clip reel from the session
+            raise ValidationError("Only players and coaches can share clip reels")
+
+        # Ownership check for players
         if user.role == "Player":
             is_owner = (
-                clip_reel.primary_player 
-                and clip_reel.primary_player.user 
+                clip_reel.primary_player
+                and clip_reel.primary_player.user
                 and clip_reel.primary_player.user == user
             )
             if not is_owner:
@@ -3848,73 +4183,122 @@ class BulkHighlightShareSerializer(serializers.Serializer):
                     "Players can only share their own clip reels. Only coaches can share other players' clip reels."
                 )
         
+        # Resolve recipient list (for clip-reel sharing)
+        if has_user_ids:
+            resolved_ids = self._validate_user_id_list(attrs["user_ids"])
+        elif visibility == "public":
+            resolved_ids = self._get_session_user_ids(session, exclude_user=user)
+        elif visibility == "private":
+            # Mode B — private: use share_with
+            if not share_with:
+                raise ValidationError(
+                    'share_with must not be empty when visibility is "private".'
+                )
+            resolved_ids = self._validate_user_id_list(share_with)
+        else:
+            # Mode C: Implied sharing via users (notes)
+            resolved_ids = [entry["user_id"] for entry in users_notes]
+            resolved_ids = self._validate_user_id_list(resolved_ids)
+
         # Prevent self-sharing
         user_id_str = str(user.id)
-        if user_id_str in [str(uid) for uid in attrs["user_ids"]]:
-            raise ValidationError("You cannot share a clip reel with yourself")
-        
-        # Attach objects for use in create
+        resolved_ids = [uid for uid in resolved_ids if str(uid) != user_id_str]
+
+        # ── Validate private note recipients ────────────────────────────────
+        if users_notes:
+            private_user_ids = [str(entry["user_id"]) for entry in users_notes]
+            existing_ids = set(
+                str(uid)
+                for uid in WajoUser.objects.filter(id__in=private_user_ids).values_list("id", flat=True)
+            )
+            for uid in private_user_ids:
+                if uid not in existing_ids:
+                    raise ValidationError(f"User with id {uid} does not exist.")
+
+        attrs["resolved_ids"] = resolved_ids
         attrs["clip_reel"] = clip_reel
         attrs["highlight"] = highlight
         attrs["session"] = session
-        
         return attrs
-    
+
+    def _get_session_user_ids(self, session, exclude_user):
+        """Return all WajoUser IDs associated with the session (teams + coaches)."""
+        user_ids = set()
+
+        for team in [session.home_team, session.away_team]:
+            if not team:
+                continue
+            # Players on the team
+            for uid in WajoUser.objects.filter(team=team).values_list("id", flat=True):
+                user_ids.add(uid)
+            # Coaches of the team
+            for uid in team.coach.values_list("id", flat=True):
+                user_ids.add(uid)
+
+        # GameUserRole participants
+        if session.game:
+            from games.models import GameUserRole
+            for uid in GameUserRole.objects.filter(game=session.game).values_list("user_id", flat=True):
+                user_ids.add(uid)
+
+        # Exclude self
+        user_ids.discard(exclude_user.id)
+        return list(user_ids)
+
     def create(self, validated_data):
-        """Create shares for all users"""
+        """Create shares for all resolved recipients, then create any requested notes."""
+        from tracevision.models import TraceClipReelNote as _Note
+
         clip_reel = validated_data["clip_reel"]
         highlight = validated_data["highlight"]
         session = validated_data["session"]
-        user_ids = validated_data["user_ids"]
+        user_ids = validated_data["resolved_ids"]
         can_comment = validated_data.get("can_comment", True)
+        public_note_content = validated_data.get("public_note") or ""
+        users_notes = validated_data.get("users", [])
         request = self.context.get("request")
         shared_by = request.user
-        
+
+        # ── 1. Create clip-reel shares ───────────────────────────────────────
         results = []
-        
-        # For each recipient
+
         for user_id in user_ids:
             shared_with = WajoUser.objects.get(id=user_id)
-            
+
             # Check if user belongs to the game
             belongs_to_game = False
-            
-            # Check if user is on home or away team
+
             if shared_with.team:
                 if session.home_team and shared_with.team.id == session.home_team.id:
                     belongs_to_game = True
                 elif session.away_team and shared_with.team.id == session.away_team.id:
                     belongs_to_game = True
-            
-            # Check if user is a coach of either team
+
             if not belongs_to_game and shared_with.role == "Coach":
                 coached_teams = shared_with.teams_coached.values_list("id", flat=True)
                 if session.home_team and session.home_team.id in coached_teams:
                     belongs_to_game = True
                 elif session.away_team and session.away_team.id in coached_teams:
                     belongs_to_game = True
-            
-            # Check if user has a GameUserRole for this session's game
+
             if not belongs_to_game and session.game:
                 from games.models import GameUserRole
                 has_game_role = GameUserRole.objects.filter(
                     game=session.game,
-                    user=shared_with
+                    user=shared_with,
                 ).exists()
                 if has_game_role:
                     belongs_to_game = True
-            
+
             user_result = {
                 "user_id": str(user_id),
                 "user_name": shared_with.name or shared_with.phone_no or shared_with.email,
                 "shares_created": 0,
                 "shares_updated": 0,
-                "belongs_to_game": belongs_to_game
+                "belongs_to_game": belongs_to_game,
             }
-            
-            # Only create shares if user belongs to the game
+
             if belongs_to_game:
-                # Create share for the specific clip reel
                 share, created = TraceClipReelShare.objects.update_or_create(
                     clip_reel=clip_reel,
                     shared_with=shared_with,
@@ -3923,26 +4307,55 @@ class BulkHighlightShareSerializer(serializers.Serializer):
                         "shared_by": shared_by,
                         "can_comment": can_comment,
                         "is_active": True,
-                    }
+                    },
                 )
-                
-                if created:
-                    user_result["shares_created"] = 1
-                else:
-                    user_result["shares_updated"] = 1
-                
+                user_result["shares_created"] = 1 if created else 0
+                user_result["shares_updated"] = 0 if created else 1
                 user_result["status"] = "success"
             else:
                 user_result["status"] = "skipped"
                 user_result["reason"] = "User is not associated with this game"
-            
+
             results.append(user_result)
-        
+
+        # ── 2. Create public note ────────────────────────────────────────────
+        if public_note_content.strip():
+            _Note.objects.create(
+                clip_reel=clip_reel,
+                highlight=highlight,
+                author=shared_by,
+                content=public_note_content,
+                visibility="public",
+            )
+
+        # ── 3. Create private notes ──────────────────────────────────────────
+        for entry in users_notes:
+            uid = entry["user_id"]
+            note_content = entry.get("note", "")
+            try:
+                target_user = WajoUser.objects.get(id=uid)
+                priv_note = _Note.objects.create(
+                    clip_reel=clip_reel,
+                    highlight=highlight,
+                    author=shared_by,
+                    content=note_content,
+                    visibility="private",
+                )
+                priv_note.share_with_user(target_user, shared_by)
+            except WajoUser.DoesNotExist:
+                pass  # Already validated in validate()
+
         return {
             "clip_id": clip_reel.id,
             "highlight_id": highlight.id,
             "recipients_count": len(user_ids),
-            "shares": results
+            "can_comment": can_comment,
+            "public_note": public_note_content if public_note_content.strip() else None,
+            "users": [
+                {"user_id": str(entry["user_id"]), "note": entry.get("note", "")}
+                for entry in users_notes
+            ],
+            "shares": results,
         }
 
 

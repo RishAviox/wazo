@@ -23,6 +23,7 @@ from .views import (
     SessionHighlightsView,
     BulkHighlightShareView,
     SessionUsersListView,
+    BulkHighlightNotesView,
 )
 
 
@@ -98,11 +99,16 @@ urlpatterns = [
         GetPlayerByTokenView.as_view(),
         name="get-player-by-token",
     ),
-    # Highlight notes endpoint
+    # Clip reel notes endpoints
     path(
         "clip-reels/<int:clip_reel_id>/notes/",
         HighlightNotesView.as_view(),
         name="clip-reel-notes",
+    ),
+    path(
+        "clip-reels/<int:clip_reel_id>/notes/bulk/",
+        BulkHighlightNotesView.as_view(),
+        name="clip-reel-notes-bulk",
     ),
     # Session users list endpoint
     path(
