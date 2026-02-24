@@ -3871,6 +3871,7 @@ class BulkHighlightShareView(APIView):
 
             return Response(
                 {
+                    "success": True,
                     "clip_id": result["clip_id"],
                     "users": result["users"],
                     "can_comment": result["can_comment"],

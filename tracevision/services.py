@@ -13,7 +13,11 @@ from tracevision.models import (
     TracePlayer,
     TracePossessionSegment,
     TracePossessionStats,
+    TraceVisionPlayerStats,
+    TraceVisionSessionStats,
 )
+from tracevision.spotlight_metrics_calculator import SpotlightMetricsCalculator
+from tracevision.metrics_calculator import calculate_passing_stats
 from tracevision.utils import filter_highlights_by_game_time, parse_time_to_seconds
 
 logger = logging.getLogger(__name__)
@@ -636,13 +640,94 @@ class TraceVisionAggregationService:
     def compute_all(self, session):
         """Compute all aggregates for a session in one shot."""
         results = {}
-        # results['coach_report'] = self._compute_coach_report(session)
-        # results['touch_leaderboard'] = self._compute_touch_leaderboard(session)
         results["possession_segments"] = self._compute_possessions(session)
         results["clips"] = self._compute_clips(session)
-        # results['passes'] = self._compute_passes(session)
+        results["spotlight_metrics"] = self._compute_spotlight_metrics(session)
+        results["passes"] = self._compute_passes(session)
         # results['passing_network'] = self._compute_passing_network(session)
         return results
+
+    def _compute_spotlight_metrics(self, session):
+        """
+        Compute spotlight tracking metrics for all players in the session.
+        Populates TraceVisionPlayerStats model.
+        """
+        logger.info(f"Computing spotlight metrics for session {session.session_id}")
+        calculator = SpotlightMetricsCalculator()
+        players = session.players.all()
+        computed_stats = []
+
+        for player in players:
+            try:
+                # Find the trace object for this player in this session
+                # Note: session mapping is important
+                trace_object = player.trace_objects.filter(session=session).first()
+                if not trace_object or not trace_object.tracking_blob_url:
+                    logger.debug(f"No tracking data for player {player.object_id}")
+                    continue
+
+                # Load tracking data
+                spotlights = calculator.load_spotlight_data(trace_object.tracking_blob_url)
+                if not spotlights:
+                    continue
+
+                # Analyze movement (raw float data)
+                movement = calculator._analyze_movement(spotlights)
+                dist_zones = calculator._calculate_distance_zones(spotlights)
+                accel_data = calculator._calculate_acceleration_metrics(spotlights)
+
+                # Total time tracked
+                total_time_s = (spotlights[-1][0] - spotlights[0][0]) / 1000.0 if spotlights else 0
+
+                # Create or update stats
+                stats, created = TraceVisionPlayerStats.objects.update_or_create(
+                    session=session,
+                    player=player,
+                    defaults={
+                        "side": trace_object.side,
+                        "total_distance_meters": movement.get("total_distance_m", 0),
+                        "avg_speed_mps": movement.get("avg_speed_mps", 0),
+                        "max_speed_mps": movement.get("max_speed_mps", 0),
+                        "total_time_seconds": total_time_s,
+                        "sprint_count": dist_zones.get("high_intensity_count", 0),
+                        "sprint_distance_meters": dist_zones.get("high_intensity_km", 0) * 1000.0,
+                        "sprint_time_seconds": 0, # Could be estimated if needed
+                        "performance_score": calculator._calculate_athletic_skills_score(movement, dist_zones, accel_data),
+                        "calculation_method": "spotlight_v1",
+                    }
+                )
+                computed_stats.append(stats.id)
+                logger.debug(f"Updated stats for player {player.object_id}")
+
+            except Exception as e:
+                logger.error(f"Error computing spotlight metrics for player {player.object_id}: {e}")
+
+        return computed_stats
+
+    def _compute_passes(self, session):
+        """
+        Compute passing statistics for the session using metrics_calculator.
+        """
+        logger.info(f"Computing passing metrics for session {session.session_id}")
+        try:
+            highlights = list(session.highlights.all().values('event_type', 'tags', 'start_offset', 'duration'))
+            # Passing stats require object info for fallback analysis
+            # We can simplify for now or pass more data if needed
+            passing_stats = calculate_passing_stats(highlights)
+            
+            # Store in session stats
+            stats, created = TraceVisionSessionStats.objects.get_or_create(session=session)
+            
+            # Update possession data with passing stats
+            possession_data = stats.possession_data or {}
+            possession_data["passing"] = passing_stats
+            stats.possession_data = possession_data
+            stats.save()
+            
+            return passing_stats
+        except Exception as e:
+            logger.error(f"Error computing passing metrics: {e}")
+            return None
 
     def compute_possession_segments_only(self, session):
         """Compute only possession segments for a session (skip clips and other aggregates)."""
