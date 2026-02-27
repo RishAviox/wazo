@@ -1375,6 +1375,30 @@ class GetAvailableHighlightDatesView(APIView):
     def get(self, request):
         try:
             user = request.user
+            # Get user language preference
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+            user_language = "he" if user_language.lower() == "he" else "en"
+            
+            # Response messages translations
+            messages = {
+                "success": {
+                    "en": "Available highlight dates retrieved successfully",
+                    "he": "תאריכי תקצירים זמינים הופקו בהצלחה"
+                },
+                "no_player": {
+                    "en": "No player found for this user",
+                    "he": "לא נמצא שחקן עבור משתמש זה"
+                },
+                "error_processing": {
+                    "en": "Error processing session data",
+                    "he": "שגיאה בעיבוד נתוני המפגש"
+                },
+                "unexpected_error": {
+                    "en": "An unexpected error occurred",
+                    "he": "אירעה שגיאה בלתי צפויה"
+                }
+            }
+
             user_role = user.role
 
             # Check if user is a coach
@@ -1448,7 +1472,7 @@ class GetAvailableHighlightDatesView(APIView):
                     return Response(
                         {
                             "success": False,
-                            "message": "No player found for this user",
+                            "message": messages["no_player"][user_language],
                             "data": {},
                         },
                         status=http_status.HTTP_404_NOT_FOUND,
@@ -1511,7 +1535,7 @@ class GetAvailableHighlightDatesView(APIView):
                 return Response(
                     {
                         "success": False,
-                        "message": "Error processing session data",
+                        "message": messages["error_processing"][user_language],
                         "data": {},
                         "error": "Unable to process session information. Please try again later.",
                     },
@@ -1521,7 +1545,7 @@ class GetAvailableHighlightDatesView(APIView):
             return Response(
                 {
                     "success": True,
-                    "message": "Available highlight dates retrieved successfully",
+                    "message": messages["success"][user_language],
                     "data": sessions_by_date,
                 },
                 status=http_status.HTTP_200_OK,
@@ -1534,7 +1558,7 @@ class GetAvailableHighlightDatesView(APIView):
             return Response(
                 {
                     "success": False,
-                    "message": "An unexpected error occurred",
+                    "message": messages["unexpected_error"][user_language],
                     "data": {},
                     "error": "Unable to retrieve highlight dates. Please try again later.",
                 },
@@ -3270,6 +3294,9 @@ class TraceClipReelNoteViewSet(viewsets.ModelViewSet):
 
             return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            from django.http import Http404
+            if isinstance(e, Http404):
+                raise e
             return Response(
                 {"error": str(e)},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -3400,6 +3427,9 @@ class TraceClipReelNoteViewSet(viewsets.ModelViewSet):
 
             return Response(serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            from django.http import Http404
+            if isinstance(e, Http404):
+                raise e
             return Response(
                 {"error": str(e)},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,

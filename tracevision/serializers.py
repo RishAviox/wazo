@@ -48,6 +48,37 @@ except ImportError:
     logger.warning("Could not import process_excel_and_create_players_task")
 
 
+# Hebrew Localization for Event Names
+EVENT_TYPE_TRANSLATIONS = {
+    "touch": {"en": "Touch", "he": "מגע"},
+    "touch-chain": {"en": "Touch Chain", "he": "שרשרת מגעים"},
+    "goal": {"en": "Goal", "he": "שער"},
+    "yellow_card": {"en": "Yellow Card", "he": "כרטיס צהוב"},
+    "red_card": {"en": "Red Card", "he": "כרטיס אדום"},
+    "substitution": {"en": "Substitution", "he": "חילוף"},
+    "save": {"en": "Save", "he": "הצלה"},
+    "shot": {"en": "Shot", "he": "בעיטה"},
+    "pass": {"en": "Pass", "he": "מסירה"},
+    "tackle": {"en": "Tackle", "he": "תיקול"},
+    "foul": {"en": "Foul", "he": "עבירה"},
+    "offside": {"en": "Offside", "he": "נבדל"},
+    "corner": {"en": "Corner", "he": "קרן"},
+    "free_kick": {"en": "Free Kick", "he": "בעיטה חופשית"},
+    "penalty": {"en": "Penalty", "he": "פנדל"},
+    "other": {"en": "Other", "he": "אחר"},
+    "Unknown time": {"en": "Unknown time", "he": "זמן לא ידוע"},
+    "at": {"en": "at", "he": "ב-"},
+}
+
+AGE_GROUP_TRANSLATIONS = {
+    "U11_U12": {"en": "U11-U12 (9v9)", "he": "U11-U12 (9v9)"},
+    "U13_U14": {"en": "U13-U14 (11v11)", "he": "U13-U14 (11v11)"},
+    "U15_U16": {"en": "U15-U16 (11v11)", "he": "U15-U16 (11v11)"},
+    "U17_U18": {"en": "U17-U18 (11v11)", "he": "U17-U18 (11v11)"},
+    "SENIOR": {"en": "Senior (18+)", "he": "בוגרים (18+)"},
+}
+
+
 class TraceClipReelSerializer(serializers.ModelSerializer):
     age_group = serializers.CharField(source="session.age_group", read_only=True)
     match_date = serializers.DateField(source="session.match_date", read_only=True)
@@ -1295,6 +1326,7 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
     match_logo = serializers.SerializerMethodField()
     match_status = serializers.SerializerMethodField()
     score = serializers.SerializerMethodField()
+    age_group = serializers.SerializerMethodField()
     stadium = serializers.SerializerMethodField()
     referees = serializers.SerializerMethodField()
     timeline = serializers.SerializerMethodField()
@@ -1451,6 +1483,19 @@ class HighlightDateSessionSerializer(serializers.ModelSerializer):
             "status": status_code,
             "value": localized_value
         }
+
+    def get_age_group(self, obj):
+        """Get localized age group name"""
+        user_language = "en"
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        # Normalize language
+        user_language = "he" if user_language.lower() == "he" else "en"
+        
+        age_group_key = obj.age_group
+        return AGE_GROUP_TRANSLATIONS.get(age_group_key, {}).get(user_language, age_group_key)
 
     def get_score(self, obj):
         """Get match score when match is Ended"""
@@ -2723,19 +2768,38 @@ class HighlightClipReelSerializer(serializers.ModelSerializer):
         return None
 
     def get_event_name(self, obj):
-        """Generate event name from event type and match time"""
-        time_str = "Unknown time"
-        if hasattr(obj, "match_time"):
-            time_str = obj.match_time or "Unknown time"
-        elif hasattr(obj, "highlight") and hasattr(obj.highlight, "match_time"):
-            time_str = obj.highlight.match_time or "Unknown time"
+        """Generate localized event name from event type and match time"""
+        user_language = "en"
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        # Normalize language
+        user_language = "he" if user_language.lower() == "he" else "en"
+
+        time_str = EVENT_TYPE_TRANSLATIONS["Unknown time"][user_language]
+        if hasattr(obj, "match_time") and obj.match_time:
+            time_str = obj.match_time
+        elif hasattr(obj, "highlight") and hasattr(obj.highlight, "match_time") and obj.highlight.match_time:
+            time_str = obj.highlight.match_time
             
-        # Get event type - use get_event_type_display if available
-        if hasattr(obj, 'get_event_type_display'):
-            event_type = obj.get_event_type_display()
-        else:
-            event_type = getattr(obj, 'event_type', 'Event')
-        return f"{event_type} at {time_str}"
+        # Get event type
+        event_type_key = "other"
+        if hasattr(obj, 'event_type'):
+            event_type_key = obj.event_type
+        elif hasattr(obj, 'highlight') and hasattr(obj.highlight, 'event_type'):
+            event_type_key = obj.highlight.event_type
+
+        # Translate event type
+        event_type_display = EVENT_TYPE_TRANSLATIONS.get(event_type_key, {}).get(user_language)
+        if not event_type_display:
+            if hasattr(obj, 'get_event_type_display'):
+                event_type_display = obj.get_event_type_display()
+            else:
+                event_type_display = getattr(obj, 'event_type', 'Event')
+        
+        at_str = EVENT_TYPE_TRANSLATIONS["at"][user_language]
+        return f"{event_type_display} {at_str}{time_str}"
 
     def get_side(self, obj):
         """Get side from highlight tags or player team"""
@@ -3376,17 +3440,31 @@ class SharedWithMeClipReelSerializer(serializers.Serializer):
     private_notes = serializers.SerializerMethodField()
 
     def get_event_name(self, obj):
-        """Generate event name from event type and match time"""
+        """Generate localized event name from event type and match time"""
+        user_language = "en"
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            user_language = getattr(request.user, "selected_language", "en") or "en"
+        
+        # Normalize language
+        user_language = "he" if user_language.lower() == "he" else "en"
+
         highlight = obj.highlight
-        time_str = highlight.match_time or "Unknown time"
+        time_str = highlight.match_time or EVENT_TYPE_TRANSLATIONS["Unknown time"][user_language]
         
-        # Get event type display
-        if hasattr(highlight, 'get_event_type_display'):
-            event_type = highlight.get_event_type_display()
-        else:
-            event_type = getattr(highlight, 'event_type', 'Event')
+        # Get event type key
+        event_type_key = getattr(highlight, 'event_type', 'other')
         
-        return f"{event_type} at {time_str}"
+        # Translate event type
+        event_type_display = EVENT_TYPE_TRANSLATIONS.get(event_type_key, {}).get(user_language)
+        if not event_type_display:
+            if hasattr(highlight, 'get_event_type_display'):
+                event_type_display = highlight.get_event_type_display()
+            else:
+                event_type_display = event_type_key or 'Event'
+        
+        at_str = EVENT_TYPE_TRANSLATIONS["at"][user_language]
+        return f"{event_type_display} {at_str}{time_str}"
 
     def get_label(self, obj):
         """Get label from clip reel or generate from event_name"""
