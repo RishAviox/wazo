@@ -17,6 +17,9 @@ class IsClipReelOwner(permissions.BasePermission):
         # obj is TraceClipReel instance
         if not obj.primary_player:
             return False
+        # Admin has full access
+        if request.user.role == "Admin":
+            return True
         return obj.primary_player.user == request.user
 
 
@@ -30,8 +33,8 @@ class HasClipReelAccess(permissions.BasePermission):
         # obj is TraceClipReel instance
         user = request.user
 
-        # Owner has access
-        if obj.primary_player and obj.primary_player.user == user:
+        # Owner or Admin has access
+        if (obj.primary_player and obj.primary_player.user == user) or user.role == "Admin":
             return True
         
         # Additional check for coaches
@@ -83,8 +86,8 @@ class CanCommentOnClipReel(permissions.BasePermission):
         # obj is TraceClipReel instance
         user = request.user
 
-        # Owner can always comment
-        if obj.primary_player and obj.primary_player.user == user:
+        # Owner or Admin can always comment
+        if (obj.primary_player and obj.primary_player.user == user) or user.role == "Admin":
             return True
 
         # Check if shared with can_comment=True
@@ -126,7 +129,8 @@ class IsCommentAuthor(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         # obj is TraceClipReelComment instance
-        return obj.author == request.user
+        # Author or Admin can edit/delete
+        return obj.author == request.user or request.user.role == "Admin"
 
 
 class CanViewComment(permissions.BasePermission):
@@ -148,7 +152,8 @@ class IsNoteAuthor(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         # obj is TraceClipReelNote instance
-        return obj.author == request.user
+        # Author or Admin can edit/delete
+        return obj.author == request.user or request.user.role == "Admin"
 
 
 class CanViewNote(permissions.BasePermission):
@@ -169,5 +174,5 @@ class IsPlayerOrCoach(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.role in ["Player", "Coach"]
+        return request.user.role in ["Player", "Coach", "Admin"]
 

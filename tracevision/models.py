@@ -1591,8 +1591,8 @@ class TraceClipReelComment(models.Model):
         if self.is_deleted:
             return False
 
-        # Author can always see their own comments
-        if self.author == user:
+        # Author or Admin can always see comments
+        if self.author == user or user.role == "Admin":
             return True
 
         # Public comments: check if user has access to the reel
@@ -1783,8 +1783,8 @@ class TraceClipReelNote(models.Model):
         if self.is_deleted:
             return False
 
-        # Author can always see their own notes
-        if self.author == user:
+        # Author or Admin can always see their own notes
+        if self.author == user or user.role == "Admin":
             return True
 
         # --- Public note visibility ---

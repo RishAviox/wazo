@@ -2683,13 +2683,17 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
             from operator import attrgetter
             from tracevision.serializers import SharedWithMeGroupSerializer
 
-            # Get all active shares for this user filtered by trace session
+            # Get all active shares filtered by trace session
+            # Admin can see all shares, others only their own
+            share_filter = {
+                "is_active": True,
+                "clip_reel__session_id": trace_session_id
+            }
+            if request.user.role != "Admin":
+                share_filter["shared_with"] = request.user
+
             shares = (
-                TraceClipReelShare.objects.filter(
-                    shared_with=request.user, 
-                    is_active=True,
-                    clip_reel__session_id=trace_session_id
-                )
+                TraceClipReelShare.objects.filter(**share_filter)
                 .select_related("clip_reel", "highlight", "shared_by", "clip_reel__primary_player")
                 .order_by("shared_by__id", "-shared_at")
             )
@@ -2826,9 +2830,10 @@ class TraceClipReelViewSet(viewsets.ModelViewSet):
                 is_owner = (
                     clip_reel.primary_player and clip_reel.primary_player.user == user
                 )
+                is_admin = user.role == "Admin"
 
-                if not is_owner:
-                    # Non-owners only see public comments and their own private comments
+                if not is_owner and not is_admin:
+                    # Non-owners/Non-admins only see public comments and their own private comments
                     comments = comments.filter(Q(visibility="public") | Q(author=user))
 
                 serializer = TraceClipReelCommentSerializer(
