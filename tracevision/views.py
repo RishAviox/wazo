@@ -14,7 +14,6 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from tracevision.permissions import HasClipReelAccess
 
-
 from teams.models import Team
 from accounts.models import WajoUser
 from tracevision.models import (
@@ -1015,7 +1014,7 @@ class GetTracePlayerReelsView(ListAPIView):
     URL: highlights/<session_id>/
 
     Role-based filtering:
-    - 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: Can see all highlights for all teams and players (full access)
+    - Can see all highlights for all teams and players (full access)
     - Coach: All highlights for players in their team + Highlights shared with them
     - Player: Only their own highlights + Highlights shared with them
 
