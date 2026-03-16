@@ -1,28 +1,32 @@
-version: '3.9'
-
 services:
 
   wajo-redis:
+    image: redis:7-alpine
     ports: !reset []
   wajo-postgres:
     image: postgres:15
+    container_name: wajo-postgres
     environment:
       POSTGRES_DB: wajo_dev
       POSTGRES_USER: wajo_user
       POSTGRES_PASSWORD: wajo_password
     ports:
-      - "5433:5432"  # Using port 5433 to avoid conflicts with other PostgreSQL instances
+      - "5434:5432" # Using port 5434 to avoid conflicts with other PostgreSQL instances
     volumes:
       - wajo_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wajo_user -d wajo_dev"]
+      test: [ "CMD-SHELL", "pg_isready -U wajo_user -d wajo_dev" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
   django:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wajo-app-dev:latest
     environment:
-      - django-settings-module=wajo_backend.settings_dev
+      - DJANGO_SETTINGS_MODULE=wajo_backend.settings_dev
       - DJANGO_DATABASE=docker
     entrypoint: ""
     # command: python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000
@@ -38,8 +42,12 @@ services:
         condition: service_healthy
 
   wajo-celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wajo-app-dev:latest
     environment:
-      - django-settings-module=wajo_backend.settings_dev
+      - DJANGO_SETTINGS_MODULE=wajo_backend.settings_dev
       - DJANGO_DATABASE=docker
     entrypoint: ""
     command: celery -A wajo_backend worker --loglevel=INFO
@@ -52,13 +60,8 @@ services:
         condition: service_healthy
 
   wajo-celery-beat:
-    # environment:
-    #   - django-settings-module=wajo_backend.settings
-    # entrypoint: ""
-    # command: celery -A wajo_backend beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
-    # volumes:
-    #   - .:/app
-    profiles: ["dont-run"]
+    image: wajo-app-dev:latest
+    profiles: [ "dont-run" ]
 
 volumes:
   wajo_postgres_data:

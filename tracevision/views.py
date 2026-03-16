@@ -1015,7 +1015,7 @@ class GetTracePlayerReelsView(ListAPIView):
     URL: highlights/<session_id>/
 
     Role-based filtering:
-    - Admin: Can see all highlights for all teams and players (full access)
+    - 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: Can see all highlights for all teams and players (full access)
     - Coach: All highlights for players in their team + Highlights shared with them
     - Player: Only their own highlights + Highlights shared with them
 
